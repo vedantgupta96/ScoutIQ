@@ -1,0 +1,30 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# --- Virtual environments (the bulk of the file count) ---
+.venv/
+venv/
+env/
+
+# --- Secrets / local env (NEVER commit) ---
+.env
+.env.*
+!.env.example
+
+# --- Cached BBRef scrape HTML (regenerable; thousands of files) ---
+backend/scoutiq/data/raw/
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# --- Local agent config ---
+.claude/
