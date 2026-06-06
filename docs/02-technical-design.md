@@ -167,6 +167,13 @@ single choice makes the backtest honest.
 
 ## 3. Valuation model (the flagship)
 
+> **v0 BUILT (2026-06-06).** Implemented in `backend/scoutiq/model/` (results in `model/artifacts/`).
+> Key change from the original plan: the model predicts **production-implied value** and **excludes the
+> player's current salary** as a feature — testing showed a paid-salary target is dominated by contract
+> mechanics (persistence beats any model on mid-contract players). See
+> [progress log](03-progress-log.md) for the pivot rationale and backtest results (R² 0.77, 80%
+> coverage 0.85).
+
 ### LOCKED feature set (confirmed available 2026-06-06)
 - **nba.com** (`leaguedashplayerstats` Advanced + Base): `MIN, GP, USG_PCT, TS_PCT, PIE, NET_RATING,
   OFF_RATING, DEF_RATING, AST_PCT, REB_PCT` + key box rates. (572 players/season, ~0.2s.)
