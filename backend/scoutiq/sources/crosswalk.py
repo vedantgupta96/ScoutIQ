@@ -14,7 +14,7 @@ from scoutiq.sources.bbref import (
 )
 
 
-def resolve_slug(full_name: str, max_suffix: int = 3) -> tuple[str | None, str]:
+def resolve_slug(full_name: str, max_suffix: int = 12) -> tuple[str | None, str]:
     target = normalize_name(full_name)
     last_seen: str | None = None
     for suffix in range(1, max_suffix + 1):
