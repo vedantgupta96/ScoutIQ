@@ -32,6 +32,7 @@ Thumbs.db
 # --- Local agent config ---
 .claude/
 
-# --- Graphify working files (keep graph.html / graph.json / GRAPH_REPORT.md) ---
+# --- Graphify: keep outputs, skip regenerable cache + working files ---
 graphify-out/.graphify_*
 graphify-out/.graphify_chunk_*.json
+graphify-out/cache/
