@@ -1,0 +1,23 @@
+[project]
+name = "scoutiq"
+version = "0.1.0"
+description = "ScoutIQ — Explainable NBA Contract Intelligence (data layer)"
+requires-python = ">=3.10"
+dependencies = [
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.1",
+    "pgvector>=0.2",
+    "pydantic-settings>=2.0",
+    "pandas>=2.0",
+    "lxml>=5.0",
+    "requests>=2.31",
+    "nba_api>=1.4.1",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["scoutiq*"]
