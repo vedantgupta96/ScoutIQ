@@ -19,6 +19,9 @@ env/
 # --- Cached BBRef scrape HTML (regenerable; thousands of files) ---
 backend/scoutiq/data/raw/
 
+# --- Trained model binary (regenerable; keep report/plots/metrics) ---
+backend/scoutiq/model/artifacts/*.joblib
+
 # --- OS / editor cruft ---
 .DS_Store
 Thumbs.db

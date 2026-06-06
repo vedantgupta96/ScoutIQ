@@ -1,0 +1,50 @@
+{
+  "model_version": "v0-gbm-conformal",
+  "n_train": 3923,
+  "n_calibration": 981,
+  "n_test": 796,
+  "test_seasons": [
+    "2023-24",
+    "2024-25"
+  ],
+  "mae_pct_of_cap": 2.916,
+  "mae_usd": 4032446,
+  "r2": 0.774,
+  "interval_80_coverage": 0.847,
+  "interval_80_half_width_pct": 5.36,
+  "naive_mean_baseline_mae_pct": 6.856,
+  "persistence_ref_mae_pct_midcontract": 2.186,
+  "n_midcontract": 768,
+  "calibration": [
+    {
+      "nominal": 0.5,
+      "empirical": 0.531,
+      "half_width_pct": 2.09
+    },
+    {
+      "nominal": 0.6,
+      "empirical": 0.648,
+      "half_width_pct": 2.87
+    },
+    {
+      "nominal": 0.7,
+      "empirical": 0.751,
+      "half_width_pct": 3.99
+    },
+    {
+      "nominal": 0.8,
+      "empirical": 0.847,
+      "half_width_pct": 5.36
+    },
+    {
+      "nominal": 0.9,
+      "empirical": 0.918,
+      "half_width_pct": 7.74
+    },
+    {
+      "nominal": 0.95,
+      "empirical": 0.964,
+      "half_width_pct": 10.6
+    }
+  ]
+}
