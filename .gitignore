@@ -31,6 +31,11 @@ Thumbs.db
 
 # --- Local agent config ---
 .claude/
+.codex/*.local.toml
+.codex/config.local.toml
+.codex/secrets.toml
+.codex/cache/
+.codex/logs/
 
 # --- Graphify: keep outputs, skip regenerable cache + working files ---
 graphify-out/.graphify_*
