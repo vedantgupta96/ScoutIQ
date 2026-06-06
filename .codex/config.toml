@@ -1,0 +1,5 @@
+# Minimal project-local Codex configuration.
+# Keep secrets, tokens, database URLs, and personal overrides out of this file.
+
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
