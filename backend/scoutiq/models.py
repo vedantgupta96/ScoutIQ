@@ -12,7 +12,9 @@ Design choices:
 """
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from datetime import datetime
+
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -95,3 +97,39 @@ class CapConstants(Base):
     max_25: Mapped[int | None] = mapped_column(BigInteger)        # 0–6 yrs experience
     max_30: Mapped[int | None] = mapped_column(BigInteger)        # 7–9 yrs
     max_35: Mapped[int | None] = mapped_column(BigInteger)        # 10+ yrs
+
+
+class Contract(Base):
+    """Forward contract structure from Spotrac — what the player is OWED, not what they earned."""
+    __tablename__ = "contracts"
+    __table_args__ = (UniqueConstraint("player_id", "season_start", name="uq_contract_player_start"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.player_id"), index=True)
+    team_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("teams.team_id"))
+    season_start: Mapped[str] = mapped_column(String(7))   # e.g. '2024-25'
+    years: Mapped[int] = mapped_column(Integer)
+    total_value: Mapped[int | None] = mapped_column(BigInteger)  # total dollars across all years
+    source: Mapped[str] = mapped_column(String(32), default="spotrac")
+    scraped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    contract_years: Mapped[list["ContractYear"]] = relationship(
+        back_populates="contract", cascade="all, delete-orphan", order_by="ContractYear.season"
+    )
+
+
+class ContractYear(Base):
+    """One season of a Contract — the year-by-year cap hit used by the cap simulator."""
+    __tablename__ = "contract_years"
+    __table_args__ = (UniqueConstraint("contract_id", "season", name="uq_contract_year"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    contract_id: Mapped[int] = mapped_column(Integer, ForeignKey("contracts.id"), index=True)
+    season: Mapped[str] = mapped_column(String(7), index=True)
+    aav: Mapped[int | None] = mapped_column(BigInteger)          # dollars this season
+    cap_pct: Mapped[float | None] = mapped_column(Numeric(6, 4)) # fraction (0.20 = 20% of cap)
+    is_guaranteed: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_player_option: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_team_option: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    contract: Mapped[Contract] = relationship(back_populates="contract_years")

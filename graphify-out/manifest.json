@@ -1,0 +1,167 @@
+{
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/alembic/env.py": {
+    "mtime": 1780761053.401748,
+    "ast_hash": "a1568d959bf861cd5f74096c18cb0777",
+    "semantic_hash": "a1568d959bf861cd5f74096c18cb0777"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/alembic/versions/0001_initial.py": {
+    "mtime": 1780761053.4051073,
+    "ast_hash": "3d97cde52ad92f43e25e20a48ab871bc",
+    "semantic_hash": "3d97cde52ad92f43e25e20a48ab871bc"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/__init__.py": {
+    "mtime": 1780761053.4056864,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/config.py": {
+    "mtime": 1780761053.4142122,
+    "ast_hash": "8561fd79f701a7354b5d41ed7164f8e1",
+    "semantic_hash": "8561fd79f701a7354b5d41ed7164f8e1"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/db.py": {
+    "mtime": 1780761053.4162288,
+    "ast_hash": "47af137213ea00466c10cff63a5e9a34",
+    "semantic_hash": "47af137213ea00466c10cff63a5e9a34"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/etl/__init__.py": {
+    "mtime": 1780761053.416309,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/etl/_util.py": {
+    "mtime": 1780761053.4167004,
+    "ast_hash": "3f1d1ef01530ce3c9663e54563f7803b",
+    "semantic_hash": "3f1d1ef01530ce3c9663e54563f7803b"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/etl/check_coverage.py": {
+    "mtime": 1780761053.417032,
+    "ast_hash": "5a1889df777587cfeeffd90f37e54b9a",
+    "semantic_hash": "5a1889df777587cfeeffd90f37e54b9a"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/etl/load_bbref.py": {
+    "mtime": 1780761053.417379,
+    "ast_hash": "75d4928fe4e7051a7c085e4a263f092e",
+    "semantic_hash": "75d4928fe4e7051a7c085e4a263f092e"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/etl/load_cap_constants.py": {
+    "mtime": 1780761053.4181933,
+    "ast_hash": "05bc6d6a36f39cde61ca78a5c124193b",
+    "semantic_hash": "05bc6d6a36f39cde61ca78a5c124193b"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/etl/load_stats.py": {
+    "mtime": 1780761053.418547,
+    "ast_hash": "2236ea114a590281526b7cb1d186c79b",
+    "semantic_hash": "2236ea114a590281526b7cb1d186c79b"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/model/__init__.py": {
+    "mtime": 1780769412.388444,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/model/artifacts/metrics.json": {
+    "mtime": 1780769412.3906558,
+    "ast_hash": "73746156947a46659cbe7805e1913bec",
+    "semantic_hash": "73746156947a46659cbe7805e1913bec"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/model/dataset.py": {
+    "mtime": 1780769412.3958483,
+    "ast_hash": "ca5777c7f3bdb127a8561ac3f23605f8",
+    "semantic_hash": "ca5777c7f3bdb127a8561ac3f23605f8"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/model/features.py": {
+    "mtime": 1780769412.3961453,
+    "ast_hash": "d03359114178f30db2c3fae0bdc3e173",
+    "semantic_hash": "d03359114178f30db2c3fae0bdc3e173"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/model/train.py": {
+    "mtime": 1780769412.3966284,
+    "ast_hash": "918d5b1182ace2e44b746c3308421690",
+    "semantic_hash": "918d5b1182ace2e44b746c3308421690"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/models.py": {
+    "mtime": 1780761053.4208062,
+    "ast_hash": "4ee1b9fdc792a85b719099512228d37a",
+    "semantic_hash": "4ee1b9fdc792a85b719099512228d37a"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/sources/__init__.py": {
+    "mtime": 1780761053.420919,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/sources/bbref.py": {
+    "mtime": 1780761053.4214873,
+    "ast_hash": "95b343ffe983a62360e23d1c24ddf4e1",
+    "semantic_hash": "95b343ffe983a62360e23d1c24ddf4e1"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/sources/crosswalk.py": {
+    "mtime": 1780767990.19804,
+    "ast_hash": "599d2efae51332ba7988757465b20e21",
+    "semantic_hash": "599d2efae51332ba7988757465b20e21"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/sources/nba.py": {
+    "mtime": 1780761053.4226499,
+    "ast_hash": "dce4c754647f33d2d516a861aed0518f",
+    "semantic_hash": "dce4c754647f33d2d516a861aed0518f"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/spikes/probe_advanced.py": {
+    "mtime": 1780761053.4247222,
+    "ast_hash": "c95dcfa3f559e60afc9a215ced646ad3",
+    "semantic_hash": "c95dcfa3f559e60afc9a215ced646ad3"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/spikes/probe_data_sources.py": {
+    "mtime": 1780761053.425119,
+    "ast_hash": "cd01af5901553c31af1c23e2fa24dd0d",
+    "semantic_hash": "cd01af5901553c31af1c23e2fa24dd0d"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/README.md": {
+    "mtime": 1780769439.3236217,
+    "ast_hash": "70aad76cdfc04a63e10b77e98827ff41",
+    "semantic_hash": "70aad76cdfc04a63e10b77e98827ff41"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/ScoutIQ.md": {
+    "mtime": 1780761053.3978431,
+    "ast_hash": "153ea413470a778037fe370ae3287d80",
+    "semantic_hash": "153ea413470a778037fe370ae3287d80"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/README.md": {
+    "mtime": 1780761053.4001944,
+    "ast_hash": "8560121152ecc636a8736e047ae3c947",
+    "semantic_hash": "8560121152ecc636a8736e047ae3c947"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/model/artifacts/report.md": {
+    "mtime": 1780769412.3951807,
+    "ast_hash": "00e6ebb45e53de327119fd2105efbbb7",
+    "semantic_hash": "00e6ebb45e53de327119fd2105efbbb7"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/docs/01-data-source-spike.md": {
+    "mtime": 1780761053.4233785,
+    "ast_hash": "7be9dfdbffe99f0a72494fa1682e55cb",
+    "semantic_hash": "7be9dfdbffe99f0a72494fa1682e55cb"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/docs/02-technical-design.md": {
+    "mtime": 1780769493.8552847,
+    "ast_hash": "a62b570e1efa636d176ef98c393ab45a",
+    "semantic_hash": "a62b570e1efa636d176ef98c393ab45a"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/docs/03-progress-log.md": {
+    "mtime": 1780769476.6424022,
+    "ast_hash": "4d28776ec3b839e353bfc044f40deffc",
+    "semantic_hash": "4d28776ec3b839e353bfc044f40deffc"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/spikes/requirements.txt": {
+    "mtime": 1780761053.4255373,
+    "ast_hash": "2490f23eb4a35c9f3eb92b569e05c209",
+    "semantic_hash": "2490f23eb4a35c9f3eb92b569e05c209"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/model/artifacts/coverage_curve.png": {
+    "mtime": 1780769412.3901205,
+    "ast_hash": "78f152bb455edee969b9f21e7e81ff13",
+    "semantic_hash": "78f152bb455edee969b9f21e7e81ff13"
+  },
+  "/Users/vedantgupta/Documents/Claude/Projects/Nexus AI/backend/scoutiq/model/artifacts/pred_vs_actual.png": {
+    "mtime": 1780769412.3948307,
+    "ast_hash": "4e48fb34607c1a5882ad50dc4beb5ecf",
+    "semantic_hash": "4e48fb34607c1a5882ad50dc4beb5ecf"
+  }
+}

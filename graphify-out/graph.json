@@ -1,0 +1,4254 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "hyperedges": [
+      {
+        "id": "etl_pipeline_flow",
+        "label": "ETL pipeline: nba.com stats + BBRef enrichment -> DB via shared db/config/models",
+        "nodes": [
+          "etl_load_stats",
+          "etl_load_bbref",
+          "etl_load_cap_constants",
+          "scoutiq_db",
+          "scoutiq_models"
+        ],
+        "relation": "participate_in",
+        "confidence": "EXTRACTED",
+        "confidence_score": 0.95,
+        "source_file": "backend/scoutiq/etl/load_stats.py"
+      },
+      {
+        "id": "model_training_pipeline",
+        "label": "Model training pipeline: dataset -> features -> train (with conformal intervals + temporal split)",
+        "nodes": [
+          "model_dataset",
+          "model_features",
+          "model_train",
+          "concept_conformal_intervals",
+          "concept_temporal_split"
+        ],
+        "relation": "implement",
+        "confidence": "EXTRACTED",
+        "confidence_score": 0.95,
+        "source_file": "backend/scoutiq/model/train.py"
+      },
+      {
+        "id": "data_layer_orm_migration",
+        "label": "Data layer: ORM models + Alembic migration + engine/session form the persistent storage foundation",
+        "nodes": [
+          "scoutiq_models",
+          "alembic_versions_0001_initial",
+          "scoutiq_db",
+          "alembic_env"
+        ],
+        "relation": "form",
+        "confidence": "EXTRACTED",
+        "confidence_score": 0.95,
+        "source_file": "backend/alembic/env.py"
+      },
+      {
+        "id": "bbref_scraping_pipeline",
+        "label": "BBRef Scraping + Crosswalk Pipeline",
+        "nodes": [
+          "sources_bbref_fetch_player_html",
+          "sources_bbref_parse_advanced",
+          "sources_bbref_parse_salaries",
+          "sources_crosswalk_resolve_slug"
+        ],
+        "relation": "participate_in",
+        "confidence": "EXTRACTED",
+        "confidence_score": 0.95,
+        "source_file": "backend/scoutiq/sources/bbref.py"
+      },
+      {
+        "id": "llm_ai_layer",
+        "label": "LLM / AI Feature Layer",
+        "nodes": [
+          "scoutiqmd_scout_report_analysis",
+          "scoutiqmd_llm_eval_harness",
+          "scoutiqmd_perplexity_sonar_layer"
+        ],
+        "relation": "participate_in",
+        "confidence": "INFERRED",
+        "confidence_score": 0.85,
+        "source_file": "ScoutIQ.md"
+      },
+      {
+        "id": "phase3_product_layer",
+        "label": "Phase 3 Product Layer",
+        "nodes": [
+          "scoutiqmd_what_if_cap_simulator",
+          "docs_techdesign_salary_cap_modeling",
+          "docs_progresslog_phase3"
+        ],
+        "relation": "form",
+        "confidence": "EXTRACTED",
+        "confidence_score": 0.95,
+        "source_file": "docs/03-progress-log.md"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "label": "env.py",
+      "file_type": "code",
+      "source_file": "backend/alembic/env.py",
+      "source_location": "L1",
+      "id": "alembic_env",
+      "community": 1,
+      "norm_label": "env.py"
+    },
+    {
+      "label": "run_migrations_offline()",
+      "file_type": "code",
+      "source_file": "backend/alembic/env.py",
+      "source_location": "L22",
+      "id": "alembic_env_run_migrations_offline",
+      "community": 1,
+      "norm_label": "run_migrations_offline()"
+    },
+    {
+      "label": "run_migrations_online()",
+      "file_type": "code",
+      "source_file": "backend/alembic/env.py",
+      "source_location": "L33",
+      "id": "alembic_env_run_migrations_online",
+      "community": 1,
+      "norm_label": "run_migrations_online()"
+    },
+    {
+      "label": "Alembic environment \u2014 pulls the DB URL from scoutiq.config and metadata from sco",
+      "file_type": "rationale",
+      "source_file": "backend/alembic/env.py",
+      "source_location": "L1",
+      "id": "alembic_env_rationale_1",
+      "community": 1,
+      "norm_label": "alembic environment \u2014 pulls the db url from scoutiq.config and metadata from sco"
+    },
+    {
+      "label": "0001_initial.py",
+      "file_type": "code",
+      "source_file": "backend/alembic/versions/0001_initial.py",
+      "source_location": "L1",
+      "id": "versions_0001_initial",
+      "community": 14,
+      "norm_label": "0001_initial.py"
+    },
+    {
+      "label": "upgrade()",
+      "file_type": "code",
+      "source_file": "backend/alembic/versions/0001_initial.py",
+      "source_location": "L19",
+      "id": "versions_0001_initial_upgrade",
+      "community": 14,
+      "norm_label": "upgrade()"
+    },
+    {
+      "label": "downgrade()",
+      "file_type": "code",
+      "source_file": "backend/alembic/versions/0001_initial.py",
+      "source_location": "L90",
+      "id": "versions_0001_initial_downgrade",
+      "community": 14,
+      "norm_label": "downgrade()"
+    },
+    {
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/__init__.py",
+      "source_location": "L1",
+      "id": "scoutiq_init",
+      "community": 17,
+      "norm_label": "__init__.py"
+    },
+    {
+      "label": "config.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L1",
+      "id": "scoutiq_config",
+      "community": 3,
+      "norm_label": "config.py"
+    },
+    {
+      "label": "Settings",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L13",
+      "id": "scoutiq_config_settings",
+      "community": 9,
+      "norm_label": "settings"
+    },
+    {
+      "label": "BaseSettings",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "id": "basesettings",
+      "community": 9,
+      "norm_label": "basesettings"
+    },
+    {
+      "label": ".seasons()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L27",
+      "id": "scoutiq_config_settings_seasons",
+      "community": 9,
+      "norm_label": ".seasons()"
+    },
+    {
+      "label": ".DATA_DIR()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L35",
+      "id": "scoutiq_config_settings_data_dir",
+      "community": 9,
+      "norm_label": ".data_dir()"
+    },
+    {
+      "label": ".RAW_DIR()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L39",
+      "id": "scoutiq_config_settings_raw_dir",
+      "community": 9,
+      "norm_label": ".raw_dir()"
+    },
+    {
+      "label": "Central config. Reads DATABASE_URL (and friends) from backend/.env.",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L1",
+      "id": "scoutiq_config_rationale_1",
+      "community": 3,
+      "norm_label": "central config. reads database_url (and friends) from backend/.env."
+    },
+    {
+      "label": "['2012-13', '2013-14', ..., '2024-25'] \u2014 NBA season string format.",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L28",
+      "id": "scoutiq_config_rationale_28",
+      "community": 9,
+      "norm_label": "['2012-13', '2013-14', ..., '2024-25'] \u2014 nba season string format."
+    },
+    {
+      "label": "db.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/db.py",
+      "source_location": "L1",
+      "id": "scoutiq_db",
+      "community": 3,
+      "norm_label": "db.py"
+    },
+    {
+      "label": "_make_engine()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/db.py",
+      "source_location": "L13",
+      "id": "scoutiq_db_make_engine",
+      "community": 3,
+      "norm_label": "_make_engine()"
+    },
+    {
+      "label": "get_session()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/db.py",
+      "source_location": "L28",
+      "id": "scoutiq_db_get_session",
+      "community": 3,
+      "norm_label": "get_session()"
+    },
+    {
+      "label": "Session",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/db.py",
+      "source_location": "L28",
+      "id": "session",
+      "community": 3,
+      "norm_label": "session"
+    },
+    {
+      "label": "SQLAlchemy 2.0 engine + session factory.",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/db.py",
+      "source_location": "L1",
+      "id": "scoutiq_db_rationale_1",
+      "community": 3,
+      "norm_label": "sqlalchemy 2.0 engine + session factory."
+    },
+    {
+      "label": "Transactional scope: commits on success, rolls back on error.",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/db.py",
+      "source_location": "L29",
+      "id": "scoutiq_db_rationale_29",
+      "community": 3,
+      "norm_label": "transactional scope: commits on success, rolls back on error."
+    },
+    {
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/__init__.py",
+      "source_location": "L1",
+      "id": "etl_init",
+      "community": 15,
+      "norm_label": "__init__.py"
+    },
+    {
+      "label": "_util.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/_util.py",
+      "source_location": "L1",
+      "id": "etl_util",
+      "community": 4,
+      "norm_label": "_util.py"
+    },
+    {
+      "label": "clean()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/_util.py",
+      "source_location": "L8",
+      "id": "etl_util_clean",
+      "community": 4,
+      "norm_label": "clean()"
+    },
+    {
+      "label": "Any",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/_util.py",
+      "source_location": "L8",
+      "id": "any",
+      "community": 4,
+      "norm_label": "any"
+    },
+    {
+      "label": "jsonify()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/_util.py",
+      "source_location": "L18",
+      "id": "etl_util_jsonify",
+      "community": 4,
+      "norm_label": "jsonify()"
+    },
+    {
+      "label": "Make a pandas/numpy cell JSON- and DB-safe: NaN -> None, numpy scalar -> python",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/etl/_util.py",
+      "source_location": "L9",
+      "id": "etl_util_rationale_9",
+      "community": 4,
+      "norm_label": "make a pandas/numpy cell json- and db-safe: nan -> none, numpy scalar -> python"
+    },
+    {
+      "label": "Pull `keys` from a pandas row into a clean dict, dropping missing/NaN values.",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/etl/_util.py",
+      "source_location": "L19",
+      "id": "etl_util_rationale_19",
+      "community": 4,
+      "norm_label": "pull `keys` from a pandas row into a clean dict, dropping missing/nan values."
+    },
+    {
+      "label": "check_coverage.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "L1",
+      "id": "etl_check_coverage",
+      "community": 3,
+      "norm_label": "check_coverage.py"
+    },
+    {
+      "label": "_scalar()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "L17",
+      "id": "etl_check_coverage_scalar",
+      "community": 3,
+      "norm_label": "_scalar()"
+    },
+    {
+      "label": "run()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "L21",
+      "id": "etl_check_coverage_run",
+      "community": 3,
+      "norm_label": "run()"
+    },
+    {
+      "label": "Data-quality gate: how much of the data is actually trainable?  A v0 training ex",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "L1",
+      "id": "etl_check_coverage_rationale_1",
+      "community": 3,
+      "norm_label": "data-quality gate: how much of the data is actually trainable?  a v0 training ex"
+    },
+    {
+      "label": "load_bbref.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L1",
+      "id": "etl_load_bbref",
+      "community": 4,
+      "norm_label": "load_bbref.py"
+    },
+    {
+      "label": "_valid_pos()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L37",
+      "id": "etl_load_bbref_valid_pos",
+      "community": 4,
+      "norm_label": "_valid_pos()"
+    },
+    {
+      "label": "_players_to_enrich()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L44",
+      "id": "etl_load_bbref_players_to_enrich",
+      "community": 4,
+      "norm_label": "_players_to_enrich()"
+    },
+    {
+      "label": "_enrich_one()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L58",
+      "id": "etl_load_bbref_enrich_one",
+      "community": 4,
+      "norm_label": "_enrich_one()"
+    },
+    {
+      "label": "run()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L121",
+      "id": "etl_load_bbref_run",
+      "community": 4,
+      "norm_label": "run()"
+    },
+    {
+      "label": "Enrich with Basketball-Reference: advanced metrics (BPM/VORP/WS/...) + position",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L1",
+      "id": "etl_load_bbref_rationale_1",
+      "community": 4,
+      "norm_label": "enrich with basketball-reference: advanced metrics (bpm/vorp/ws/...) + position"
+    },
+    {
+      "label": "load_cap_constants.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/load_cap_constants.py",
+      "source_location": "L1",
+      "id": "etl_load_cap_constants",
+      "community": 3,
+      "norm_label": "load_cap_constants.py"
+    },
+    {
+      "label": "_int_or_none()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/load_cap_constants.py",
+      "source_location": "L19",
+      "id": "etl_load_cap_constants_int_or_none",
+      "community": 3,
+      "norm_label": "_int_or_none()"
+    },
+    {
+      "label": "run()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/load_cap_constants.py",
+      "source_location": "L24",
+      "id": "etl_load_cap_constants_run",
+      "community": 3,
+      "norm_label": "run()"
+    },
+    {
+      "label": "Seed cap_constants from the reference CSV. Idempotent (upsert by season).  max_2",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/etl/load_cap_constants.py",
+      "source_location": "L1",
+      "id": "etl_load_cap_constants_rationale_1",
+      "community": 3,
+      "norm_label": "seed cap_constants from the reference csv. idempotent (upsert by season).  max_2"
+    },
+    {
+      "label": "load_stats.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L1",
+      "id": "etl_load_stats",
+      "community": 4,
+      "norm_label": "load_stats.py"
+    },
+    {
+      "label": "_upsert()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L31",
+      "id": "etl_load_stats_upsert",
+      "community": 4,
+      "norm_label": "_upsert()"
+    },
+    {
+      "label": "load_season()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L42",
+      "id": "etl_load_stats_load_season",
+      "community": 4,
+      "norm_label": "load_season()"
+    },
+    {
+      "label": "run()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L76",
+      "id": "etl_load_stats_run",
+      "community": 4,
+      "norm_label": "run()"
+    },
+    {
+      "label": "Load nba.com Base+Advanced stats -> teams, players, player_seasons. Idempotent (",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L1",
+      "id": "etl_load_stats_rationale_1",
+      "community": 4,
+      "norm_label": "load nba.com base+advanced stats -> teams, players, player_seasons. idempotent ("
+    },
+    {
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/__init__.py",
+      "source_location": "L1",
+      "id": "model_init",
+      "community": 16,
+      "norm_label": "__init__.py"
+    },
+    {
+      "label": "metrics.json",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L1",
+      "id": "artifacts_metrics",
+      "community": 5,
+      "norm_label": "metrics.json"
+    },
+    {
+      "label": "model_version",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L2",
+      "id": "artifacts_metrics_model_version",
+      "community": 5,
+      "norm_label": "model_version"
+    },
+    {
+      "label": "n_train",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L3",
+      "id": "artifacts_metrics_n_train",
+      "community": 5,
+      "norm_label": "n_train"
+    },
+    {
+      "label": "n_calibration",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L4",
+      "id": "artifacts_metrics_n_calibration",
+      "community": 5,
+      "norm_label": "n_calibration"
+    },
+    {
+      "label": "n_test",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L5",
+      "id": "artifacts_metrics_n_test",
+      "community": 5,
+      "norm_label": "n_test"
+    },
+    {
+      "label": "test_seasons",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L6",
+      "id": "artifacts_metrics_test_seasons",
+      "community": 5,
+      "norm_label": "test_seasons"
+    },
+    {
+      "label": "mae_pct_of_cap",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L10",
+      "id": "artifacts_metrics_mae_pct_of_cap",
+      "community": 5,
+      "norm_label": "mae_pct_of_cap"
+    },
+    {
+      "label": "mae_usd",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L11",
+      "id": "artifacts_metrics_mae_usd",
+      "community": 5,
+      "norm_label": "mae_usd"
+    },
+    {
+      "label": "r2",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L12",
+      "id": "artifacts_metrics_r2",
+      "community": 5,
+      "norm_label": "r2"
+    },
+    {
+      "label": "interval_80_coverage",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L13",
+      "id": "artifacts_metrics_interval_80_coverage",
+      "community": 5,
+      "norm_label": "interval_80_coverage"
+    },
+    {
+      "label": "interval_80_half_width_pct",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L14",
+      "id": "artifacts_metrics_interval_80_half_width_pct",
+      "community": 5,
+      "norm_label": "interval_80_half_width_pct"
+    },
+    {
+      "label": "naive_mean_baseline_mae_pct",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L15",
+      "id": "artifacts_metrics_naive_mean_baseline_mae_pct",
+      "community": 5,
+      "norm_label": "naive_mean_baseline_mae_pct"
+    },
+    {
+      "label": "persistence_ref_mae_pct_midcontract",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L16",
+      "id": "artifacts_metrics_persistence_ref_mae_pct_midcontract",
+      "community": 5,
+      "norm_label": "persistence_ref_mae_pct_midcontract"
+    },
+    {
+      "label": "n_midcontract",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L17",
+      "id": "artifacts_metrics_n_midcontract",
+      "community": 5,
+      "norm_label": "n_midcontract"
+    },
+    {
+      "label": "calibration",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L18",
+      "id": "artifacts_metrics_calibration",
+      "community": 5,
+      "norm_label": "calibration"
+    },
+    {
+      "label": "dataset.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/dataset.py",
+      "source_location": "L1",
+      "id": "model_dataset",
+      "community": 3,
+      "norm_label": "dataset.py"
+    },
+    {
+      "label": "build_dataset()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/dataset.py",
+      "source_location": "L22",
+      "id": "model_dataset_build_dataset",
+      "community": 2,
+      "norm_label": "build_dataset()"
+    },
+    {
+      "label": "DataFrame",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/dataset.py",
+      "source_location": "L22",
+      "id": "backend_scoutiq_model_dataset_py_dataframe",
+      "community": 2,
+      "norm_label": "dataframe"
+    },
+    {
+      "label": "Build the modeling table from the data layer.  One row per (player, season t) th",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/model/dataset.py",
+      "source_location": "L1",
+      "id": "model_dataset_rationale_1",
+      "community": 3,
+      "norm_label": "build the modeling table from the data layer.  one row per (player, season t) th"
+    },
+    {
+      "label": "features.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/features.py",
+      "source_location": "L1",
+      "id": "model_features",
+      "community": 2,
+      "norm_label": "features.py"
+    },
+    {
+      "label": "primary_position()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/features.py",
+      "source_location": "L35",
+      "id": "model_features_primary_position",
+      "community": 2,
+      "norm_label": "primary_position()"
+    },
+    {
+      "label": "Feature specification for the v0 valuation model.  Target: a player's salary as",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/model/features.py",
+      "source_location": "L1",
+      "id": "model_features_rationale_1",
+      "community": 2,
+      "norm_label": "feature specification for the v0 valuation model.  target: a player's salary as"
+    },
+    {
+      "label": "SF-PF' -> 'SF'. The first listed position is BBRef's primary.",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/model/features.py",
+      "source_location": "L36",
+      "id": "model_features_rationale_36",
+      "community": 2,
+      "norm_label": "sf-pf' -> 'sf'. the first listed position is bbref's primary."
+    },
+    {
+      "label": "train.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L1",
+      "id": "model_train",
+      "community": 2,
+      "norm_label": "train.py"
+    },
+    {
+      "label": "conformal_q()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L42",
+      "id": "model_train_conformal_q",
+      "community": 2,
+      "norm_label": "conformal_q()"
+    },
+    {
+      "label": "ndarray",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L42",
+      "id": "ndarray",
+      "community": 2,
+      "norm_label": "ndarray"
+    },
+    {
+      "label": "main()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L49",
+      "id": "model_train_main",
+      "community": 2,
+      "norm_label": "main()"
+    },
+    {
+      "label": "_plots()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L151",
+      "id": "model_train_plots",
+      "community": 2,
+      "norm_label": "_plots()"
+    },
+    {
+      "label": "_val_table()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L179",
+      "id": "model_train_val_table",
+      "community": 2,
+      "norm_label": "_val_table()"
+    },
+    {
+      "label": "DataFrame",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L179",
+      "id": "backend_scoutiq_model_train_py_dataframe",
+      "community": 2,
+      "norm_label": "dataframe"
+    },
+    {
+      "label": "_write_report()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L188",
+      "id": "model_train_write_report",
+      "community": 2,
+      "norm_label": "_write_report()"
+    },
+    {
+      "label": "Train + backtest the v0 valuation model.  - Model: HistGradientBoostingRegressor",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L1",
+      "id": "model_train_rationale_1",
+      "community": 2,
+      "norm_label": "train + backtest the v0 valuation model.  - model: histgradientboostingregressor"
+    },
+    {
+      "label": "Split-conformal quantile of |residual| for a target coverage `level`.",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L43",
+      "id": "model_train_rationale_43",
+      "community": 2,
+      "norm_label": "split-conformal quantile of |residual| for a target coverage `level`."
+    },
+    {
+      "label": "models.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L1",
+      "id": "scoutiq_models",
+      "community": 1,
+      "norm_label": "models.py"
+    },
+    {
+      "label": "Base",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L20",
+      "id": "scoutiq_models_base",
+      "community": 1,
+      "norm_label": "base"
+    },
+    {
+      "label": "DeclarativeBase",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "id": "declarativebase",
+      "community": 1,
+      "norm_label": "declarativebase"
+    },
+    {
+      "label": "Team",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L24",
+      "id": "scoutiq_models_team",
+      "community": 1,
+      "norm_label": "team"
+    },
+    {
+      "label": "Player",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L34",
+      "id": "scoutiq_models_player",
+      "community": 1,
+      "norm_label": "player"
+    },
+    {
+      "label": "PlayerXref",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L44",
+      "id": "scoutiq_models_playerxref",
+      "community": 1,
+      "norm_label": "playerxref"
+    },
+    {
+      "label": "PlayerSeason",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L59",
+      "id": "scoutiq_models_playerseason",
+      "community": 1,
+      "norm_label": "playerseason"
+    },
+    {
+      "label": "PlayerSalary",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L74",
+      "id": "scoutiq_models_playersalary",
+      "community": 1,
+      "norm_label": "playersalary"
+    },
+    {
+      "label": "CapConstants",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L86",
+      "id": "scoutiq_models_capconstants",
+      "community": 1,
+      "norm_label": "capconstants"
+    },
+    {
+      "label": "ScoutIQ ORM models (data layer, v0).  Design choices: - Natural keys: `players.p",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L1",
+      "id": "scoutiq_models_rationale_1",
+      "community": 1,
+      "norm_label": "scoutiq orm models (data layer, v0).  design choices: - natural keys: `players.p"
+    },
+    {
+      "label": "nba_api player_id <-> verified Basketball-Reference slug. Solves name-matching o",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L45",
+      "id": "scoutiq_models_rationale_45",
+      "community": 1,
+      "norm_label": "nba_api player_id <-> verified basketball-reference slug. solves name-matching o"
+    },
+    {
+      "label": "Realized historical salary per season (from BBRef). The v0 valuation target sour",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L75",
+      "id": "scoutiq_models_rationale_75",
+      "community": 1,
+      "norm_label": "realized historical salary per season (from bbref). the v0 valuation target sour"
+    },
+    {
+      "label": "League cap parameters per season. Data, not code \u2014 they change every year.",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L87",
+      "id": "scoutiq_models_rationale_87",
+      "community": 1,
+      "norm_label": "league cap parameters per season. data, not code \u2014 they change every year."
+    },
+    {
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/__init__.py",
+      "source_location": "L1",
+      "id": "sources_init",
+      "community": 18,
+      "norm_label": "__init__.py"
+    },
+    {
+      "label": "bbref.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L1",
+      "id": "sources_bbref",
+      "community": 0,
+      "norm_label": "bbref.py"
+    },
+    {
+      "label": "normalize_name()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L24",
+      "id": "sources_bbref_normalize_name",
+      "community": 0,
+      "norm_label": "normalize_name()"
+    },
+    {
+      "label": "bbref_slug()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L30",
+      "id": "sources_bbref_bbref_slug",
+      "community": 0,
+      "norm_label": "bbref_slug()"
+    },
+    {
+      "label": "player_url()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L39",
+      "id": "sources_bbref_player_url",
+      "community": 0,
+      "norm_label": "player_url()"
+    },
+    {
+      "label": "strip_html_comments()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L43",
+      "id": "sources_bbref_strip_html_comments",
+      "community": 0,
+      "norm_label": "strip_html_comments()"
+    },
+    {
+      "label": "fetch_player_html()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L47",
+      "id": "sources_bbref_fetch_player_html",
+      "community": 0,
+      "norm_label": "fetch_player_html()"
+    },
+    {
+      "label": "page_player_name()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L73",
+      "id": "sources_bbref_page_player_name",
+      "community": 0,
+      "norm_label": "page_player_name()"
+    },
+    {
+      "label": "_read_tables()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L79",
+      "id": "sources_bbref_read_tables",
+      "community": 0,
+      "norm_label": "_read_tables()"
+    },
+    {
+      "label": "DataFrame",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L79",
+      "id": "backend_scoutiq_sources_bbref_py_dataframe",
+      "community": 0,
+      "norm_label": "dataframe"
+    },
+    {
+      "label": "_season_rows()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L86",
+      "id": "sources_bbref_season_rows",
+      "community": 0,
+      "norm_label": "_season_rows()"
+    },
+    {
+      "label": "parse_advanced()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L97",
+      "id": "sources_bbref_parse_advanced",
+      "community": 0,
+      "norm_label": "parse_advanced()"
+    },
+    {
+      "label": "_parse_salary()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L106",
+      "id": "sources_bbref_parse_salary",
+      "community": 0,
+      "norm_label": "_parse_salary()"
+    },
+    {
+      "label": "parse_salaries()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L113",
+      "id": "sources_bbref_parse_salaries",
+      "community": 0,
+      "norm_label": "parse_salaries()"
+    },
+    {
+      "label": "Basketball-Reference adapter: fetch (with disk cache), strip comment-buried tabl",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L1",
+      "id": "sources_bbref_rationale_1",
+      "community": 0,
+      "norm_label": "basketball-reference adapter: fetch (with disk cache), strip comment-buried tabl"
+    },
+    {
+      "label": "Lowercase, strip accents/punctuation \u2014 for slug building and match verification.",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L25",
+      "id": "sources_bbref_rationale_25",
+      "community": 0,
+      "norm_label": "lowercase, strip accents/punctuation \u2014 for slug building and match verification."
+    },
+    {
+      "label": "BBRef id heuristic: first5(last)+first2(first)+NN. Collisions resolve via suffix",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L31",
+      "id": "sources_bbref_rationale_31",
+      "community": 0,
+      "norm_label": "bbref id heuristic: first5(last)+first2(first)+nn. collisions resolve via suffix"
+    },
+    {
+      "label": "Return raw HTML for a player slug; cache to data/raw/{slug}.html. None on 404/er",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L48",
+      "id": "sources_bbref_rationale_48",
+      "community": 0,
+      "norm_label": "return raw html for a player slug; cache to data/raw/{slug}.html. none on 404/er"
+    },
+    {
+      "label": "Pull the player's name from <title> for match verification.",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L74",
+      "id": "sources_bbref_rationale_74",
+      "community": 0,
+      "norm_label": "pull the player's name from <title> for match verification."
+    },
+    {
+      "label": "Keep only real per-season rows (drop Career/averages footers); de-dupe by season",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L87",
+      "id": "sources_bbref_rationale_87",
+      "community": 0,
+      "norm_label": "keep only real per-season rows (drop career/averages footers); de-dupe by season"
+    },
+    {
+      "label": "Advanced table: BPM, VORP, WS, WS/48, OBPM, DBPM, PER, USG%, TS%, Pos, Age per s",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L98",
+      "id": "sources_bbref_rationale_98",
+      "community": 0,
+      "norm_label": "advanced table: bpm, vorp, ws, ws/48, obpm, dbpm, per, usg%, ts%, pos, age per s"
+    },
+    {
+      "label": "Salaries table -> columns [Season, Salary(int)]. Realized per-season salary.",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L114",
+      "id": "sources_bbref_rationale_114",
+      "community": 0,
+      "norm_label": "salaries table -> columns [season, salary(int)]. realized per-season salary."
+    },
+    {
+      "label": "crosswalk.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/crosswalk.py",
+      "source_location": "L1",
+      "id": "sources_crosswalk",
+      "community": 0,
+      "norm_label": "crosswalk.py"
+    },
+    {
+      "label": "resolve_slug()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/crosswalk.py",
+      "source_location": "L17",
+      "id": "sources_crosswalk_resolve_slug",
+      "community": 0,
+      "norm_label": "resolve_slug()"
+    },
+    {
+      "label": "Resolve nba_api players to verified Basketball-Reference slugs.  Strategy: build",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/sources/crosswalk.py",
+      "source_location": "L1",
+      "id": "sources_crosswalk_rationale_1",
+      "community": 0,
+      "norm_label": "resolve nba_api players to verified basketball-reference slugs.  strategy: build"
+    },
+    {
+      "label": "nba.py",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "L1",
+      "id": "sources_nba",
+      "community": 7,
+      "norm_label": "nba.py"
+    },
+    {
+      "label": "_league_dash()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "L14",
+      "id": "sources_nba_league_dash",
+      "community": 7,
+      "norm_label": "_league_dash()"
+    },
+    {
+      "label": "DataFrame",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "L14",
+      "id": "backend_scoutiq_sources_nba_py_dataframe",
+      "community": 7,
+      "norm_label": "dataframe"
+    },
+    {
+      "label": "fetch_season()",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "L23",
+      "id": "sources_nba_fetch_season",
+      "community": 7,
+      "norm_label": "fetch_season()"
+    },
+    {
+      "label": "nba.com (stats.nba.com) adapter via nba_api.  We use `LeagueDashPlayerStats` (le",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "L1",
+      "id": "sources_nba_rationale_1",
+      "community": 7,
+      "norm_label": "nba.com (stats.nba.com) adapter via nba_api.  we use `leaguedashplayerstats` (le"
+    },
+    {
+      "label": "Return one row per player for `season`, merging Base + Advanced on PLAYER_ID.",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "L24",
+      "id": "sources_nba_rationale_24",
+      "community": 7,
+      "norm_label": "return one row per player for `season`, merging base + advanced on player_id."
+    },
+    {
+      "label": "probe_advanced.py",
+      "file_type": "code",
+      "source_file": "spikes/probe_advanced.py",
+      "source_location": "L1",
+      "id": "spikes_probe_advanced",
+      "community": 10,
+      "norm_label": "probe_advanced.py"
+    },
+    {
+      "label": "section()",
+      "file_type": "code",
+      "source_file": "spikes/probe_advanced.py",
+      "source_location": "L22",
+      "id": "spikes_probe_advanced_section",
+      "community": 10,
+      "norm_label": "section()"
+    },
+    {
+      "label": "probe_nba_advanced()",
+      "file_type": "code",
+      "source_file": "spikes/probe_advanced.py",
+      "source_location": "L26",
+      "id": "spikes_probe_advanced_probe_nba_advanced",
+      "community": 10,
+      "norm_label": "probe_nba_advanced()"
+    },
+    {
+      "label": "bbref_slug()",
+      "file_type": "code",
+      "source_file": "spikes/probe_advanced.py",
+      "source_location": "L43",
+      "id": "spikes_probe_advanced_bbref_slug",
+      "community": 10,
+      "norm_label": "bbref_slug()"
+    },
+    {
+      "label": "probe_bbref_advanced()",
+      "file_type": "code",
+      "source_file": "spikes/probe_advanced.py",
+      "source_location": "L49",
+      "id": "spikes_probe_advanced_probe_bbref_advanced",
+      "community": 10,
+      "norm_label": "probe_bbref_advanced()"
+    },
+    {
+      "label": "probe_data_sources.py",
+      "file_type": "code",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L1",
+      "id": "spikes_probe_data_sources",
+      "community": 6,
+      "norm_label": "probe_data_sources.py"
+    },
+    {
+      "label": "section()",
+      "file_type": "code",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L40",
+      "id": "spikes_probe_data_sources_section",
+      "community": 6,
+      "norm_label": "section()"
+    },
+    {
+      "label": "require()",
+      "file_type": "code",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L46",
+      "id": "spikes_probe_data_sources_require",
+      "community": 6,
+      "norm_label": "require()"
+    },
+    {
+      "label": "probe_nba_api()",
+      "file_type": "code",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L57",
+      "id": "spikes_probe_data_sources_probe_nba_api",
+      "community": 6,
+      "norm_label": "probe_nba_api()"
+    },
+    {
+      "label": "bbref_slug()",
+      "file_type": "code",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L102",
+      "id": "spikes_probe_data_sources_bbref_slug",
+      "community": 6,
+      "norm_label": "bbref_slug()"
+    },
+    {
+      "label": "strip_html_comments()",
+      "file_type": "code",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L116",
+      "id": "spikes_probe_data_sources_strip_html_comments",
+      "community": 6,
+      "norm_label": "strip_html_comments()"
+    },
+    {
+      "label": "probe_bbref_contracts()",
+      "file_type": "code",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L121",
+      "id": "spikes_probe_data_sources_probe_bbref_contracts",
+      "community": 6,
+      "norm_label": "probe_bbref_contracts()"
+    },
+    {
+      "label": "main()",
+      "file_type": "code",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L189",
+      "id": "spikes_probe_data_sources_main",
+      "community": 6,
+      "norm_label": "main()"
+    },
+    {
+      "label": "Reproduce BBRef's player-id slug heuristic: first 5 of last name + first 2 of fi",
+      "file_type": "rationale",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L103",
+      "id": "spikes_probe_data_sources_rationale_103",
+      "community": 6,
+      "norm_label": "reproduce bbref's player-id slug heuristic: first 5 of last name + first 2 of fi"
+    },
+    {
+      "label": "Sports-Reference buries many tables inside <!-- ... --> comments. Unwrap them.",
+      "file_type": "rationale",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L117",
+      "id": "spikes_probe_data_sources_rationale_117",
+      "community": 6,
+      "norm_label": "sports-reference buries many tables inside <!-- ... --> comments. unwrap them."
+    },
+    {
+      "label": "0001_initial migration",
+      "file_type": "code",
+      "source_file": "backend/alembic/versions/0001_initial.py",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "alembic_versions_0001_initial",
+      "community": 1,
+      "norm_label": "0001_initial migration"
+    },
+    {
+      "label": "Split-conformal prediction intervals",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "3-8",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "concept_conformal_intervals",
+      "community": 2,
+      "norm_label": "split-conformal prediction intervals"
+    },
+    {
+      "label": "Production-implied market value (no salary leakage)",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/model/features.py",
+      "source_location": "21-24",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "concept_production_implied_value",
+      "community": 2,
+      "norm_label": "production-implied market value (no salary leakage)"
+    },
+    {
+      "label": "Strict temporal train/test split (no leakage)",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "6-8",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "concept_temporal_split",
+      "community": 2,
+      "norm_label": "strict temporal train/test split (no leakage)"
+    },
+    {
+      "label": "JSONB columns for evolving stats (box + advanced)",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "8-9",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "concept_jsonb_stats",
+      "community": 1,
+      "norm_label": "jsonb columns for evolving stats (box + advanced)"
+    },
+    {
+      "label": "NBA API IDs as natural primary keys (no surrogate crosswalk for stats)",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "4-6",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "concept_nba_id_natural_key",
+      "community": 1,
+      "norm_label": "nba api ids as natural primary keys (no surrogate crosswalk for stats)"
+    },
+    {
+      "label": "nba_id -> BBRef slug crosswalk (PlayerXref)",
+      "file_type": "concept",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "44-56",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "concept_slug_crosswalk",
+      "community": 4,
+      "norm_label": "nba_id -> bbref slug crosswalk (playerxref)"
+    },
+    {
+      "label": "Trainable row definition: advanced@t + salary@t+1 + cap@t+1",
+      "file_type": "concept",
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "3-8",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "concept_trainable_row",
+      "community": 3,
+      "norm_label": "trainable row definition: advanced@t + salary@t+1 + cap@t+1"
+    },
+    {
+      "label": "Salary stickiness \u2014 persistence baseline beats production model on mid-contract",
+      "file_type": "rationale",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "84-89",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "concept_salary_stickiness",
+      "community": 2,
+      "norm_label": "salary stickiness \u2014 persistence baseline beats production model on mid-contract"
+    },
+    {
+      "label": "_league_dash (LeagueDashPlayerStats wrapper)",
+      "file_type": "code",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "_league_dash",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "sources_nba__league_dash",
+      "community": 7,
+      "norm_label": "_league_dash (leaguedashplayerstats wrapper)"
+    },
+    {
+      "label": "What-If Contract & Cap Simulator",
+      "file_type": "concept",
+      "source_file": "ScoutIQ.md",
+      "source_location": "\u00a72",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "scoutiqmd_what_if_cap_simulator",
+      "community": 12,
+      "norm_label": "what-if contract & cap simulator"
+    },
+    {
+      "label": "Contract Valuation Engine",
+      "file_type": "concept",
+      "source_file": "ScoutIQ.md",
+      "source_location": "\u00a76.1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "scoutiqmd_contract_valuation_engine",
+      "community": 11,
+      "norm_label": "contract valuation engine"
+    },
+    {
+      "label": "LLM Evaluation Harness",
+      "file_type": "rationale",
+      "source_file": "ScoutIQ.md",
+      "source_location": "\u00a73.2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "scoutiqmd_llm_eval_harness",
+      "community": 13,
+      "norm_label": "llm evaluation harness"
+    },
+    {
+      "label": "Perplexity Sonar Qualitative Layer",
+      "file_type": "concept",
+      "source_file": "ScoutIQ.md",
+      "source_location": "\u00a75",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "scoutiqmd_perplexity_sonar_layer",
+      "community": 13,
+      "norm_label": "perplexity sonar qualitative layer"
+    },
+    {
+      "label": "Scout Report Analysis (LLM \u2192 structured ratings)",
+      "file_type": "concept",
+      "source_file": "ScoutIQ.md",
+      "source_location": "\u00a77.1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "scoutiqmd_scout_report_analysis",
+      "community": 13,
+      "norm_label": "scout report analysis (llm \u2192 structured ratings)"
+    },
+    {
+      "label": "Phase 3 \u2014 Cap Simulator + FastAPI + Dashboard",
+      "file_type": "document",
+      "source_file": "docs/03-progress-log.md",
+      "source_location": "## Next (Phase 3)",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "docs_progresslog_phase3",
+      "community": 12,
+      "norm_label": "phase 3 \u2014 cap simulator + fastapi + dashboard"
+    },
+    {
+      "label": "Valuation Model Backtest Report v0",
+      "file_type": "document",
+      "source_file": "backend/scoutiq/model/artifacts/report.md",
+      "source_location": "headline metrics",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "artifacts_report_valuation_backtest",
+      "community": 11,
+      "norm_label": "valuation model backtest report v0"
+    },
+    {
+      "label": "Model Metrics JSON (R\u00b2=0.77, MAE=2.9%)",
+      "file_type": "document",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "artifacts_metrics_json",
+      "community": 11,
+      "norm_label": "model metrics json (r2=0.77, mae=2.9%)"
+    },
+    {
+      "label": "Data Pipeline Architecture (numbers\u2192ETL, words\u2192LLM)",
+      "file_type": "rationale",
+      "source_file": "docs/02-technical-design.md",
+      "source_location": "\u00a75",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "docs_techdesign_data_pipeline",
+      "community": 7,
+      "norm_label": "data pipeline architecture (numbers\u2192etl, words\u2192llm)"
+    },
+    {
+      "label": "Simplified CBA Salary Cap Model",
+      "file_type": "concept",
+      "source_file": "docs/02-technical-design.md",
+      "source_location": "\u00a75",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "docs_techdesign_salary_cap_modeling",
+      "community": 12,
+      "norm_label": "simplified cba salary cap model"
+    },
+    {
+      "label": "Interval Calibration Chart (conformal prediction)",
+      "file_type": "image",
+      "source_file": "backend/scoutiq/model/artifacts/coverage_curve.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "artifacts_coverage_curve_calibration_chart",
+      "community": 8,
+      "norm_label": "interval calibration chart (conformal prediction)"
+    },
+    {
+      "label": "Conformal Prediction Coverage (well-calibrated empirical \u2248 nominal)",
+      "file_type": "concept",
+      "source_file": "backend/scoutiq/model/artifacts/coverage_curve.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "artifacts_coverage_curve_conformal_coverage",
+      "community": 8,
+      "norm_label": "conformal prediction coverage (well-calibrated empirical \u2248 nominal)"
+    },
+    {
+      "label": "Ideal Calibration Diagonal (nominal = empirical)",
+      "file_type": "concept",
+      "source_file": "backend/scoutiq/model/artifacts/coverage_curve.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "artifacts_coverage_curve_ideal_diagonal",
+      "community": 8,
+      "norm_label": "ideal calibration diagonal (nominal = empirical)"
+    },
+    {
+      "label": "Predicted vs Actual Scatter Plot (test 2023-25)",
+      "file_type": "image",
+      "source_file": "backend/scoutiq/model/artifacts/pred_vs_actual.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "artifacts_pred_vs_actual_scatter_plot",
+      "community": 8,
+      "norm_label": "predicted vs actual scatter plot (test 2023-25)"
+    },
+    {
+      "label": "Model Accuracy Signal (R\u00b2=0.77, salary % of cap)",
+      "file_type": "concept",
+      "source_file": "backend/scoutiq/model/artifacts/pred_vs_actual.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "artifacts_pred_vs_actual_model_accuracy",
+      "community": 8,
+      "norm_label": "model accuracy signal (r2=0.77, salary % of cap)"
+    },
+    {
+      "label": "High-salary Prediction Variance (overpaid outliers visible)",
+      "file_type": "concept",
+      "source_file": "backend/scoutiq/model/artifacts/pred_vs_actual.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "artifacts_pred_vs_actual_salary_dispersion",
+      "community": 8,
+      "norm_label": "high-salary prediction variance (overpaid outliers visible)"
+    }
+  ],
+  "links": [
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/alembic/env.py",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "alembic_env",
+      "target": "alembic_env_run_migrations_offline",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/alembic/env.py",
+      "source_location": "L33",
+      "weight": 1.0,
+      "source": "alembic_env",
+      "target": "alembic_env_run_migrations_online",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "backend/alembic/env.py",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "alembic_env",
+      "target": "alembic_versions_0001_initial"
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/alembic/env.py",
+      "source_location": "9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "alembic_env",
+      "target": "scoutiq_config"
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/alembic/env.py",
+      "source_location": "10",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "alembic_env",
+      "target": "scoutiq_models"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/alembic/env.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "alembic_env_rationale_1",
+      "target": "alembic_env",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/alembic/versions/0001_initial.py",
+      "source_location": "L90",
+      "weight": 1.0,
+      "source": "versions_0001_initial",
+      "target": "versions_0001_initial_downgrade",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/alembic/versions/0001_initial.py",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "versions_0001_initial",
+      "target": "versions_0001_initial_upgrade",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "13",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "etl_check_coverage",
+      "target": "scoutiq_config"
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "23",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "etl_load_bbref",
+      "target": "scoutiq_config"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_cap_constants.py",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "etl_load_cap_constants",
+      "target": "scoutiq_config",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "13",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "etl_load_stats",
+      "target": "scoutiq_config"
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/dataset.py",
+      "source_location": "13",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "model_dataset",
+      "target": "scoutiq_config"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L13",
+      "weight": 1.0,
+      "source": "scoutiq_config",
+      "target": "scoutiq_config_settings",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "scoutiq_config_rationale_1",
+      "target": "scoutiq_config",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/db.py",
+      "source_location": "10",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "scoutiq_db",
+      "target": "scoutiq_config"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L17",
+      "weight": 1.0,
+      "source": "sources_bbref",
+      "target": "scoutiq_config",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L13",
+      "weight": 1.0,
+      "source": "scoutiq_config_settings",
+      "target": "basesettings",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L35",
+      "weight": 1.0,
+      "source": "scoutiq_config_settings",
+      "target": "scoutiq_config_settings_data_dir",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L39",
+      "weight": 1.0,
+      "source": "scoutiq_config_settings",
+      "target": "scoutiq_config_settings_raw_dir",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "scoutiq_config_settings",
+      "target": "scoutiq_config_settings_seasons",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/config.py",
+      "source_location": "L28",
+      "weight": 1.0,
+      "source": "scoutiq_config_rationale_28",
+      "target": "scoutiq_config_settings_seasons",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "14",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "etl_check_coverage",
+      "target": "scoutiq_db"
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "24",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "etl_load_bbref",
+      "target": "scoutiq_db"
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_cap_constants.py",
+      "source_location": "11",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "etl_load_cap_constants",
+      "target": "scoutiq_db"
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "14",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "etl_load_stats",
+      "target": "scoutiq_db"
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/dataset.py",
+      "source_location": "14",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "model_dataset",
+      "target": "scoutiq_db"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.65,
+      "source_file": "backend/scoutiq/db.py",
+      "source_location": "19",
+      "weight": 1.0,
+      "source": "scoutiq_db",
+      "target": "concept_nba_id_natural_key"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/db.py",
+      "source_location": "L28",
+      "weight": 1.0,
+      "source": "scoutiq_db",
+      "target": "scoutiq_db_get_session",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/db.py",
+      "source_location": "L13",
+      "weight": 1.0,
+      "source": "scoutiq_db",
+      "target": "scoutiq_db_make_engine",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/db.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "scoutiq_db_rationale_1",
+      "target": "scoutiq_db",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "L25",
+      "weight": 1.0,
+      "source": "etl_check_coverage_run",
+      "target": "scoutiq_db_get_session"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L123",
+      "weight": 1.0,
+      "source": "etl_load_bbref_run",
+      "target": "scoutiq_db_get_session"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/etl/load_cap_constants.py",
+      "source_location": "L42",
+      "weight": 1.0,
+      "source": "etl_load_cap_constants_run",
+      "target": "scoutiq_db_get_session"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L65",
+      "weight": 1.0,
+      "source": "etl_load_stats_load_season",
+      "target": "scoutiq_db_get_session"
+    },
+    {
+      "relation": "references",
+      "context": "generic_arg",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/db.py",
+      "source_location": "L28",
+      "weight": 1.0,
+      "source": "scoutiq_db_get_session",
+      "target": "session",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/db.py",
+      "source_location": "L29",
+      "weight": 1.0,
+      "source": "scoutiq_db_rationale_29",
+      "target": "scoutiq_db_get_session",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "25",
+      "weight": 1.0,
+      "source": "etl_load_bbref",
+      "target": "etl_util"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "15",
+      "weight": 1.0,
+      "source": "etl_load_stats",
+      "target": "etl_util"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/_util.py",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "etl_util",
+      "target": "etl_util_clean",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/_util.py",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "etl_util",
+      "target": "etl_util_jsonify",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L81",
+      "weight": 1.0,
+      "source": "etl_load_bbref_enrich_one",
+      "target": "etl_util_clean"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L47",
+      "weight": 1.0,
+      "source": "etl_load_stats_load_season",
+      "target": "etl_util_clean"
+    },
+    {
+      "relation": "references",
+      "context": "return_type",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/_util.py",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "etl_util_clean",
+      "target": "any",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/_util.py",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "etl_util_jsonify",
+      "target": "etl_util_clean",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/_util.py",
+      "source_location": "L9",
+      "weight": 1.0,
+      "source": "etl_util_rationale_9",
+      "target": "etl_util_clean",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L60",
+      "weight": 1.0,
+      "source": "etl_load_stats_load_season",
+      "target": "etl_util_jsonify"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/_util.py",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "etl_util_rationale_19",
+      "target": "etl_util_jsonify",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "39-58",
+      "weight": 1.0,
+      "source": "etl_check_coverage",
+      "target": "concept_trainable_row"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "etl_check_coverage",
+      "target": "etl_check_coverage_run",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "L17",
+      "weight": 1.0,
+      "source": "etl_check_coverage",
+      "target": "etl_check_coverage_scalar",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "39-58",
+      "weight": 1.0,
+      "source": "etl_check_coverage",
+      "target": "model_dataset"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "etl_check_coverage_rationale_1",
+      "target": "etl_check_coverage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/check_coverage.py",
+      "source_location": "L28",
+      "weight": 1.0,
+      "source": "etl_check_coverage_run",
+      "target": "etl_check_coverage_scalar",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "59-118",
+      "weight": 1.0,
+      "source": "etl_load_bbref",
+      "target": "concept_slug_crosswalk"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L58",
+      "weight": 1.0,
+      "source": "etl_load_bbref",
+      "target": "etl_load_bbref_enrich_one",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L44",
+      "weight": 1.0,
+      "source": "etl_load_bbref",
+      "target": "etl_load_bbref_players_to_enrich",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L121",
+      "weight": 1.0,
+      "source": "etl_load_bbref",
+      "target": "etl_load_bbref_run",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L37",
+      "weight": 1.0,
+      "source": "etl_load_bbref",
+      "target": "etl_load_bbref_valid_pos",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "etl_load_bbref",
+      "target": "etl_load_stats"
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "26",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "etl_load_bbref",
+      "target": "scoutiq_models"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "etl_load_bbref_rationale_1",
+      "target": "etl_load_bbref",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L81",
+      "weight": 1.0,
+      "source": "etl_load_bbref_enrich_one",
+      "target": "etl_load_bbref_valid_pos",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L124",
+      "weight": 1.0,
+      "source": "etl_load_bbref_run",
+      "target": "etl_load_bbref_players_to_enrich",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L59",
+      "weight": 1.0,
+      "source": "etl_load_bbref_enrich_one",
+      "target": "sources_crosswalk_resolve_slug"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_bbref.py",
+      "source_location": "L132",
+      "weight": 1.0,
+      "source": "etl_load_bbref_run",
+      "target": "etl_load_bbref_enrich_one",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_cap_constants.py",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "etl_load_cap_constants",
+      "target": "etl_load_cap_constants_int_or_none",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_cap_constants.py",
+      "source_location": "L24",
+      "weight": 1.0,
+      "source": "etl_load_cap_constants",
+      "target": "etl_load_cap_constants_run",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_cap_constants.py",
+      "source_location": "12",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "etl_load_cap_constants",
+      "target": "scoutiq_models"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/etl/load_cap_constants.py",
+      "source_location": "43",
+      "weight": 1.0,
+      "source": "etl_load_cap_constants",
+      "target": "scoutiq_models_capconstants"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_cap_constants.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "etl_load_cap_constants_rationale_1",
+      "target": "etl_load_cap_constants",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_cap_constants.py",
+      "source_location": "L28",
+      "weight": 1.0,
+      "source": "etl_load_cap_constants_run",
+      "target": "etl_load_cap_constants_int_or_none",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L42",
+      "weight": 1.0,
+      "source": "etl_load_stats",
+      "target": "etl_load_stats_load_season",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L76",
+      "weight": 1.0,
+      "source": "etl_load_stats",
+      "target": "etl_load_stats_run",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L31",
+      "weight": 1.0,
+      "source": "etl_load_stats",
+      "target": "etl_load_stats_upsert",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "16",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "etl_load_stats",
+      "target": "scoutiq_models"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "etl_load_stats_rationale_1",
+      "target": "etl_load_stats",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L66",
+      "weight": 1.0,
+      "source": "etl_load_stats_load_season",
+      "target": "etl_load_stats_upsert",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/etl/load_stats.py",
+      "source_location": "L78",
+      "weight": 1.0,
+      "source": "etl_load_stats_run",
+      "target": "etl_load_stats_load_season",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_calibration",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L13",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_interval_80_coverage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_interval_80_half_width_pct",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_mae_pct_of_cap",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_mae_usd",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_model_version",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_n_calibration",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L17",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_n_midcontract",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_n_test",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_n_train",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L15",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_naive_mean_baseline_mae_pct",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L16",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_persistence_ref_mae_pct_midcontract",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_r2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/artifacts/metrics.json",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "artifacts_metrics",
+      "target": "artifacts_metrics_test_seasons",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "backend/scoutiq/model/dataset.py",
+      "source_location": "73-75",
+      "weight": 1.0,
+      "source": "concept_trainable_row",
+      "target": "model_dataset"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/dataset.py",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "model_dataset",
+      "target": "model_dataset_build_dataset",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/model/dataset.py",
+      "source_location": "15",
+      "weight": 1.0,
+      "source": "model_dataset",
+      "target": "model_features"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/dataset.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "model_dataset_rationale_1",
+      "target": "model_dataset",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "31",
+      "weight": 1.0,
+      "source": "model_train",
+      "target": "model_dataset"
+    },
+    {
+      "relation": "references",
+      "context": "return_type",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/dataset.py",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "model_dataset_build_dataset",
+      "target": "backend_scoutiq_model_dataset_py_dataframe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L51",
+      "weight": 1.0,
+      "source": "model_train_main",
+      "target": "model_dataset_build_dataset"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/features.py",
+      "source_location": "L35",
+      "weight": 1.0,
+      "source": "model_features",
+      "target": "model_features_primary_position",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/features.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "model_features_rationale_1",
+      "target": "model_features",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "32",
+      "weight": 1.0,
+      "source": "model_train",
+      "target": "model_features"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/features.py",
+      "source_location": "L36",
+      "weight": 1.0,
+      "source": "model_features_rationale_36",
+      "target": "model_features_primary_position",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "42-46",
+      "weight": 1.0,
+      "source": "model_train",
+      "target": "concept_conformal_intervals"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "91-98",
+      "weight": 1.0,
+      "source": "model_train",
+      "target": "concept_production_implied_value"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "84-89",
+      "weight": 1.0,
+      "source": "model_train",
+      "target": "concept_salary_stickiness"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "53-57",
+      "weight": 1.0,
+      "source": "model_train",
+      "target": "concept_temporal_split"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L42",
+      "weight": 1.0,
+      "source": "model_train",
+      "target": "model_train_conformal_q",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L49",
+      "weight": 1.0,
+      "source": "model_train",
+      "target": "model_train_main",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L151",
+      "weight": 1.0,
+      "source": "model_train",
+      "target": "model_train_plots",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L179",
+      "weight": 1.0,
+      "source": "model_train",
+      "target": "model_train_val_table",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L188",
+      "weight": 1.0,
+      "source": "model_train",
+      "target": "model_train_write_report",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "model_train_rationale_1",
+      "target": "model_train",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "parameter_type",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L42",
+      "weight": 1.0,
+      "source": "model_train_conformal_q",
+      "target": "ndarray",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L69",
+      "weight": 1.0,
+      "source": "model_train_main",
+      "target": "model_train_conformal_q",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L43",
+      "weight": 1.0,
+      "source": "model_train_rationale_43",
+      "target": "model_train_conformal_q",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L111",
+      "weight": 1.0,
+      "source": "model_train_main",
+      "target": "backend_scoutiq_model_train_py_dataframe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L130",
+      "weight": 1.0,
+      "source": "model_train_main",
+      "target": "model_train_plots",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L131",
+      "weight": 1.0,
+      "source": "model_train_main",
+      "target": "model_train_write_report",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "parameter_type",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L179",
+      "weight": 1.0,
+      "source": "model_train_val_table",
+      "target": "backend_scoutiq_model_train_py_dataframe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L227",
+      "weight": 1.0,
+      "source": "model_train_write_report",
+      "target": "model_train_val_table",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "parameter_type",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "L188",
+      "weight": 1.0,
+      "source": "model_train_write_report",
+      "target": "backend_scoutiq_model_train_py_dataframe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L20",
+      "weight": 1.0,
+      "source": "scoutiq_models",
+      "target": "scoutiq_models_base",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L86",
+      "weight": 1.0,
+      "source": "scoutiq_models",
+      "target": "scoutiq_models_capconstants",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L34",
+      "weight": 1.0,
+      "source": "scoutiq_models",
+      "target": "scoutiq_models_player",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L74",
+      "weight": 1.0,
+      "source": "scoutiq_models",
+      "target": "scoutiq_models_playersalary",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L59",
+      "weight": 1.0,
+      "source": "scoutiq_models",
+      "target": "scoutiq_models_playerseason",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L44",
+      "weight": 1.0,
+      "source": "scoutiq_models",
+      "target": "scoutiq_models_playerxref",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L24",
+      "weight": 1.0,
+      "source": "scoutiq_models",
+      "target": "scoutiq_models_team",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "scoutiq_models_rationale_1",
+      "target": "scoutiq_models",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L20",
+      "weight": 1.0,
+      "source": "scoutiq_models_base",
+      "target": "declarativebase",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L86",
+      "weight": 1.0,
+      "source": "scoutiq_models_capconstants",
+      "target": "scoutiq_models_base",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L34",
+      "weight": 1.0,
+      "source": "scoutiq_models_player",
+      "target": "scoutiq_models_base",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L74",
+      "weight": 1.0,
+      "source": "scoutiq_models_playersalary",
+      "target": "scoutiq_models_base",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L59",
+      "weight": 1.0,
+      "source": "scoutiq_models_playerseason",
+      "target": "scoutiq_models_base",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L44",
+      "weight": 1.0,
+      "source": "scoutiq_models_playerxref",
+      "target": "scoutiq_models_base",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L24",
+      "weight": 1.0,
+      "source": "scoutiq_models_team",
+      "target": "scoutiq_models_base",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/alembic/versions/0001_initial.py",
+      "source_location": "23-30",
+      "weight": 1.0,
+      "source": "alembic_versions_0001_initial",
+      "target": "scoutiq_models_team"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/alembic/versions/0001_initial.py",
+      "source_location": "32-38",
+      "weight": 1.0,
+      "source": "alembic_versions_0001_initial",
+      "target": "scoutiq_models_player"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/alembic/versions/0001_initial.py",
+      "source_location": "40-47",
+      "weight": 1.0,
+      "source": "alembic_versions_0001_initial",
+      "target": "scoutiq_models_playerxref"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "44-56",
+      "weight": 1.0,
+      "source": "scoutiq_models_playerxref",
+      "target": "concept_slug_crosswalk"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L45",
+      "weight": 1.0,
+      "source": "scoutiq_models_rationale_45",
+      "target": "scoutiq_models_playerxref",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/alembic/versions/0001_initial.py",
+      "source_location": "49-62",
+      "weight": 1.0,
+      "source": "alembic_versions_0001_initial",
+      "target": "scoutiq_models_playerseason"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "70-71",
+      "weight": 1.0,
+      "source": "scoutiq_models_playerseason",
+      "target": "concept_jsonb_stats"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/alembic/versions/0001_initial.py",
+      "source_location": "64-75",
+      "weight": 1.0,
+      "source": "alembic_versions_0001_initial",
+      "target": "scoutiq_models_playersalary"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L75",
+      "weight": 1.0,
+      "source": "scoutiq_models_rationale_75",
+      "target": "scoutiq_models_playersalary",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/alembic/versions/0001_initial.py",
+      "source_location": "77-87",
+      "weight": 1.0,
+      "source": "alembic_versions_0001_initial",
+      "target": "scoutiq_models_capconstants"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "L87",
+      "weight": 1.0,
+      "source": "scoutiq_models_rationale_87",
+      "target": "scoutiq_models_capconstants",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L30",
+      "weight": 1.0,
+      "source": "sources_bbref",
+      "target": "sources_bbref_bbref_slug",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L47",
+      "weight": 1.0,
+      "source": "sources_bbref",
+      "target": "sources_bbref_fetch_player_html",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L24",
+      "weight": 1.0,
+      "source": "sources_bbref",
+      "target": "sources_bbref_normalize_name",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L73",
+      "weight": 1.0,
+      "source": "sources_bbref",
+      "target": "sources_bbref_page_player_name",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L97",
+      "weight": 1.0,
+      "source": "sources_bbref",
+      "target": "sources_bbref_parse_advanced",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L113",
+      "weight": 1.0,
+      "source": "sources_bbref",
+      "target": "sources_bbref_parse_salaries",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L106",
+      "weight": 1.0,
+      "source": "sources_bbref",
+      "target": "sources_bbref_parse_salary",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L39",
+      "weight": 1.0,
+      "source": "sources_bbref",
+      "target": "sources_bbref_player_url",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L79",
+      "weight": 1.0,
+      "source": "sources_bbref",
+      "target": "sources_bbref_read_tables",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L86",
+      "weight": 1.0,
+      "source": "sources_bbref",
+      "target": "sources_bbref_season_rows",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L43",
+      "weight": 1.0,
+      "source": "sources_bbref",
+      "target": "sources_bbref_strip_html_comments",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "sources_bbref_rationale_1",
+      "target": "sources_bbref",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L32",
+      "weight": 1.0,
+      "source": "sources_bbref_bbref_slug",
+      "target": "sources_bbref_normalize_name",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L25",
+      "weight": 1.0,
+      "source": "sources_bbref_rationale_25",
+      "target": "sources_bbref_normalize_name",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/sources/crosswalk.py",
+      "source_location": "resolve_slug",
+      "weight": 1.0,
+      "source": "sources_crosswalk_resolve_slug",
+      "target": "sources_bbref_normalize_name"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "player_url",
+      "weight": 1.0,
+      "source": "sources_bbref_fetch_player_html",
+      "target": "sources_bbref_bbref_slug"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L31",
+      "weight": 1.0,
+      "source": "sources_bbref_rationale_31",
+      "target": "sources_bbref_bbref_slug",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/sources/crosswalk.py",
+      "source_location": "resolve_slug",
+      "weight": 1.0,
+      "source": "sources_crosswalk_resolve_slug",
+      "target": "sources_bbref_bbref_slug"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L60",
+      "weight": 1.0,
+      "source": "sources_bbref_fetch_player_html",
+      "target": "sources_bbref_player_url",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "parse_advanced",
+      "weight": 1.0,
+      "source": "sources_bbref_parse_advanced",
+      "target": "sources_bbref_strip_html_comments"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "parse_salaries",
+      "weight": 1.0,
+      "source": "sources_bbref_parse_salaries",
+      "target": "sources_bbref_strip_html_comments"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L81",
+      "weight": 1.0,
+      "source": "sources_bbref_read_tables",
+      "target": "sources_bbref_strip_html_comments",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L48",
+      "weight": 1.0,
+      "source": "sources_bbref_rationale_48",
+      "target": "sources_bbref_fetch_player_html",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/sources/crosswalk.py",
+      "source_location": "resolve_slug",
+      "weight": 1.0,
+      "source": "sources_crosswalk_resolve_slug",
+      "target": "sources_bbref_fetch_player_html"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L74",
+      "weight": 1.0,
+      "source": "sources_bbref_rationale_74",
+      "target": "sources_bbref_page_player_name",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/sources/crosswalk.py",
+      "source_location": "resolve_slug",
+      "weight": 1.0,
+      "source": "sources_crosswalk_resolve_slug",
+      "target": "sources_bbref_page_player_name"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L99",
+      "weight": 1.0,
+      "source": "sources_bbref_parse_advanced",
+      "target": "sources_bbref_read_tables",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L115",
+      "weight": 1.0,
+      "source": "sources_bbref_parse_salaries",
+      "target": "sources_bbref_read_tables",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "generic_arg",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L79",
+      "weight": 1.0,
+      "source": "sources_bbref_read_tables",
+      "target": "backend_scoutiq_sources_bbref_py_dataframe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "return_type",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L97",
+      "weight": 1.0,
+      "source": "sources_bbref_parse_advanced",
+      "target": "backend_scoutiq_sources_bbref_py_dataframe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "return_type",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L113",
+      "weight": 1.0,
+      "source": "sources_bbref_parse_salaries",
+      "target": "backend_scoutiq_sources_bbref_py_dataframe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "return_type",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L86",
+      "weight": 1.0,
+      "source": "sources_bbref_season_rows",
+      "target": "backend_scoutiq_sources_bbref_py_dataframe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L102",
+      "weight": 1.0,
+      "source": "sources_bbref_parse_advanced",
+      "target": "sources_bbref_season_rows",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L118",
+      "weight": 1.0,
+      "source": "sources_bbref_parse_salaries",
+      "target": "sources_bbref_season_rows",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L87",
+      "weight": 1.0,
+      "source": "sources_bbref_rationale_87",
+      "target": "sources_bbref_season_rows",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/02-technical-design.md",
+      "source_location": "\u00a75",
+      "weight": 1.0,
+      "source": "docs_techdesign_data_pipeline",
+      "target": "sources_bbref_parse_advanced"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "sources_bbref_parse_advanced",
+      "target": "sources_nba_fetch_season"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L98",
+      "weight": 1.0,
+      "source": "sources_bbref_rationale_98",
+      "target": "sources_bbref_parse_advanced",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/bbref.py",
+      "source_location": "L114",
+      "weight": 1.0,
+      "source": "sources_bbref_rationale_114",
+      "target": "sources_bbref_parse_salaries",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/crosswalk.py",
+      "source_location": "L17",
+      "weight": 1.0,
+      "source": "sources_crosswalk",
+      "target": "sources_crosswalk_resolve_slug",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/crosswalk.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "sources_crosswalk_rationale_1",
+      "target": "sources_crosswalk",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "sources_nba",
+      "target": "sources_nba_fetch_season",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "sources_nba",
+      "target": "sources_nba_league_dash",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "sources_nba_rationale_1",
+      "target": "sources_nba",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "L28",
+      "weight": 1.0,
+      "source": "sources_nba_fetch_season",
+      "target": "sources_nba_league_dash",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "return_type",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "sources_nba_league_dash",
+      "target": "backend_scoutiq_sources_nba_py_dataframe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "return_type",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "sources_nba_fetch_season",
+      "target": "backend_scoutiq_sources_nba_py_dataframe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/02-technical-design.md",
+      "source_location": "\u00a75",
+      "weight": 1.0,
+      "source": "docs_techdesign_data_pipeline",
+      "target": "sources_nba_fetch_season"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "fetch_season",
+      "weight": 1.0,
+      "source": "sources_nba_fetch_season",
+      "target": "sources_nba__league_dash"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scoutiq/sources/nba.py",
+      "source_location": "L24",
+      "weight": 1.0,
+      "source": "sources_nba_rationale_24",
+      "target": "sources_nba_fetch_season",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_advanced.py",
+      "source_location": "L43",
+      "weight": 1.0,
+      "source": "spikes_probe_advanced",
+      "target": "spikes_probe_advanced_bbref_slug",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_advanced.py",
+      "source_location": "L49",
+      "weight": 1.0,
+      "source": "spikes_probe_advanced",
+      "target": "spikes_probe_advanced_probe_bbref_advanced",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_advanced.py",
+      "source_location": "L26",
+      "weight": 1.0,
+      "source": "spikes_probe_advanced",
+      "target": "spikes_probe_advanced_probe_nba_advanced",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_advanced.py",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "spikes_probe_advanced",
+      "target": "spikes_probe_advanced_section",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_advanced.py",
+      "source_location": "L50",
+      "weight": 1.0,
+      "source": "spikes_probe_advanced_probe_bbref_advanced",
+      "target": "spikes_probe_advanced_section",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_advanced.py",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "spikes_probe_advanced_probe_nba_advanced",
+      "target": "spikes_probe_advanced_section",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_advanced.py",
+      "source_location": "L55",
+      "weight": 1.0,
+      "source": "spikes_probe_advanced_probe_bbref_advanced",
+      "target": "spikes_probe_advanced_bbref_slug",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L102",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources",
+      "target": "spikes_probe_data_sources_bbref_slug",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L189",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources",
+      "target": "spikes_probe_data_sources_main",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L121",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources",
+      "target": "spikes_probe_data_sources_probe_bbref_contracts",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L57",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources",
+      "target": "spikes_probe_data_sources_probe_nba_api",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L46",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources",
+      "target": "spikes_probe_data_sources_require",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L40",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources",
+      "target": "spikes_probe_data_sources_section",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L116",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources",
+      "target": "spikes_probe_data_sources_strip_html_comments",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L205",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources_main",
+      "target": "spikes_probe_data_sources_section",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L122",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources_probe_bbref_contracts",
+      "target": "spikes_probe_data_sources_section",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L58",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources_probe_nba_api",
+      "target": "spikes_probe_data_sources_section",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L124",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources_probe_bbref_contracts",
+      "target": "spikes_probe_data_sources_require",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L60",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources_probe_nba_api",
+      "target": "spikes_probe_data_sources_require",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L201",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources_main",
+      "target": "spikes_probe_data_sources_probe_nba_api",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L131",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources_probe_bbref_contracts",
+      "target": "spikes_probe_data_sources_bbref_slug",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L103",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources_rationale_103",
+      "target": "spikes_probe_data_sources_bbref_slug",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L156",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources_probe_bbref_contracts",
+      "target": "spikes_probe_data_sources_strip_html_comments",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L117",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources_rationale_117",
+      "target": "spikes_probe_data_sources_strip_html_comments",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "spikes/probe_data_sources.py",
+      "source_location": "L203",
+      "weight": 1.0,
+      "source": "spikes_probe_data_sources_main",
+      "target": "spikes_probe_data_sources_probe_bbref_contracts",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "concept_conformal_intervals",
+      "target": "concept_temporal_split"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "backend/scoutiq/model/train.py",
+      "source_location": "84-89",
+      "weight": 1.0,
+      "source": "concept_production_implied_value",
+      "target": "concept_salary_stickiness"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.65,
+      "source_file": "backend/scoutiq/models.py",
+      "source_location": "4-11",
+      "weight": 1.0,
+      "source": "concept_jsonb_stats",
+      "target": "concept_nba_id_natural_key"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/03-progress-log.md",
+      "source_location": "## Next (Phase 3)",
+      "weight": 1.0,
+      "source": "docs_progresslog_phase3",
+      "target": "scoutiqmd_what_if_cap_simulator"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "ScoutIQ.md",
+      "source_location": "\u00a73.1",
+      "weight": 1.0,
+      "source": "scoutiqmd_contract_valuation_engine",
+      "target": "artifacts_metrics_json"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "ScoutIQ.md",
+      "source_location": "\u00a73.1",
+      "weight": 1.0,
+      "source": "scoutiqmd_contract_valuation_engine",
+      "target": "artifacts_report_valuation_backtest"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ScoutIQ.md",
+      "source_location": "\u00a73.2",
+      "weight": 1.0,
+      "source": "scoutiqmd_llm_eval_harness",
+      "target": "scoutiqmd_scout_report_analysis"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "ScoutIQ.md",
+      "source_location": "\u00a75",
+      "weight": 1.0,
+      "source": "scoutiqmd_perplexity_sonar_layer",
+      "target": "scoutiqmd_scout_report_analysis"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/03-progress-log.md",
+      "source_location": "## Next (Phase 3)",
+      "weight": 1.0,
+      "source": "docs_progresslog_phase3",
+      "target": "docs_techdesign_salary_cap_modeling"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/model/artifacts/coverage_curve.png",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "artifacts_coverage_curve_calibration_chart",
+      "target": "artifacts_coverage_curve_conformal_coverage"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/model/artifacts/coverage_curve.png",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "artifacts_coverage_curve_calibration_chart",
+      "target": "artifacts_coverage_curve_ideal_diagonal"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/model/artifacts/coverage_curve.png",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "artifacts_coverage_curve_conformal_coverage",
+      "target": "artifacts_coverage_curve_ideal_diagonal"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "backend/scoutiq/model/artifacts/pred_vs_actual.png",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "artifacts_pred_vs_actual_model_accuracy",
+      "target": "artifacts_coverage_curve_conformal_coverage"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/model/artifacts/pred_vs_actual.png",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "artifacts_pred_vs_actual_scatter_plot",
+      "target": "artifacts_pred_vs_actual_model_accuracy"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/scoutiq/model/artifacts/pred_vs_actual.png",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "artifacts_pred_vs_actual_scatter_plot",
+      "target": "artifacts_pred_vs_actual_salary_dispersion"
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "etl_pipeline_flow",
+      "label": "ETL pipeline: nba.com stats + BBRef enrichment -> DB via shared db/config/models",
+      "nodes": [
+        "etl_load_stats",
+        "etl_load_bbref",
+        "etl_load_cap_constants",
+        "scoutiq_db",
+        "scoutiq_models"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "backend/scoutiq/etl/load_stats.py"
+    },
+    {
+      "id": "model_training_pipeline",
+      "label": "Model training pipeline: dataset -> features -> train (with conformal intervals + temporal split)",
+      "nodes": [
+        "model_dataset",
+        "model_features",
+        "model_train",
+        "concept_conformal_intervals",
+        "concept_temporal_split"
+      ],
+      "relation": "implement",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "backend/scoutiq/model/train.py"
+    },
+    {
+      "id": "data_layer_orm_migration",
+      "label": "Data layer: ORM models + Alembic migration + engine/session form the persistent storage foundation",
+      "nodes": [
+        "scoutiq_models",
+        "alembic_versions_0001_initial",
+        "scoutiq_db",
+        "alembic_env"
+      ],
+      "relation": "form",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "backend/alembic/env.py"
+    },
+    {
+      "id": "bbref_scraping_pipeline",
+      "label": "BBRef Scraping + Crosswalk Pipeline",
+      "nodes": [
+        "sources_bbref_fetch_player_html",
+        "sources_bbref_parse_advanced",
+        "sources_bbref_parse_salaries",
+        "sources_crosswalk_resolve_slug"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "backend/scoutiq/sources/bbref.py"
+    },
+    {
+      "id": "llm_ai_layer",
+      "label": "LLM / AI Feature Layer",
+      "nodes": [
+        "scoutiqmd_scout_report_analysis",
+        "scoutiqmd_llm_eval_harness",
+        "scoutiqmd_perplexity_sonar_layer"
+      ],
+      "relation": "participate_in",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "ScoutIQ.md"
+    },
+    {
+      "id": "phase3_product_layer",
+      "label": "Phase 3 Product Layer",
+      "nodes": [
+        "scoutiqmd_what_if_cap_simulator",
+        "docs_techdesign_salary_cap_modeling",
+        "docs_progresslog_phase3"
+      ],
+      "relation": "form",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "docs/03-progress-log.md"
+    }
+  ],
+  "built_at_commit": "1409f571c92d66cff534b11d46f03ebc5e5ddb2f"
+}
