@@ -1,21 +1,24 @@
 """Spotrac contract ETL — load forward contract structure into `contracts` + `contract_years`.
 
-Spotrac is the riskiest part of the pipeline: they don't provide an API, the HTML changes
-without notice, and aggressive scraping triggers bot-detection. Mitigations:
-  - Per-player disk caching (same pattern as bbref.py): only hit the network once per player.
-  - Rate-limiting: SPOTRAC_DELAY_SECONDS between requests.
-  - Graceful per-player failure: one bad page does not abort the run.
-  - Cache TTL: re-fetch if cached HTML is older than CACHE_TTL_DAYS days (contracts change).
+Two-step scrape:
+  1. 30 team contract pages  → player list with Spotrac IDs and summary (AAV, years, total value)
+  2. Individual player pages  → year-by-year cap hits + option/guarantee status
 
-Spotrac URL pattern: https://www.spotrac.com/nba/player/<slug>/contract/
+URL patterns:
+  Team:   https://www.spotrac.com/nba/{team-slug}/contracts/
+  Player: https://www.spotrac.com/nba/player/_/id/{spotrac_id}/{name-slug}
 
-The scraper parses the contract summary table and the year-by-year breakdown table.
-Run after the BBRef ETL so player_xref slugs are populated (Spotrac slugs differ from BBRef;
-we derive them from the player name, not the crosswalk).
+Mitigations against Spotrac bot-detection:
+  - Disk cache with TTL (re-fetch after CACHE_TTL_DAYS; contracts can be amended)
+  - Rate-limiting: SPOTRAC_DELAY_SECONDS between requests
+  - Per-player fault tolerance: one bad page never aborts the run
+
+Name-matching to our DB: normalize → exact match; fallback → word-overlap score.
 
 Usage:
-    python -m scoutiq.etl.load_contracts             # all players with verified BBRef crosswalk
-    python -m scoutiq.etl.load_contracts --limit 50  # test run on 50 players
+    python -m scoutiq.etl.load_contracts            # all active-roster players
+    python -m scoutiq.etl.load_contracts --limit 20 # test run
+    python -m scoutiq.etl.load_contracts --teams denver-nuggets boston-celtics
 """
 from __future__ import annotations
 
@@ -23,6 +26,7 @@ import argparse
 import logging
 import re
 import time
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -33,159 +37,204 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from scoutiq.config import settings
 from scoutiq.db import get_session
-from scoutiq.models import Contract, ContractYear, Player, PlayerXref
+from scoutiq.models import Contract, ContractYear, Player
 
 logger = logging.getLogger(__name__)
 
-SPOTRAC_DELAY_SECONDS = 4.0   # be polite; Spotrac rate-limits aggressively
-CACHE_TTL_DAYS = 7            # re-fetch contract pages older than this (contracts can be amended)
+SPOTRAC_DELAY_SECONDS = 3.5
+CACHE_TTL_DAYS = 7
 CACHE_DIR = settings.RAW_DIR / "spotrac"
 
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-
-# ---------------------------------------------------------------------------
-# Slug derivation (Spotrac uses a different slug format than BBRef)
-# ---------------------------------------------------------------------------
-
-def spotrac_slug(full_name: str) -> str:
-    """'LeBron James' -> 'lebron-james'  (Spotrac URL slug)."""
-    name = full_name.lower()
-    # drop suffixes that Spotrac doesn't use
-    name = re.sub(r"\s+(jr\.?|sr\.?|ii|iii|iv)$", "", name)
-    name = re.sub(r"[^a-z0-9\s]", "", name)   # drop accents / punctuation
-    name = re.sub(r"\s+", "-", name.strip())
-    return name
+NBA_TEAM_SLUGS = [
+    "atlanta-hawks", "boston-celtics", "brooklyn-nets", "charlotte-hornets",
+    "chicago-bulls", "cleveland-cavaliers", "dallas-mavericks", "denver-nuggets",
+    "detroit-pistons", "golden-state-warriors", "houston-rockets", "indiana-pacers",
+    "la-clippers", "los-angeles-lakers", "memphis-grizzlies", "miami-heat",
+    "milwaukee-bucks", "minnesota-timberwolves", "new-orleans-pelicans", "new-york-knicks",
+    "oklahoma-city-thunder", "orlando-magic", "philadelphia-76ers", "phoenix-suns",
+    "portland-trail-blazers", "sacramento-kings", "san-antonio-spurs", "toronto-raptors",
+    "utah-jazz", "washington-wizards",
+]
 
 
 # ---------------------------------------------------------------------------
-# HTTP + cache
+# Cache helpers
 # ---------------------------------------------------------------------------
 
-def _cache_path(slug: str) -> Path:
+def _cache_path(key: str) -> Path:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    return CACHE_DIR / f"{slug}.html"
+    safe = re.sub(r"[^a-z0-9_-]", "_", key)
+    return CACHE_DIR / f"{safe}.html"
 
 
 def _cache_stale(path: Path) -> bool:
     if not path.exists():
         return True
-    age_days = (time.time() - path.stat().st_mtime) / 86_400
-    return age_days > CACHE_TTL_DAYS
+    return (time.time() - path.stat().st_mtime) / 86_400 > CACHE_TTL_DAYS
 
 
-def fetch_contract_html(slug: str) -> str | None:
-    """Return Spotrac contract-page HTML, using disk cache.  Returns None on 404/failure."""
-    path = _cache_path(slug)
+def _get(url: str, cache_key: str) -> str | None:
+    path = _cache_path(cache_key)
     if not _cache_stale(path):
         return path.read_text(encoding="utf-8")
-
-    url = f"https://www.spotrac.com/nba/player/{slug}/contract/"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=20)
         resp.encoding = "utf-8"
         if resp.status_code == 404:
-            logger.debug("404: %s", url)
             return None
         resp.raise_for_status()
     except requests.RequestException as e:
-        logger.warning("fetch failed for %s: %s", slug, e)
+        logger.warning("fetch failed %s: %s", url, e)
         return None
-
-    html = resp.text
-    path.write_text(html, encoding="utf-8")
+    path.write_text(resp.text, encoding="utf-8")
     time.sleep(SPOTRAC_DELAY_SECONDS)
-    return html
+    return resp.text
 
 
 # ---------------------------------------------------------------------------
-# HTML parsing
+# Parsing helpers
 # ---------------------------------------------------------------------------
 
 def _parse_dollars(text: str) -> int | None:
-    """'$142,123,456' -> 142123456.  Returns None if not parseable."""
     digits = re.sub(r"[^0-9]", "", text)
     return int(digits) if digits else None
 
 
 def _parse_pct(text: str) -> float | None:
-    """'18.50%' -> 0.1850.  Returns None if not parseable."""
     m = re.search(r"[\d.]+", text)
     return round(float(m.group()) / 100, 6) if m else None
 
 
-def _season_from_year_range(text: str) -> str | None:
-    """'2024-25' or '2024-2025' -> '2024-25'."""
-    m = re.search(r"(20\d{2})[–\-](20)?(\d{2})", text)
-    if not m:
-        return None
-    y1 = m.group(1)
-    y2 = m.group(3)
-    return f"{y1}-{y2}"
+def _normalize(name: str) -> str:
+    """Lowercase, strip accents, collapse whitespace, drop Jr/Sr/II/III."""
+    n = unicodedata.normalize("NFKD", name)
+    n = "".join(c for c in n if not unicodedata.combining(c))
+    n = n.lower()
+    n = re.sub(r"\s+(jr\.?|sr\.?|ii|iii|iv)$", "", n)
+    n = re.sub(r"[^a-z\s]", "", n)
+    return re.sub(r"\s+", " ", n).strip()
 
 
-def parse_contract(html: str) -> dict | None:
-    """Parse Spotrac contract page → dict with keys: season_start, years, total_value, year_rows.
+# ---------------------------------------------------------------------------
+# Step 1 — scrape team page → player list
+# ---------------------------------------------------------------------------
 
-    year_rows is a list of dicts: {season, aav, cap_pct, is_guaranteed, is_player_option, is_team_option}
-    Returns None if the page doesn't contain a parseable contract.
-    """
+def scrape_team(team_slug: str) -> list[dict]:
+    """Return list of {full_name, spotrac_id, name_slug, years, total_value, aav, start, end}."""
+    url = f"https://www.spotrac.com/nba/{team_slug}/contracts/"
+    html = _get(url, f"team_{team_slug}")
+    if not html:
+        logger.warning("no page for team %s", team_slug)
+        return []
+
     soup = BeautifulSoup(html, "html5lib")
+    table = soup.find("table")
+    if not table:
+        logger.warning("no table on %s", team_slug)
+        return []
 
-    # --- locate the year-by-year table ---
-    # Spotrac renders a <table> with class "contract" or similar; the structure changes
-    # periodically, so we look for the table containing year-range cells.
-    tables = soup.find_all("table")
-    year_table = None
-    for tbl in tables:
-        headers = [th.get_text(strip=True) for th in tbl.find_all("th")]
-        if any(re.search(r"20\d{2}", h) for h in headers) or any("Base Salary" in h for h in headers):
-            year_table = tbl
-            break
+    players = []
+    for row in table.find_all("tr")[1:]:
+        cells = row.find_all(["td", "th"])
+        if len(cells) < 8:
+            continue
 
-    if year_table is None:
-        logger.debug("No contract table found in HTML")
+        # player link → spotrac_id + name slug
+        link_tag = row.find("a", href=True)
+        if not link_tag:
+            continue
+        href = link_tag["href"]
+        m = re.search(r"/id/(\d+)/([^/]+)", href)
+        if not m:
+            continue
+        spotrac_id = m.group(1)
+        name_slug = m.group(2)
+
+        # full_name: cell text has "{LastName}{Full Name}" — take the suffix after first word
+        raw = cells[0].get_text(strip=True)
+        # typical: "JokicNikola Jokic" — the full name contains a space
+        full_name_m = re.search(r"([A-Z][a-zéàâêîôùûäëïöüñ]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-zéàâêîôùûäëïöüñ]+.*)", raw)
+        full_name = full_name_m.group(1).strip() if full_name_m else raw
+
+        years_txt = cells[7].get_text(strip=True) if len(cells) > 7 else ""
+        years = int(years_txt) if years_txt.isdigit() else None
+
+        total_value = _parse_dollars(cells[8].get_text(strip=True)) if len(cells) > 8 else None
+        aav = _parse_dollars(cells[9].get_text(strip=True)) if len(cells) > 9 else None
+
+        start_txt = cells[5].get_text(strip=True) if len(cells) > 5 else ""
+        end_txt = cells[6].get_text(strip=True) if len(cells) > 6 else ""
+
+        if not spotrac_id or not years:
+            continue
+
+        players.append({
+            "full_name": full_name,
+            "spotrac_id": spotrac_id,
+            "name_slug": name_slug,
+            "years": years,
+            "total_value": total_value,
+            "aav": aav,
+            "start": start_txt,   # calendar year, e.g. '2023'
+            "end": end_txt,
+        })
+
+    return players
+
+
+# ---------------------------------------------------------------------------
+# Step 2 — scrape individual player page → year-by-year
+# ---------------------------------------------------------------------------
+
+def scrape_player_contract(spotrac_id: str, name_slug: str) -> list[dict] | None:
+    """Return list of {season, aav, cap_pct, is_guaranteed, is_player_option, is_team_option}."""
+    url = f"https://www.spotrac.com/nba/player/_/id/{spotrac_id}/{name_slug}"
+    html = _get(url, f"player_{spotrac_id}")
+    if not html:
         return None
 
-    rows = year_table.find_all("tr")
-    year_rows = []
-    total_value = 0
+    soup = BeautifulSoup(html, "html5lib")
+    tables = soup.find_all("table")
+    if not tables:
+        return None
 
-    for row in rows[1:]:  # skip header row
+    # table[0] has: Year, [icon], Age, Status, Cap Hit Annual, Cap %, ...
+    table = tables[0]
+    rows = []
+    for row in table.find_all("tr")[1:]:
         cells = row.find_all(["td", "th"])
-        if len(cells) < 2:
+        if len(cells) < 5:
             continue
 
-        # first cell: season year range
-        season = _season_from_year_range(cells[0].get_text(strip=True))
-        if not season:
+        season = cells[0].get_text(strip=True)   # '2024-25'
+        # skip non-season rows (UFA, RFA, etc.) — must match YYYY-YY
+        if not re.match(r"^\d{4}-\d{2}$", season):
             continue
 
-        # look for dollar amount (base salary) in subsequent cells
-        aav = None
-        cap_pct = None
-        for cell in cells[1:]:
-            txt = cell.get_text(strip=True)
-            if "$" in txt and aav is None:
-                aav = _parse_dollars(txt)
-            if "%" in txt and cap_pct is None:
-                cap_pct = _parse_pct(txt)
+        status = cells[3].get_text(strip=True).lower()  # '', 'player', 'team', 'ufa', ...
+        # skip free-agent / post-contract rows
+        if status in ("ufa", "rfa", "two-way"):
+            continue
 
-        # option detection from row class or cell text
-        row_classes = " ".join(row.get("class", []))
-        cell_texts = " ".join(c.get_text(strip=True) for c in cells).lower()
-        is_player_option = "player option" in cell_texts or "po" in row_classes.lower()
-        is_team_option = "team option" in cell_texts or "to" in row_classes.lower()
+        cap_hit_txt = cells[4].get_text(strip=True)
+        cap_pct_txt = cells[5].get_text(strip=True) if len(cells) > 5 else ""
+
+        aav = _parse_dollars(cap_hit_txt)
+        cap_pct = _parse_pct(cap_pct_txt)
+
+        is_player_option = "player" in status
+        is_team_option = "team" in status
         is_guaranteed = not is_player_option and not is_team_option
 
-        year_rows.append({
+        rows.append({
             "season": season,
             "aav": aav,
             "cap_pct": cap_pct,
@@ -193,48 +242,80 @@ def parse_contract(html: str) -> dict | None:
             "is_player_option": is_player_option,
             "is_team_option": is_team_option,
         })
-        if aav:
-            total_value += aav
 
-    if not year_rows:
-        return None
+    return rows if rows else None
 
-    year_rows.sort(key=lambda r: r["season"])
-    return {
-        "season_start": year_rows[0]["season"],
-        "years": len(year_rows),
-        "total_value": total_value or None,
-        "year_rows": year_rows,
-    }
+
+# ---------------------------------------------------------------------------
+# Name matching
+# ---------------------------------------------------------------------------
+
+def _build_name_index(session) -> dict[str, int]:
+    """normalized_name -> player_id from our DB."""
+    rows = session.execute(select(Player.player_id, Player.full_name)).all()
+    return {_normalize(r.full_name): r.player_id for r in rows}
+
+
+def _match_player(full_name: str, index: dict[str, int]) -> int | None:
+    norm = _normalize(full_name)
+    if norm in index:
+        return index[norm]
+    # word-overlap fallback: e.g. 'nicolas claxton' vs 'nic claxton'
+    words = set(norm.split())
+    best_id, best_score = None, 0
+    for db_name, pid in index.items():
+        db_words = set(db_name.split())
+        if not db_words:
+            continue
+        score = len(words & db_words) / max(len(words), len(db_words))
+        if score > best_score and score >= 0.8:
+            best_score, best_id = score, pid
+    return best_id
 
 
 # ---------------------------------------------------------------------------
 # DB upsert
 # ---------------------------------------------------------------------------
 
-def upsert_contract(player_id: int, parsed: dict, session) -> None:
-    """Upsert a parsed contract into contracts + contract_years."""
+def _start_season(start_year: str, years_data: list[dict]) -> str:
+    """Derive season_start from first year row or start_year string."""
+    if years_data:
+        return years_data[0]["season"]
+    y = re.sub(r"[^0-9]", "", start_year)[:4]
+    if len(y) == 4:
+        y2 = str(int(y) + 1)[2:]
+        return f"{y}-{y2}"
+    return "2024-25"
+
+
+def upsert_contract(player_id: int, summary: dict, year_rows: list[dict], session) -> None:
     now = datetime.now(tz=timezone.utc)
+    season_start = _start_season(summary.get("start", ""), year_rows)
+    years = len(year_rows) or summary.get("years", 1)
 
     stmt = (
         pg_insert(Contract)
         .values(
             player_id=player_id,
-            season_start=parsed["season_start"],
-            years=parsed["years"],
-            total_value=parsed["total_value"],
+            season_start=season_start,
+            years=years,
+            total_value=summary.get("total_value"),
             source="spotrac",
             scraped_at=now,
         )
         .on_conflict_do_update(
             constraint="uq_contract_player_start",
-            set_={"years": parsed["years"], "total_value": parsed["total_value"], "scraped_at": now},
+            set_={
+                "years": years,
+                "total_value": summary.get("total_value"),
+                "scraped_at": now,
+            },
         )
         .returning(Contract.id)
     )
     contract_id = session.execute(stmt).scalar_one()
 
-    for yr in parsed["year_rows"]:
+    for yr in year_rows:
         yr_stmt = (
             pg_insert(ContractYear)
             .values(
@@ -264,48 +345,64 @@ def upsert_contract(player_id: int, parsed: dict, session) -> None:
 # Main runner
 # ---------------------------------------------------------------------------
 
-def load_all(limit: int | None = None) -> None:
+def load_all(team_slugs: list[str] | None = None, limit: int | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    teams = team_slugs or NBA_TEAM_SLUGS
 
+    # build name index once
     with get_session() as session:
-        query = select(Player.player_id, Player.full_name)
-        rows = session.execute(query).all()
+        name_index = _build_name_index(session)
+    logger.info("DB index: %d players", len(name_index))
 
-    players = [(r.player_id, r.full_name) for r in rows]
+    # collect all players from team pages (deduplicated by spotrac_id)
+    seen_ids: set[str] = set()
+    all_players: list[dict] = []
+    for team_slug in teams:
+        logger.info("scraping team: %s", team_slug)
+        players = scrape_team(team_slug)
+        for p in players:
+            if p["spotrac_id"] not in seen_ids:
+                seen_ids.add(p["spotrac_id"])
+                all_players.append(p)
+        logger.info("  → %d unique players so far", len(all_players))
+
     if limit:
-        players = players[:limit]
+        all_players = all_players[:limit]
 
-    ok = skipped = errors = 0
-    for player_id, full_name in players:
-        slug = spotrac_slug(full_name)
+    ok = skipped = errors = no_match = 0
+    for p in all_players:
+        player_id = _match_player(p["full_name"], name_index)
+        if player_id is None:
+            logger.debug("no DB match for '%s'", p["full_name"])
+            no_match += 1
+            continue
         try:
-            html = fetch_contract_html(slug)
-            if html is None:
-                logger.debug("No page for %s (%s)", full_name, slug)
+            year_rows = scrape_player_contract(p["spotrac_id"], p["name_slug"])
+            if not year_rows:
+                logger.debug("no year data for %s", p["full_name"])
                 skipped += 1
                 continue
-
-            parsed = parse_contract(html)
-            if parsed is None:
-                logger.debug("No contract table for %s", full_name)
-                skipped += 1
-                continue
-
             with get_session() as session:
-                upsert_contract(player_id, parsed, session)
-
-            logger.info("✓ %s — %d yr / $%s", full_name, parsed["years"],
-                        f"{parsed['total_value']:,}" if parsed["total_value"] else "?")
+                upsert_contract(player_id, p, year_rows, session)
+            logger.info(
+                "✓ %s — %d yr  $%s AAV  [%s]",
+                p["full_name"],
+                len(year_rows),
+                f"{p['aav']:,}" if p["aav"] else "?",
+                ", ".join(f"{yr['season']}={'G' if yr['is_guaranteed'] else 'PO' if yr['is_player_option'] else 'TO'}"
+                          for yr in year_rows),
+            )
             ok += 1
         except Exception as e:
-            logger.warning("✗ %s: %s", full_name, e)
+            logger.warning("✗ %s: %s", p["full_name"], e)
             errors += 1
 
-    logger.info("Done. ok=%d  skipped=%d  errors=%d", ok, skipped, errors)
+    logger.info("Done. ok=%d  skipped=%d  no_match=%d  errors=%d", ok, skipped, no_match, errors)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, default=None, help="Max players to process")
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--teams", nargs="+", default=None, metavar="TEAM_SLUG")
     args = parser.parse_args()
-    load_all(limit=args.limit)
+    load_all(team_slugs=args.teams, limit=args.limit)
