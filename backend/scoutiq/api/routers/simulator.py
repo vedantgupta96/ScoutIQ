@@ -14,8 +14,11 @@ from scoutiq.models import CapConstants, Player, PlayerSeason
 
 router = APIRouter(tags=["simulator"])
 
-# Most recent season with full model features — used as the valuation base
-VALUATION_SEASON = "2024-25"
+# Most recent season with full model features — used as the valuation base.
+# Mirrors players.LATEST_SEASON; advance both each offseason after the ETL runs.
+# 2025-26 cap constants are loaded, so the simulator now uses actual (not
+# projected) caps for current-season contracts.
+VALUATION_SEASON = "2025-26"
 
 
 class SimulatorRequest(BaseModel):
