@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # Seasons to ETL: 2012-13 .. 2024-25 (enough history for a 2015–22 / 2023–25 backtest).
     SEASON_START_YEAR: int = 2012
     SEASON_END_YEAR: int = 2024
+    CURRENT_SEASON: str = "2025-26"
 
     # Politeness for Basketball-Reference scraping.
     BBREF_DELAY_SECONDS: float = 3.5

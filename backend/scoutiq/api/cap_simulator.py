@@ -17,6 +17,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 CAP_GROWTH_RATE = 0.045  # 4.5% annual cap escalator for projection
+SIMULATOR_ASSUMPTIONS = {
+    "standalone_contract_only": True,
+    "simplified_cba": True,
+    "cap_projection_rate": CAP_GROWTH_RATE,
+    "not_modeled": [
+        "team payroll",
+        "luxury tax owed",
+        "Bird rights",
+        "MLE/BAE exceptions",
+        "repeater tax",
+        "traded-player exceptions",
+    ],
+}
 
 
 @dataclass
@@ -26,6 +39,7 @@ class SeasonCapData:
     tax_line: int
     first_apron: int
     second_apron: int
+    is_projected: bool = False
 
 
 @dataclass
@@ -40,8 +54,7 @@ class ContractYear:
     tax_line: int
     first_apron: int
     second_apron: int
-    # standalone: where does just this contract's AAV sit relative to thresholds?
-    cap_hit_vs_tax: str         # "below_tax" | "above_tax" | "above_first_apron" | "above_second_apron"
+    is_projected_cap: bool
 
 
 @dataclass
@@ -56,17 +69,8 @@ class CapSimulation:
     hi_pct: float | None
     value_gap_pct: float | None # value_pct - proposed_aav_pct (positive = underpaid)
     model_version: str | None
+    assumptions: dict = field(default_factory=lambda: dict(SIMULATOR_ASSUMPTIONS))
     years: list[ContractYear] = field(default_factory=list)
-
-
-def _apron_status(cap_hit: int, tax_line: int, first_apron: int, second_apron: int) -> str:
-    if cap_hit >= second_apron:
-        return "above_second_apron"
-    if cap_hit >= first_apron:
-        return "above_first_apron"
-    if cap_hit >= tax_line:
-        return "above_tax"
-    return "below_tax"
 
 
 def _project_cap(base_cap: SeasonCapData, years_forward: int) -> SeasonCapData:
@@ -79,6 +83,7 @@ def _project_cap(base_cap: SeasonCapData, years_forward: int) -> SeasonCapData:
         tax_line=int(base_cap.tax_line * factor),
         first_apron=int(base_cap.first_apron * factor),
         second_apron=int(base_cap.second_apron * factor),
+        is_projected=True,
     )
 
 
@@ -105,7 +110,15 @@ def build_season_sequence(
     current = start_season
     for _ in range(years):
         if current in cap_by_season:
-            data = cap_by_season[current]
+            raw = cap_by_season[current]
+            data = SeasonCapData(
+                season=current,
+                salary_cap=raw.salary_cap,
+                tax_line=raw.tax_line,
+                first_apron=raw.first_apron,
+                second_apron=raw.second_apron,
+                is_projected=False,
+            )
         elif last_known is not None:
             # project forward
             base_year = int(all_known[-1][:4])
@@ -114,7 +127,14 @@ def build_season_sequence(
             data = _project_cap(last_known, offset)
         else:
             raise ValueError("No cap constants available to project from.")
-        data = SeasonCapData(current, data.salary_cap, data.tax_line, data.first_apron, data.second_apron)
+        data = SeasonCapData(
+            current,
+            data.salary_cap,
+            data.tax_line,
+            data.first_apron,
+            data.second_apron,
+            data.is_projected,
+        )
         result.append(data)
         current = _next_season(current)
     return result
@@ -125,7 +145,7 @@ def simulate(
     player_name: str,
     aav_pct: float,            # % of cap (e.g. 20.0)
     years: int,
-    guaranteed_years: int,
+    guaranteed_years: int | None,
     player_option_years: int,
     team_option_years: int,
     start_season: str,
@@ -137,8 +157,25 @@ def simulate(
     Option logic (applied from the END of the contract):
     - team_option_years: last N years are team options
     - player_option_years: preceding M years are player options
-    - guaranteed_years: all remaining years up to that count are guaranteed
+    - guaranteed_years: all remaining years up to that count are guaranteed; if omitted, all
+      non-option years are treated as guaranteed.
     """
+    if years < 1:
+        raise ValueError("years must be at least 1.")
+    if any(v < 0 for v in (player_option_years, team_option_years)):
+        raise ValueError("option year counts cannot be negative.")
+    option_years = player_option_years + team_option_years
+    if option_years > years:
+        raise ValueError("player_option_years + team_option_years cannot exceed years.")
+    if guaranteed_years is None:
+        guaranteed_years = years - option_years
+    if guaranteed_years < 0:
+        raise ValueError("guaranteed_years cannot be negative.")
+    if guaranteed_years + option_years > years:
+        raise ValueError(
+            "guaranteed_years + player_option_years + team_option_years cannot exceed years."
+        )
+
     aav_fraction = aav_pct / 100.0
     season_caps = build_season_sequence(start_season, years, cap_by_season)
 
@@ -164,7 +201,6 @@ def simulate(
     for i, (cap_data, (is_g, is_po, is_to)) in enumerate(zip(season_caps, year_types)):
         cap_hit_usd = int(aav_fraction * cap_data.salary_cap)
         cap_hit_pct = round(aav_fraction * 100, 2)
-        status = _apron_status(cap_hit_usd, cap_data.tax_line, cap_data.first_apron, cap_data.second_apron)
         contract_years_out.append(ContractYear(
             season=cap_data.season,
             cap_hit_usd=cap_hit_usd,
@@ -176,7 +212,7 @@ def simulate(
             tax_line=cap_data.tax_line,
             first_apron=cap_data.first_apron,
             second_apron=cap_data.second_apron,
-            cap_hit_vs_tax=status,
+            is_projected_cap=cap_data.is_projected,
         ))
 
     # first-year USD for the summary

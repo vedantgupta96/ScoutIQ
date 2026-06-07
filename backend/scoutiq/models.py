@@ -39,6 +39,9 @@ class Player(Base):
     player_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)  # nba_api PLAYER_ID
     full_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     position: Mapped[str | None] = mapped_column(String(16))  # filled from BBRef advanced table
+    current_team_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("teams.team_id"))
+    current_team_source: Mapped[str | None] = mapped_column(String(64))
+    current_team_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     xref: Mapped["PlayerXref | None"] = relationship(back_populates="player", uselist=False)
 

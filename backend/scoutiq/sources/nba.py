@@ -8,7 +8,15 @@ from __future__ import annotations
 import time
 
 import pandas as pd
-from nba_api.stats.endpoints import leaguedashplayerstats
+from nba_api.stats.endpoints import commonallplayers, leaguedashplayerstats
+from nba_api.stats.static import teams as static_teams
+
+_TEAM_ABBREV_ALIASES = {
+    "BRK": "BKN",  # Basketball-Reference abbreviation for Brooklyn.
+    "CHO": "CHA",
+    "NOH": "NOP",
+    "PHO": "PHX",
+}
 
 
 def _league_dash(season: str, measure_type: str) -> pd.DataFrame:
@@ -33,3 +41,35 @@ def fetch_season(season: str, pause: float = 0.6) -> pd.DataFrame:
     merged = base.merge(adv[adv_only], on="PLAYER_ID", how="left")
     merged["SEASON"] = season
     return merged
+
+
+def team_rows() -> list[dict]:
+    """Current NBA team reference rows from nba_api static metadata."""
+    return [
+        {
+            "team_id": t["id"],
+            "abbreviation": t["abbreviation"],
+            "name": t["full_name"],
+        }
+        for t in static_teams.get_teams()
+    ]
+
+
+def team_id_for_abbreviation(abbreviation: str | None) -> int | None:
+    """Map an NBA/BBRef team abbreviation to the stable nba_api team id."""
+    if not abbreviation:
+        return None
+    abbr = _TEAM_ABBREV_ALIASES.get(str(abbreviation).upper(), str(abbreviation).upper())
+    for row in team_rows():
+        if row["abbreviation"] == abbr:
+            return row["team_id"]
+    return None
+
+
+def fetch_current_players(season: str) -> pd.DataFrame:
+    """Return current roster/team metadata for active NBA players."""
+    return commonallplayers.CommonAllPlayers(
+        is_only_current_season=1,
+        season=season,
+        timeout=60,
+    ).get_data_frames()[0]
