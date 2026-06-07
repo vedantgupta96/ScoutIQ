@@ -12,6 +12,8 @@ requests/lxml · scikit-learn
 - **nba.com** (`nba_api` → `leaguedashplayerstats`): box + advanced (USG/TS/PIE/ratings). Numbers, deterministic.
 - **Basketball-Reference** (scraped, cached): advanced (BPM/VORP/WS + position) and realized salary.
   Polite: identified User-Agent, ~3.5s rate-limit, disk cache so re-runs never re-hit the site.
+- **Spotrac** (scraped, cached): forward contract structure and season cap hits. Used to bridge 2025-26
+  salary comparisons because realized salary tables lag the current season.
 
 ## Setup
 ```bash
@@ -37,6 +39,8 @@ python -m scoutiq.etl.load_bbref --limit 10       # validate scrape on 10 player
 python -m scoutiq.etl.load_bbref                  # ...then full (slow first run; cached after)
 python -m scoutiq.etl.repair_team_history         # cache-only: fix historical team_id from BBRef
 python -m scoutiq.etl.load_current_rosters        # current roster team -> players.current_team_*
+python -m scoutiq.etl.load_contracts              # Spotrac forward contract structure (networked)
+python -m scoutiq.etl.bridge_contract_salaries    # bridge 2025-26 cap hits into player_salaries
 python -m scoutiq.etl.check_coverage              # data-quality gate -> trainable row count
 python -m scoutiq.model.train                     # regenerate model.joblib + backtest artifacts
 uvicorn scoutiq.api.main:app --reload             # serve API at http://127.0.0.1:8000
@@ -53,6 +57,7 @@ curl 'http://127.0.0.1:8000/players/cards?query=bane&limit=5'
 curl 'http://127.0.0.1:8000/players/watchlist?bucket=all&limit=24&offset=0'
 curl 'http://127.0.0.1:8000/players/1630217'
 curl 'http://127.0.0.1:8000/players/1630217/valuation?season=2024-25'
+curl 'http://127.0.0.1:8000/players/1630217/headshot'
 curl 'http://127.0.0.1:8000/players/1630217/scout-ratings'
 curl 'http://127.0.0.1:8000/backtest'
 curl 'http://127.0.0.1:8000/llm/scout-ratings/eval'
@@ -71,6 +76,9 @@ Player endpoints intentionally separate team concepts:
 Run `repair_team_history` after `load_bbref` if nba.com historical stat rows have inherited current
 roster team metadata. This command is cache-only and uses local BBRef pages, so it does not hit the
 network. Run `load_current_rosters` separately when you want current roster/team state.
+
+Player headshots are served through a backend proxy/cache at `GET /players/{player_id}/headshot`; missing
+images are negative-cached and the frontend falls back to initials.
 
 The v0 simulator is intentionally narrow: it models a standalone proposed contract against cap constants
 and the valuation model, not full team payroll, luxury tax owed, Bird rights, MLE/BAE, repeater tax, or
@@ -128,7 +136,7 @@ This is a player-profile UI/API contract preview. It does not read real scouting
 or live Claude outputs yet.
 
 ## Config
-`scoutiq/config.py` (env-overridable): `SEASON_START_YEAR`/`SEASON_END_YEAR` (default 2012–2024),
+`scoutiq/config.py` (env-overridable): `SEASON_START_YEAR`/`SEASON_END_YEAR` (default 2012–2025),
 `BBREF_DELAY_SECONDS`, `BBREF_USER_AGENT`.
 
 ## Layout
@@ -137,8 +145,8 @@ scoutiq/
   config.py  db.py  models.py
   sources/   nba.py  bbref.py  crosswalk.py
   etl/       load_cap_constants.py  load_stats.py  load_bbref.py  load_current_rosters.py
-             repair_team_history.py  check_coverage.py
-  api/       main.py  routers/players.py  routers/simulator.py  routers/backtest.py
+             repair_team_history.py  load_contracts.py  bridge_contract_salaries.py  check_coverage.py
+  api/       main.py  routers/players.py  routers/simulator.py  routers/backtest.py  routers/headshots.py
   model/     train.py  predict.py  artifacts/
   llm/       schemas.py  scoring.py  eval_scout_ratings.py  eval_data/  artifacts/
   data/      cap_constants_seed.csv   raw/ (cached HTML, gitignored)

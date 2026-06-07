@@ -1,16 +1,17 @@
 # ScoutIQ — Progress Log
 
-_Last updated: 2026-06-06. Snapshot of what's built, what works, what broke, and what's next._
+_Last updated: 2026-06-07. Snapshot of what's built, what works, what broke, and what's next._
 
 ## Status at a glance
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Data layer (schema, ETL, dataset) | ✅ complete |
 | 2 | Valuation model + backtest | ✅ complete |
-| 3 | Cap simulator + FastAPI + dashboard | ⏳ next |
+| 3 | Cap simulator + FastAPI + dashboard | ✅ core complete |
+| 4 | Contract timeline, comps, grounded rationale | ⏳ next |
 
-Three PRs merged to `main` (data layer · scrape-robustness fix · valuation model). Workflow is
-feature-branch → PR → squash-merge per phase. Database is a live hosted **Neon** Postgres.
+Twenty PRs are merged to `main`, with the current work adding player headshots. Workflow is feature
+branch → PR → squash-merge per phase. Database is a live hosted **Neon** Postgres.
 
 ---
 
@@ -28,8 +29,8 @@ A clean, query-ready NBA dataset that the model trains on.
 - **ETL** (idempotent upserts): cap-constants seed, league-wide stats per season, BBRef enrichment, and
   a `check_coverage` gate that reports the trainable-row count.
 
-**Result:** 6,829 player-seasons · 1,673 players · 13 seasons (2012-13 → 2024-25); 1,552 players matched
-to BBRef and verified; **4,719 trainable rows**.
+**Result:** 2025-26 data is now loaded into the product path, with current roster state, cap constants,
+forward Spotrac contract structure, and bridged 2025-26 contract cap hits for valuation comparisons.
 
 ### Phase 2 — Valuation model
 Estimates a player's **production-implied market value** (salary as % of cap) from on-court production —
@@ -38,13 +39,27 @@ deliberately *not* using their current salary, so the gap to actual pay is the a
 - **Framing:** features = production at season *t* → value at *t+1*; strict temporal split (no leakage).
 - **Model:** HistGradientBoosting (handles NaN natively).
 - **Uncertainty:** split-conformal prediction intervals (marginal coverage guarantee).
-- **Backtest:** train target-seasons ≤ 2022-23, test 2023-24 & 2024-25.
+- **Backtest:** train target-seasons ≤ 2023-24, test 2024-25 & 2025-26.
 - **Outputs (committed):** `report.md`, calibration + predicted-vs-actual plots, `metrics.json`, and a
   per-player `valuations_test.csv`.
 
-**Result (test 2023-25):** R² **0.77** · MAE **2.9% of cap** (~$4.0M) vs 6.9% naive · 80% interval
-coverage **0.85**. Calibration tracks nominal across all levels. The largest value-vs-pay gaps are
-basketball-credible (underpaid: Bane, Haliburton, J. Williams; overpaid: Simmons, LaVine, Beal, Gobert).
+**Result (test 2024-26):** R² **0.767** · MAE **3.128% of cap** (~$4.6M) vs 6.98% naive · 80%
+interval coverage **0.797**. Calibration lands almost exactly on target, and the 2025-26 rows use
+Spotrac-sourced per-season cap hits as evaluation/pay comparison data.
+
+### Phase 3 — API, dashboard, and simulator
+The core product cockpit is now working.
+
+- **FastAPI:** health/current-season, player search/profile, valuation, batched player cards, contract
+  watchlist, simulator, backtest metadata/valuations, scout-rating eval, player scout-rating fixture
+  aggregation, and cached player headshots.
+- **Dashboard:** Next.js app with players/watchlist, player profile, simulator, and model/backtest views.
+- **Simulator:** simplified-but-explicit CBA subset, 2025-26 default contract start, actual loaded
+  2025-26 cap constants, future cap projection, option/guarantee sliders, and assumption flags.
+- **Watchlist:** bucket/sort/position/search filters; valuation pinned to the displayed season so
+  2025-26 stats and salary coverage do not silently drop players.
+- **Scout eval:** offline synthetic fixture harness is exposed in API/UI, but live LLM/Sonar ingestion is
+  intentionally not in the request path yet.
 
 ---
 
@@ -70,6 +85,11 @@ Most were caught by actually running the pipeline, not by reading code:
 | ~30 players unmatched (e.g. Jalen Green) | common surnames push BBRef slugs past suffix 03 | deepen collision search (`max_suffix` 3 → 12) |
 | Crosswalk flagged correct slugs as mismatch | exact-match vs the page `<title>` ("Name Stats, …") | prefix-match the title |
 | `DetachedInstanceError` | read an ORM attr after the session closed | read inside the session scope |
+| Watchlist dropped players after 2025-26 data load | values were computed against latest stats season with incomplete salary coverage | pin card valuation to the watchlist target season |
+| Watchlist candidate cap hid top mismatches | alphabetical candidate cap excluded relevant players before ranking | order candidates by minutes and use a season-sized candidate cap |
+| Spotrac pages shifted columns / extension tables | fixed-index first-table parser missed cap-hit rows | header-driven parser scans all cap-hit tables |
+| Contract re-scrapes left stale duplicates | dedup key changed when parser/source shifted `season_start` | clean-replace existing player contracts before insert |
+| Missing headshots could repeatedly hit the CDN | no negative cache for players without NBA CDN images | cache missing-image sentinels and fall back to initials |
 
 ---
 
@@ -77,6 +97,8 @@ Most were caught by actually running the pipeline, not by reading code:
 - **Sport = NBA, persona = front office, posture = calibrated/honest.** NBA is the only league where
   valuation + a real cap + guaranteed contracts + scouting text all coexist.
 - **Hosted Neon over local Postgres/Docker; SQLAlchemy + Alembic; nba.com Advanced + BBRef BPM/VORP/WS.**
+- **Current season is backend-owned.** `/health.current_season` drives the shell label so the UI does not
+  drift from `LATEST_SEASON`.
 - **Target as % of cap, not raw dollars** — normalizes ~10%/yr cap inflation so the backtest is honest.
 - **The big pivot — value model, not salary forecast.** The original plan predicted next-year *paid*
   salary. Testing revealed that's dominated by contract mechanics: a dumb "next year = this year"
@@ -90,14 +112,16 @@ Most were caught by actually running the pipeline, not by reading code:
 ## Known limitations
 - **Salary stickiness:** persistence beats the model on mid-contract players (expected; we exclude salary
   on purpose). The fix is forward contract data (Spotrac) to evaluate at contract-decision points.
-- **No forward contract structure yet** — `contracts`/`contract_years` are defined-later; the cap
-  simulator (Phase 3) will start with a simplified subset.
+- **Forward contract structure is present but not yet fully surfaced.** `contracts`/`contract_years`
+  exist and feed 2025-26 salary bridging; the next product step is a visible current-contract timeline
+  and extension simulation flow.
 - **Name matching:** ~15 `mismatch` / ~106 `not_found` players remain (accents, Jr./Sr., no BBRef page).
 - **Cap rules** are a simplified subset of the CBA (no Bird rights / exceptions / repeater tax yet).
 
 ---
 
-## Next (Phase 3)
-The part that makes it a product: a **FastAPI** service wrapping the model + the **What-If Contract & Cap
-Simulator** (the signature feature) + a first dashboard. Forward contract structure (Spotrac) unlocks the
-v1 contract-AAV target and richer cap math.
+## Next
+The highest-leverage next feature is **current contract timeline + one-click extension simulation**:
+show what the player is owed, compare it to production-implied value, and let the user launch a proposed
+extension from the current deal. After that, similar-player/contract comps and grounded rationale
+generation are the most natural additions.

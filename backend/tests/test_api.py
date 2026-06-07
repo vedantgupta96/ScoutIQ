@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+import scoutiq.api.routers.headshots as headshots_router
 import scoutiq.api.routers.simulator as simulator_router
 import scoutiq.api.routers.players as players_router
 from scoutiq.api.deps import get_db
@@ -332,6 +333,58 @@ def test_health_exposes_current_season():
     assert body["status"] == "ok"
     # current_season is the UI's source of truth; it must mirror LATEST_SEASON.
     assert body["current_season"] == players_router.LATEST_SEASON
+
+
+def test_player_headshot_fetches_and_caches_image(monkeypatch, tmp_path):
+    calls = {"count": 0}
+
+    class FakeResponse:
+        status_code = 200
+        content = b"png-bytes"
+        headers = {"content-type": "image/png"}
+
+    def fake_get(url, headers, timeout):
+        calls["count"] += 1
+        return FakeResponse()
+
+    monkeypatch.setattr(headshots_router, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(headshots_router.requests, "get", fake_get)
+    client = _client(FakeDB())
+
+    first = client.get("/players/1630217/headshot")
+    second = client.get("/players/1630217/headshot")
+
+    assert first.status_code == 200
+    assert first.content == b"png-bytes"
+    assert second.status_code == 200
+    assert second.content == b"png-bytes"
+    assert calls["count"] == 1
+    assert (tmp_path / "1630217.png").exists()
+
+
+def test_player_headshot_negative_caches_missing_image(monkeypatch, tmp_path):
+    calls = {"count": 0}
+
+    class FakeResponse:
+        status_code = 404
+        content = b""
+        headers = {"content-type": "text/html"}
+
+    def fake_get(url, headers, timeout):
+        calls["count"] += 1
+        return FakeResponse()
+
+    monkeypatch.setattr(headshots_router, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(headshots_router.requests, "get", fake_get)
+    client = _client(FakeDB())
+
+    first = client.get("/players/999999/headshot")
+    second = client.get("/players/999999/headshot")
+
+    assert first.status_code == 404
+    assert second.status_code == 404
+    assert calls["count"] == 1
+    assert (tmp_path / "999999.missing").exists()
 
 
 def test_scout_ratings_eval_returns_offline_fixture_report():

@@ -1,14 +1,16 @@
 # ScoutIQ — Technical Design
 
 > The doc you code against. Vision lives in `ScoutIQ.md`; feasibility in `docs/01-data-source-spike.md`.
-> **Do not finalize the schema until the contract-data row of the spike is green.**
+> **Current status:** the core API/dashboard/simulator is built; the next product step is surfacing
+> current contracts as a timeline and using them to launch extension simulations.
 
 ---
 
 ## 0. Scope & non-goals (the useful 10% of a PRD)
 
-**In scope (Phase 1):** NBA player + contract DB, stats/contracts ETL, contract valuation model with
-confidence intervals + backtest, What-If cap simulator, front-office dashboard.
+**In scope (current core):** NBA player + contract DB, stats/contracts ETL, contract valuation model with
+confidence intervals + backtest, What-If cap simulator, front-office dashboard, and offline scout-rating
+eval preview.
 
 **Non-goals:** real-time/in-game data, multiple sports, full CBA fidelity, mobile app, auth/multi-tenant,
 trade-machine matching rules. (These are explicit *non-goals*, not "later" — keep the surface small.)
@@ -37,10 +39,10 @@ Principles:
 
 ## 2. Postgres schema (Phase 1)
 
-> **v0 build update (2026-06-06):** the authoritative schema now lives in `backend/scoutiq/models.py`.
-> Changes vs. the SQL below: added **`player_salaries`** (historical realized salary from BBRef — what v0
-> trains on) and **`player_xref`** (nba_id ↔ verified BBRef slug). `contracts`/`contract_years` are
-> **defined-later** (forward structure from Spotrac), not populated in this phase.
+> **v0 build update (2026-06-07):** the authoritative schema now lives in `backend/scoutiq/models.py`.
+> Changes vs. the SQL below: added **`player_salaries`** (realized BBRef salary plus bridged Spotrac
+> current-season cap hits), **`player_xref`** (nba_id ↔ verified BBRef slug), current roster fields on
+> `players`, and populated **`contracts`/`contract_years`** from Spotrac.
 
 ```sql
 -- ── Reference ────────────────────────────────────────────────
@@ -171,8 +173,8 @@ single choice makes the backtest honest.
 > Key change from the original plan: the model predicts **production-implied value** and **excludes the
 > player's current salary** as a feature — testing showed a paid-salary target is dominated by contract
 > mechanics (persistence beats any model on mid-contract players). See
-> [progress log](03-progress-log.md) for the pivot rationale and backtest results (R² 0.77, 80%
-> coverage 0.85).
+> [progress log](03-progress-log.md) for the pivot rationale and backtest results (R² 0.767, 80%
+> coverage 0.797).
 
 ### LOCKED feature set (confirmed available 2026-06-06)
 - **nba.com** (`leaguedashplayerstats` Advanced + Base): `MIN, GP, USG_PCT, TS_PCT, PIE, NET_RATING,
@@ -184,8 +186,8 @@ single choice makes the backtest honest.
 ### Target
 - **v0 (build now):** a player's **season salary as % of that season's cap**, predicted from
   **prior-season** production (clean temporal split; fully supported by `player_salaries` + `player_seasons`).
-- **v1 (after Spotrac):** first-year salary of a *new contract* as % of cap — upgrade once forward
-  contract structure exists.
+- **v1:** first-year salary of a *new contract* as % of cap, evaluated at contract-decision points now
+  that Spotrac forward structure exists.
 
 - **Legacy note — features (strict leakage control, only data before the predicted season):**
   prior 1–3 seasons production (BPM, VORP, WS, usage, TS%, minutes), **age**, position,
@@ -194,7 +196,7 @@ single choice makes the backtest honest.
   - **Confidence intervals** via **quantile regression** (predict P10/P50/P90) or **conformal
     prediction** (cleaner coverage guarantees — recommended).
 - **Backtest protocol (temporal, no leakage):**
-  - Train on contracts signed **2015–2022**, test on **2023–2025**.
+  - Current artifact trains target-seasons ≤ **2023-24** and tests on **2024-25** & **2025-26**.
   - Report MAE in **$** *and* in **% of cap**; report **interval coverage** (does the 80% CI contain
     truth ~80% of the time?) with a reliability plot.
   - Ship these numbers in the UI — calibration is the credibility centerpiece.
@@ -239,7 +241,8 @@ GET  /backtest                           # serve published calibration metrics
 
 1. **Migrations + `cap_constants` seed** → 2. **stats ETL** → 3. **contracts ETL** (riskiest; spike first)
 → 4. **valuation v0 + backtest** → 5. **cap engine + `/simulate`** → 6. **dashboard + signature viz**.
-Phase 2 (LLM/Sonar/pgvector) and Phase 3 (forecast/injury/graph/Monte Carlo) layer on after Phase 1 ships.
+Next layers: current-contract timeline, extension simulation, similar-player/contract comps, grounded
+rationale generation, then forecast/injury/Monte Carlo experiments if they stay honest.
 
 ---
 

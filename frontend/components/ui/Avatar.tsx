@@ -1,3 +1,5 @@
+import { headshotUrl } from '@/lib/api';
+
 const SIZE_PX = { sm: 28, md: 36, lg: 48, xl: 64 };
 
 function initials(name: string): string {
@@ -8,8 +10,6 @@ function initials(name: string): string {
     .map((w) => w[0].toUpperCase())
     .join('');
 }
-
-import { headshotUrl } from '@/lib/api';
 
 interface AvatarProps {
   name: string;
@@ -50,8 +50,7 @@ export function Avatar({ name, size = 'md', position, playerId }: AvatarProps) {
         {abbrev}
       </span>
       {playerId != null && (
-        // Overlays the initials; on a 404/load error it hides itself, revealing
-        // the initials underneath — no state needed, works without 'use client'.
+        // Overlays initials; on load error it hides itself, revealing the fallback.
         <img
           src={headshotUrl(playerId)}
           alt={name}
