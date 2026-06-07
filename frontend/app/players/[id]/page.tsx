@@ -217,7 +217,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
       <Card padded>
         <div className="siq-player-card-row">
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: '1 1 260px' }}>
-            <Avatar name={val.player_name} size="xl" position={val.position} />
+            <Avatar name={val.player_name} size="xl" position={val.position} playerId={val.player_id} />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <h2 style={{
