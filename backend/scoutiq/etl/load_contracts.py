@@ -194,25 +194,16 @@ def scrape_team(team_slug: str) -> list[dict]:
 # Step 2 — scrape individual player page → year-by-year
 # ---------------------------------------------------------------------------
 
-def scrape_player_contract(spotrac_id: str, name_slug: str) -> list[dict] | None:
-    """Return list of {season, aav, cap_pct, is_guaranteed, is_player_option, is_team_option}."""
-    url = f"https://www.spotrac.com/nba/player/_/id/{spotrac_id}/{name_slug}"
-    html = _get(url, f"player_{spotrac_id}")
-    if not html:
-        return None
+def _parse_contract_table(table) -> list[dict]:
+    """Parse one Spotrac cap-hit table into year rows, or [] if it isn't one.
 
-    soup = BeautifulSoup(html, "html5lib")
-    tables = soup.find_all("table")
-    if not tables:
-        return None
-
-    # table[0] columns vary by page: some include a "Status" column, some do not,
-    # which shifts Cap Hit / Cap % by one. Locate columns by header text instead
-    # of fixed indices, or the dollar/percent cells silently misalign.
-    table = tables[0]
+    Columns vary by page: some include a "Status" column, some do not, which
+    shifts Cap Hit / Cap % by one. Locate columns by header text instead of
+    fixed indices, or the dollar/percent cells silently misalign.
+    """
     header_row = table.find("tr")
     if header_row is None:
-        return None
+        return []
     headers = [c.get_text(strip=True).lower() for c in header_row.find_all(["td", "th"])]
 
     def _col(prefix: str) -> int | None:
@@ -222,7 +213,7 @@ def scrape_player_contract(spotrac_id: str, name_slug: str) -> list[dict] | None
     cap_pct_idx = _col("cap %")
     status_idx = _col("status")
     if cap_hit_idx is None or cap_pct_idx is None:
-        return None  # unrecognized layout — better no data than misaligned data
+        return []  # not a cap-hit table (base-salary / cash tables share the page)
 
     rows = []
     for row in table.find_all("tr")[1:]:
@@ -240,22 +231,41 @@ def scrape_player_contract(spotrac_id: str, name_slug: str) -> list[dict] | None
         if status in ("ufa", "rfa", "two-way"):
             continue
 
-        aav = _parse_dollars(cells[cap_hit_idx].get_text(strip=True))
-        cap_pct = _parse_pct(cells[cap_pct_idx].get_text(strip=True))
-
         is_player_option = "player" in status
         is_team_option = "team" in status
-        is_guaranteed = not is_player_option and not is_team_option
-
         rows.append({
             "season": season,
-            "aav": aav,
-            "cap_pct": cap_pct,
-            "is_guaranteed": is_guaranteed,
+            "aav": _parse_dollars(cells[cap_hit_idx].get_text(strip=True)),
+            "cap_pct": _parse_pct(cells[cap_pct_idx].get_text(strip=True)),
+            "is_guaranteed": not is_player_option and not is_team_option,
             "is_player_option": is_player_option,
             "is_team_option": is_team_option,
         })
+    return rows
 
+
+def scrape_player_contract(spotrac_id: str, name_slug: str) -> list[dict] | None:
+    """Return list of {season, aav, cap_pct, is_guaranteed, is_player_option, is_team_option}.
+
+    A recently-extended player's page leads with the extension table while the
+    current contract (the years we actually need, e.g. 2025-26) sits in a later
+    cap-hit table. Merge across every cap-hit table, keeping the first non-null
+    cap hit per season, so those current years aren't dropped.
+    """
+    url = f"https://www.spotrac.com/nba/player/_/id/{spotrac_id}/{name_slug}"
+    html = _get(url, f"player_{spotrac_id}")
+    if not html:
+        return None
+
+    soup = BeautifulSoup(html, "html5lib")
+    by_season: dict[str, dict] = {}
+    for table in soup.find_all("table"):
+        for row in _parse_contract_table(table):
+            existing = by_season.get(row["season"])
+            if existing is None or (existing["aav"] is None and row["aav"] is not None):
+                by_season[row["season"]] = row
+
+    rows = [by_season[s] for s in sorted(by_season)]
     return rows if rows else None
 
 
