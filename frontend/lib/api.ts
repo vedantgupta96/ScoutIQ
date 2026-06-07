@@ -135,6 +135,8 @@ export interface BacktestValuationRow {
   actual_pct: number;
   value_pct: number;
   gap_pct: number;
+  gp: number;
+  min_per_g: number;
 }
 
 // ---- API functions -------------------------------------------

@@ -22,6 +22,8 @@ class ValuationRow(BaseModel):
     actual_pct: float
     value_pct: float
     gap_pct: float
+    gp: int
+    min_per_g: float
 
 
 class BacktestResponse(BaseModel):
@@ -73,5 +75,7 @@ def get_backtest_valuations():
                 actual_pct=float(row["actual_pct"]),
                 value_pct=float(row["value_pct"]),
                 gap_pct=float(row["gap_pct"]),
+                gp=int(float(row["gp"])),
+                min_per_g=float(row["min_per_g"]),
             ))
     return rows
