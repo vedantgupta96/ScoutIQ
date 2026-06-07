@@ -17,7 +17,7 @@ router = APIRouter(prefix="/players", tags=["players"])
 
 # The most recent completed season for which we have full stats.
 # Update each offseason after the ETL runs for the new season.
-LATEST_SEASON = "2024-25"
+LATEST_SEASON = "2025-26"
 
 
 class TeamSummary(BaseModel):

@@ -330,3 +330,13 @@ export function getScoutRatingEval(): Promise<ScoutRatingEvalResponse> {
 export function getPlayerScoutRatings(id: number): Promise<PlayerScoutRatingsResponse> {
   return apiFetch<PlayerScoutRatingsResponse>(`/players/${id}/scout-ratings`);
 }
+
+export interface HealthResponse {
+  status: string;
+  service: string;
+  current_season: string;
+}
+
+export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
+  return apiFetch<HealthResponse>('/health', { signal });
+}

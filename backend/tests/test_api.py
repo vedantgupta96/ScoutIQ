@@ -272,7 +272,9 @@ def test_player_watchlist_defaults_to_ranked_recent_mismatches(monkeypatch):
     )
     client = _client(FakeDB())
 
-    response = client.get("/players/watchlist?bucket=underpaid&limit=10")
+    # Pin to the fixture's season (FakeDB models a 2024-25 player); the default
+    # season tracks LATEST_SEASON, which is exercised separately at the API level.
+    response = client.get("/players/watchlist?bucket=underpaid&season=2024-25&limit=10")
 
     assert response.status_code == 200
     body = response.json()
@@ -318,6 +320,18 @@ def test_backtest_returns_committed_metrics():
     assert body["metrics"]["n_test"] == 699
     assert body["metrics"]["test_seasons"] == ["2024-25", "2025-26"]
     assert "metrics.json" in body["artifacts"]
+
+
+def test_health_exposes_current_season():
+    client = _client(FakeDB())
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    # current_season is the UI's source of truth; it must mirror LATEST_SEASON.
+    assert body["current_season"] == players_router.LATEST_SEASON
 
 
 def test_scout_ratings_eval_returns_offline_fixture_report():
