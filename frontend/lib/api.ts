@@ -98,6 +98,37 @@ export interface SimulatorResponse {
   disclaimer: string;
 }
 
+export interface BacktestCalibrationPoint {
+  nominal: number;
+  empirical: number;
+  half_width_pct: number;
+}
+
+export interface BacktestMetrics {
+  model_version: string;
+  n_train: number;
+  n_calibration: number;
+  n_test: number;
+  test_seasons: string[];
+  mae_pct_of_cap: number;
+  mae_usd: number;
+  r2: number;
+  interval_80_coverage: number;
+  interval_80_half_width_pct: number;
+  naive_mean_baseline_mae_pct: number;
+  persistence_ref_mae_pct_midcontract: number;
+  n_midcontract: number;
+  calibration: BacktestCalibrationPoint[];
+}
+
+export interface BacktestResponse {
+  model_version: string | null;
+  metrics: BacktestMetrics;
+  report_path: string;
+  artifacts: string[];
+  caveat: string;
+}
+
 // ---- API functions -------------------------------------------
 
 export function searchPlayers(query?: string, limit = 20): Promise<PlayerSummary[]> {
@@ -120,4 +151,8 @@ export function simulateContract(req: SimulatorRequest): Promise<SimulatorRespon
     method: 'POST',
     body: JSON.stringify(req),
   });
+}
+
+export function getBacktest(): Promise<BacktestResponse> {
+  return apiFetch<BacktestResponse>('/backtest');
 }

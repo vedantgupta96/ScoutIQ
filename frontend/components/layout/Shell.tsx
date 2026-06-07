@@ -20,8 +20,7 @@ const TITLES: Record<string, string> = {
 
 function Sidebar({ active }: { active: string }) {
   return (
-    <aside style={{
-      width: 'var(--sidebar-width)',
+    <aside className="siq-sidebar" style={{
       flexShrink: 0,
       background: 'var(--bg-panel)',
       borderRight: '1px solid var(--border-subtle)',
@@ -30,7 +29,7 @@ function Sidebar({ active }: { active: string }) {
       height: '100%',
     }}>
       {/* Logo */}
-      <div style={{
+      <div className="siq-sidebar-logo" style={{
         display: 'flex', alignItems: 'center', gap: 10,
         padding: '0 18px', height: 'var(--topbar-height)',
         borderBottom: '1px solid var(--border-subtle)',
@@ -42,20 +41,20 @@ function Sidebar({ active }: { active: string }) {
           alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
         }}>
-          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 13, color: '#fff' }}>S</span>
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 13, color: 'var(--text-on-accent)' }}>S</span>
         </div>
-        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 19, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+        <span className="siq-logo-text" style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 19, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
           Scout<span style={{ color: 'var(--accent)' }}>IQ</span>
         </span>
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <span className="ds-eyebrow" style={{ padding: '8px 8px 6px' }}>Front office</span>
+      <nav className="siq-sidebar-nav" style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span className="ds-eyebrow siq-nav-eyebrow" style={{ padding: '8px 8px 6px' }}>Front office</span>
         {NAV.map(({ id, href, label, Icon }) => {
           const isActive = active === id;
           return (
-            <Link key={id} href={href} style={{
+            <Link key={id} href={href} className="siq-sidebar-link" aria-label={label} style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '9px 10px', borderRadius: 'var(--radius-md)',
               textDecoration: 'none', position: 'relative',
@@ -72,14 +71,14 @@ function Sidebar({ active }: { active: string }) {
                 }} />
               )}
               <Icon size={17} />
-              {label}
+              <span className="siq-nav-label">{label}</span>
             </Link>
           );
         })}
       </nav>
 
       {/* Footer */}
-      <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div className="siq-sidebar-footer" style={{ padding: '12px 14px', borderTop: '1px solid var(--border-subtle)' }}>
         <Badge tone="confidence" variant="outline" size="sm" dot>v0-gbm-conformal</Badge>
       </div>
     </aside>
@@ -104,14 +103,14 @@ function TopBar({ title, query, onQuery }: { title: string; query: string; onQue
   };
 
   return (
-    <header style={{
+    <header className="siq-topbar" style={{
       height: 'var(--topbar-height)', flexShrink: 0,
       display: 'flex', alignItems: 'center', gap: 16,
       padding: '0 22px',
       background: 'var(--bg-app)',
       borderBottom: '1px solid var(--border-subtle)',
     }}>
-      <h1 style={{
+      <h1 className="siq-topbar-title" style={{
         fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 20,
         color: 'var(--text-primary)', whiteSpace: 'nowrap', margin: 0,
       }}>
@@ -119,7 +118,7 @@ function TopBar({ title, query, onQuery }: { title: string; query: string; onQue
       </h1>
 
       {/* Search */}
-      <div style={{ flex: 1, maxWidth: 340, marginLeft: 8 }}>
+      <div className="siq-topbar-search" style={{ flex: 1, maxWidth: 340, marginLeft: 8 }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '6px 10px',
@@ -147,9 +146,11 @@ function TopBar({ title, query, onQuery }: { title: string; query: string; onQue
         </div>
       </div>
 
-      <div style={{ flex: 1 }} />
+      <div className="siq-topbar-spacer" style={{ flex: 1 }} />
 
-      <Badge tone="neutral">2024-25</Badge>
+      <span className="siq-season-badge">
+        <Badge tone="neutral">2024-25</Badge>
+      </span>
 
       <button onClick={toggleTheme} style={{
         display: 'inline-flex', padding: 7, borderRadius: 'var(--radius-md)',
@@ -159,7 +160,7 @@ function TopBar({ title, query, onQuery }: { title: string; query: string; onQue
         {dark ? <Sun size={16} /> : <Moon size={16} />}
       </button>
 
-      <button style={{
+      <button className="siq-bell-button" style={{
         display: 'inline-flex', padding: 7, borderRadius: 'var(--radius-md)',
         border: '1px solid var(--border-subtle)', background: 'var(--bg-panel)',
         color: 'var(--text-secondary)', cursor: 'pointer',
@@ -191,12 +192,12 @@ export function Shell({ children }: ShellProps) {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="siq-shell">
       <Sidebar active={activeId} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <TopBar title={baseTitle} query={query} onQuery={handleQuery} />
-        <main style={{ flex: 1, overflow: 'auto', padding: 24 }}>
-          <div style={{ maxWidth: 1440, margin: '0 auto' }}>
+        <main className="siq-main">
+          <div className="siq-content">
             {children}
           </div>
         </main>

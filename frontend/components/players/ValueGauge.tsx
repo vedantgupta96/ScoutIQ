@@ -1,5 +1,7 @@
 'use client';
 
+import type { CSSProperties } from 'react';
+
 interface ValueGaugeProps {
   valuePct: number;
   loPct: number;
@@ -7,98 +9,203 @@ interface ValueGaugeProps {
   actualPct: number | null;
 }
 
-// Scale to the larger of 40% or hi+5%, so high-value players don't clip.
 function computeMax(hiPct: number, valuePct: number, actualPct: number | null): number {
-  const topValue = Math.max(hiPct, valuePct, actualPct ?? 0);
-  return Math.ceil(Math.max(40, topValue + 6) / 10) * 10;
+  const top = Math.max(hiPct, valuePct, actualPct ?? 0);
+  return Math.ceil(Math.max(40, top + 6) / 10) * 10;
 }
 
-function pctToX(pct: number, max: number, width: number): number {
-  return Math.min(Math.max(pct / max, 0), 1) * width;
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
-// Clamp label x so it doesn't overflow the SVG edges.
-function clampLabelX(x: number, width: number, margin = 8): number {
-  return Math.max(margin, Math.min(width - margin, x));
+function formatPct(value: number): string {
+  return `${value.toFixed(1)}%`;
 }
 
 export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProps) {
-  const W = 100, H = 52;
-  const trackY = 32;
-  const trackH = 6;
   const MAX = computeMax(hiPct, valuePct, actualPct);
+  const toPosition = (v: number) => clamp((v / MAX) * 100, 0, 100);
+  const toPct = (v: number) => `${toPosition(v).toFixed(3)}%`;
+  const labelPlacement = (position: number, shift: 'left' | 'center' | 'right' = 'center'): CSSProperties => {
+    let transform = 'translateX(-50%)';
+    let textAlign: CSSProperties['textAlign'] = 'center';
 
-  const toX = (pct: number) => pctToX(pct, MAX, W);
+    if (shift === 'left') {
+      transform = 'translateX(calc(-100% - 8px))';
+      textAlign = 'right';
+    } else if (shift === 'right') {
+      transform = 'translateX(8px)';
+      textAlign = 'left';
+    }
 
-  const loX  = toX(loPct);
-  const hiX  = toX(hiPct);
-  const valX = toX(valuePct);
-  const actX = actualPct != null ? toX(actualPct) : null;
+    if (position <= 6) {
+      transform = 'translateX(0)';
+      textAlign = 'left';
+    } else if (position >= 94) {
+      transform = 'translateX(-100%)';
+      textAlign = 'right';
+    }
 
-  // Ticks: 0%, 10%, ... up to MAX
+    return { left: `${position.toFixed(3)}%`, transform, textAlign };
+  };
+
   const ticks = Array.from({ length: MAX / 10 + 1 }, (_, i) => i * 10);
-
-  // Separate labels if value and pay are too close (< 5% of width apart)
-  const labelsOverlap = actX != null && Math.abs(valX - actX) < 8;
+  const valuePosition = toPosition(valuePct);
+  const actualPosition = actualPct == null ? null : toPosition(actualPct);
+  const bandStart = toPosition(Math.min(loPct, hiPct));
+  const bandEnd = toPosition(Math.max(loPct, hiPct));
+  const overlap = actualPosition != null && Math.abs(valuePosition - actualPosition) < 8;
+  const ariaLabel = actualPct == null
+    ? `Estimated value ${formatPct(valuePct)}, confidence interval ${formatPct(loPct)} to ${formatPct(hiPct)}.`
+    : `Estimated value ${formatPct(valuePct)}, actual pay ${formatPct(actualPct)}, confidence interval ${formatPct(loPct)} to ${formatPct(hiPct)}.`;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }} overflow="visible">
-      {/* Track background */}
-      <rect x={0} y={trackY} width={W} height={trackH} rx={3} fill="var(--bg-inset)" />
-
-      {/* CI band */}
-      <rect
-        x={loX} y={trackY}
-        width={Math.max(0, hiX - loX)} height={trackH} rx={2}
-        fill="var(--confidence)" opacity={0.3}
-      />
-
-      {/* Tick marks + labels */}
-      {ticks.map((t) => {
-        const x = toX(t);
-        return (
-          <g key={t}>
-            <line x1={x} y1={trackY - 2} x2={x} y2={trackY + trackH + 2}
-                  stroke="var(--border-subtle)" strokeWidth={0.5} />
-            <text x={clampLabelX(x, W)} y={H - 1}
-                  fill="var(--text-muted)" fontSize="5.5"
-                  fontFamily="var(--font-mono)" textAnchor="middle">
-              {t}%
-            </text>
-          </g>
-        );
-      })}
-
-      {/* Actual pay marker */}
-      {actX != null && (
-        <g>
-          <line x1={actX} y1={trackY - 5} x2={actX} y2={trackY + trackH + 4}
-                stroke="var(--text-muted)" strokeWidth={1} strokeDasharray="2 2" />
-          <text
-            x={clampLabelX(actX + (labelsOverlap ? -5 : 0), W)}
-            y={trackY - 7}
-            fill="var(--text-muted)" fontSize="5"
-            fontFamily="var(--font-mono)"
-            textAnchor={labelsOverlap ? 'end' : 'middle'}
-          >
-            pay
-          </text>
-        </g>
-      )}
-
-      {/* Value marker (orange dot) */}
-      <circle cx={valX} cy={trackY + trackH / 2} r={5}
-              fill="var(--accent)" stroke="var(--bg-panel)" strokeWidth={1.5} />
-      <text
-        x={clampLabelX(valX + (labelsOverlap ? 5 : 0), W)}
-        y={trackY - 7}
-        fill="var(--accent)" fontSize="5"
-        fontFamily="var(--font-mono)"
-        fontWeight="600"
-        textAnchor={labelsOverlap ? 'start' : 'middle'}
+    <div
+      role="img"
+      aria-label={ariaLabel}
+      style={{
+        userSelect: 'none',
+        paddingTop: 30,
+        paddingBottom: 26,
+      }}
+    >
+      <div
+        style={{
+          position: 'relative',
+          height: 16,
+          borderRadius: 'var(--radius-pill)',
+          background: 'var(--bg-inset)',
+          border: '1px solid var(--border-subtle)',
+          boxShadow: 'inset 0 1px 2px rgba(16,24,40,0.06)',
+        }}
       >
-        value
-      </text>
-    </svg>
+        <div
+          style={{
+            position: 'absolute',
+            left: `${bandStart.toFixed(3)}%`,
+            width: `${Math.max(0, bandEnd - bandStart).toFixed(3)}%`,
+            top: 2,
+            bottom: 2,
+            borderRadius: 'var(--radius-pill)',
+            background: 'var(--confidence)',
+            opacity: 0.5,
+          }}
+        />
+
+        {ticks.map((t) => (
+          <span
+            key={`tick-${t}`}
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: toPct(t),
+              top: 3,
+              bottom: 3,
+              width: 1,
+              transform: 'translateX(-0.5px)',
+              background: 'var(--border-subtle)',
+            }}
+          />
+        ))}
+
+        {actualPct != null && (
+          <>
+            <span
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                left: toPct(actualPct),
+                top: -4,
+                bottom: -4,
+                width: 2,
+                transform: 'translateX(-1px)',
+                borderRadius: 'var(--radius-pill)',
+                background: 'repeating-linear-gradient(to bottom, var(--text-secondary) 0 4px, transparent 4px 7px)',
+              }}
+            />
+            <span
+              className="ds-tnum"
+              style={{
+                position: 'absolute',
+                bottom: 'calc(100% + 8px)',
+                maxWidth: 92,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                fontSize: 11,
+                lineHeight: 1.1,
+                color: 'var(--text-muted)',
+                whiteSpace: 'nowrap',
+                ...labelPlacement(actualPosition ?? 0, overlap ? 'left' : 'center'),
+              }}
+            >
+              pay {formatPct(actualPct)}
+            </span>
+          </>
+        )}
+
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            left: toPct(valuePct),
+            top: '50%',
+            width: 16,
+            height: 16,
+            transform: 'translate(-50%, -50%)',
+            borderRadius: 'var(--radius-pill)',
+            background: 'var(--accent)',
+            border: '2px solid var(--bg-panel)',
+            boxShadow: '0 1px 4px rgba(16,24,40,0.18)',
+          }}
+        />
+        <span
+          className="ds-tnum"
+          style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 8px)',
+            maxWidth: 104,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            fontSize: 11,
+            lineHeight: 1.1,
+            color: 'var(--accent)',
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            ...labelPlacement(valuePosition, overlap ? 'right' : 'center'),
+          }}
+        >
+          value {formatPct(valuePct)}
+        </span>
+
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 8px)',
+            left: 0,
+            right: 0,
+            height: 18,
+          }}
+        >
+          {ticks.map((t) => (
+            <span
+              key={`label-${t}`}
+              className="ds-tnum"
+              style={{
+                position: 'absolute',
+                left: toPct(t),
+                transform: t === 0 ? 'translateX(0)' : t === MAX ? 'translateX(-100%)' : 'translateX(-50%)',
+                fontSize: 10,
+                lineHeight: 1,
+                color: 'var(--text-muted)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {t}%
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

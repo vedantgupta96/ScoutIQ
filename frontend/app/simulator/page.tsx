@@ -1,5 +1,6 @@
 'use client';
 
+import type { CSSProperties } from 'react';
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, SlidersHorizontal, TriangleAlert } from 'lucide-react';
@@ -22,6 +23,8 @@ function DSSlider({
   label: string; value: number; onChange: (v: number) => void;
   min: number; max: number; step: number; format: (v: number) => string;
 }) {
+  const pct = max === min ? 0 : ((value - min) / (max - min)) * 100;
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -31,9 +34,10 @@ function DSSlider({
         </span>
       </div>
       <input
+        className="siq-slider"
         type="range" min={min} max={max} step={step} value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={{ width: '100%', accentColor: 'var(--accent)', cursor: 'pointer' }}
+        style={{ '--siq-slider-pct': `${Math.min(100, Math.max(0, pct))}%` } as CSSProperties}
       />
     </div>
   );
@@ -43,8 +47,8 @@ function DSSlider({
 const TIER_COLORS = {
   'below-tax':   { fill: 'var(--positive)',  label: 'Under tax' },
   'taxpayer':    { fill: 'var(--warning)',    label: 'Over tax' },
-  'first-apron': { fill: 'var(--orange-500)', label: '1st apron' },
-  'second-apron':{ fill: 'var(--negative)',  label: '2nd apron' },
+  'first-apron': { fill: 'var(--warning)',    label: 'First apron' },
+  'second-apron':{ fill: 'var(--negative)',   label: 'Second apron' },
 };
 
 function CapBar({ yr }: { yr: ContractYearResponse }) {
@@ -97,7 +101,7 @@ function CapBar({ yr }: { yr: ContractYearResponse }) {
           <div key={i} style={{
             position: 'absolute', left: `${pct}%`, top: -3, bottom: -3,
             width: 1.5,
-            background: i === 0 ? 'var(--warning)' : i === 1 ? 'var(--orange-500)' : 'var(--negative)',
+            background: i === 0 ? 'var(--amber-300)' : i === 1 ? 'var(--warning)' : 'var(--negative)',
             opacity: 0.6,
           }} />
         ))}
@@ -256,7 +260,7 @@ function SimulatorContent() {
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.5fr)', gap: 'var(--panel-gap)', alignItems: 'start' }}>
+          <div className="siq-simulator-grid">
             {/* Controls */}
             <Card eyebrow="Contract terms" icon={<SlidersHorizontal size={15} />}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>

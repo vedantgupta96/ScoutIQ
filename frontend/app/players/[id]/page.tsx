@@ -31,25 +31,43 @@ function StatRow({ label, value, warn }: { label: string; value: string; warn?: 
   );
 }
 
-// Feature metadata: label + how to format the raw value from the API
+// Feature metadata: label + how to format the raw value from the API.
+// Keys match the actual column names in features.py (some are uppercase NBA_ADV keys).
 const FEATURE_META: Record<string, { label: string; fmt: (v: number) => string }> = {
-  pts_per_game:  { label: 'Points / game',    fmt: (v) => v.toFixed(1) },
-  reb_per_game:  { label: 'Rebounds / game',  fmt: (v) => v.toFixed(1) },
-  ast_per_game:  { label: 'Assists / game',   fmt: (v) => v.toFixed(1) },
-  ts_pct:        { label: 'True shooting',    fmt: (v) => (v * 100).toFixed(1) + '%' },
-  ws:            { label: 'Win Shares',       fmt: (v) => v.toFixed(1) },
-  ws_per_48:     { label: 'WS / 48',          fmt: (v) => v.toFixed(3) },
-  age:           { label: 'Age',              fmt: (v) => v.toFixed(0) },
-  gp:            { label: 'Games played',     fmt: (v) => v.toFixed(0) },
-  minutes:       { label: 'Season minutes',   fmt: (v) => Math.round(v).toLocaleString() },
-  vorp:          { label: 'VORP',             fmt: (v) => v.toFixed(1) },
-  bpm:           { label: 'BPM',              fmt: (v) => v.toFixed(1) },
-  obpm:          { label: 'Off. BPM',         fmt: (v) => v.toFixed(1) },
-  dbpm:          { label: 'Def. BPM',         fmt: (v) => v.toFixed(1) },
-  per:           { label: 'PER',              fmt: (v) => v.toFixed(1) },
-  off_rating:    { label: 'Off. rating',      fmt: (v) => v.toFixed(1) },
-  def_rating:    { label: 'Def. rating',      fmt: (v) => v.toFixed(1) },
-  pace:          { label: 'Pace',             fmt: (v) => v.toFixed(1) },
+  // Base
+  age:        { label: 'Age',              fmt: (v) => v.toFixed(0) },
+  gp:         { label: 'Games played',     fmt: (v) => v.toFixed(0) },
+  minutes:    { label: 'Season minutes',   fmt: (v) => Math.round(v).toLocaleString() },
+  // Per-game box (API returns _pg suffix)
+  pts_pg:     { label: 'Points / game',    fmt: (v) => v.toFixed(1) },
+  reb_pg:     { label: 'Rebounds / game',  fmt: (v) => v.toFixed(1) },
+  ast_pg:     { label: 'Assists / game',   fmt: (v) => v.toFixed(1) },
+  stl_pg:     { label: 'Steals / game',    fmt: (v) => v.toFixed(1) },
+  blk_pg:     { label: 'Blocks / game',    fmt: (v) => v.toFixed(1) },
+  tov_pg:     { label: 'Turnovers / game', fmt: (v) => v.toFixed(1) },
+  fg3m_pg:    { label: '3PM / game',       fmt: (v) => v.toFixed(1) },
+  // NBA.com Advanced (uppercase keys from API)
+  TS_PCT:     { label: 'True shooting',    fmt: (v) => (v * 100).toFixed(1) + '%' },
+  EFG_PCT:    { label: 'eFG%',             fmt: (v) => (v * 100).toFixed(1) + '%' },
+  USG_PCT:    { label: 'Usage rate',       fmt: (v) => (v * 100).toFixed(1) + '%' },
+  PIE:        { label: 'PIE',              fmt: (v) => (v * 100).toFixed(1) + '%' },
+  OFF_RATING: { label: 'Off. rating',      fmt: (v) => v.toFixed(1) },
+  DEF_RATING: { label: 'Def. rating',      fmt: (v) => v.toFixed(1) },
+  NET_RATING: { label: 'Net rating',       fmt: (v) => (v >= 0 ? '+' : '') + v.toFixed(1) },
+  AST_PCT:    { label: 'Ast. %',           fmt: (v) => (v * 100).toFixed(1) + '%' },
+  OREB_PCT:   { label: 'OReb. %',          fmt: (v) => (v * 100).toFixed(1) + '%' },
+  DREB_PCT:   { label: 'DReb. %',          fmt: (v) => (v * 100).toFixed(1) + '%' },
+  REB_PCT:    { label: 'Reb. %',           fmt: (v) => (v * 100).toFixed(1) + '%' },
+  TM_TOV_PCT: { label: 'Team TOV %',       fmt: (v) => (v * 100).toFixed(1) + '%' },
+  PACE:       { label: 'Pace',             fmt: (v) => v.toFixed(1) },
+  // BBRef advanced (uppercase)
+  BPM:        { label: 'BPM',              fmt: (v) => (v >= 0 ? '+' : '') + v.toFixed(1) },
+  OBPM:       { label: 'Off. BPM',         fmt: (v) => (v >= 0 ? '+' : '') + v.toFixed(1) },
+  DBPM:       { label: 'Def. BPM',         fmt: (v) => (v >= 0 ? '+' : '') + v.toFixed(1) },
+  VORP:       { label: 'VORP',             fmt: (v) => v.toFixed(1) },
+  WS:         { label: 'Win Shares',       fmt: (v) => v.toFixed(1) },
+  WS48:       { label: 'WS / 48',          fmt: (v) => v.toFixed(3) },
+  PER:        { label: 'PER',              fmt: (v) => v.toFixed(1) },
 };
 
 function formatFeatureValue(key: string, value: number): { label: string; formatted: string } {
@@ -116,7 +134,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
 
       {/* Player header card */}
       <Card padded>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+        <div className="siq-player-card-row">
           <Avatar name={val.player_name} size="xl" position={val.position} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -135,13 +153,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
           <VerdictPill gapPct={val.gap_pct} size="lg" />
           <button
             onClick={() => router.push(`/simulator?player=${playerId}`)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              padding: '9px 16px', borderRadius: 'var(--radius-md)',
-              background: 'var(--accent)', color: '#fff', border: 'none',
-              fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 600,
-              cursor: 'pointer',
-            }}
+            className="siq-primary-button"
           >
             <SlidersHorizontal size={15} />
             Run cap simulation
@@ -149,7 +161,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
         </div>
       </Card>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(0, 1fr)', gap: 'var(--panel-gap)' }}>
+      <div className="siq-profile-grid">
         {/* Left column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
           {/* Valuation card */}

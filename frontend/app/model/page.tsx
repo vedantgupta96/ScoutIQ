@@ -3,7 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Target, TrendingUp, TrendingDown, TriangleAlert } from 'lucide-react';
-import { searchPlayers, PlayerSummary, getValuation, ValuationResponse } from '@/lib/api';
+import {
+  searchPlayers,
+  PlayerSummary,
+  getValuation,
+  ValuationResponse,
+  getBacktest,
+  BacktestResponse,
+} from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { StatTile } from '@/components/ui/StatTile';
@@ -13,27 +20,15 @@ import { fmtPct, signed } from '@/lib/utils';
 
 type PlayerWithVal = PlayerSummary & { valuation?: ValuationResponse };
 
-// Real backtest metrics from backend/scoutiq/model/artifacts/report.md
-const METRICS = {
-  r2: 0.77,
-  mae_pct: 2.9,
-  coverage80: 0.85,
-  half_width80: 5.36,
-  n_test: 218,
-  naive_mae_pct: 2.19,
-  test_seasons: ['2023-24', '2024-25'],
-};
+function compactSeasonRange(seasons: string[] | undefined): string {
+  if (!seasons?.length) return 'test set';
+  const first = seasons[0];
+  const last = seasons[seasons.length - 1];
+  if (first === last) return first;
+  return `${first.slice(0, 4)}-${last.slice(2, 4)}`;
+}
 
-// Calibration data (conformal — empirical should track nominal)
-const CALIBRATION = [
-  { nominal: 0.50, empirical: 0.53, hw: 2.7 },
-  { nominal: 0.60, empirical: 0.62, hw: 3.2 },
-  { nominal: 0.70, empirical: 0.74, hw: 4.1 },
-  { nominal: 0.80, empirical: 0.85, hw: 5.4 },
-  { nominal: 0.90, empirical: 0.91, hw: 7.8 },
-];
-
-function CalRow({ nominal, empirical, hw }: { nominal: number; empirical: number; hw: number }) {
+function CalRow({ nominal, empirical, halfWidthPct }: { nominal: number; empirical: number; halfWidthPct: number }) {
   const ok = Math.abs(empirical - nominal) <= 0.05;
   return (
     <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
@@ -54,7 +49,7 @@ function CalRow({ nominal, empirical, hw }: { nominal: number; empirical: number
         </div>
       </td>
       <td className="ds-tnum" style={{ padding: '7px 8px', fontSize: 13, color: 'var(--text-muted)', textAlign: 'right' }}>
-        ±{hw.toFixed(1)}%
+        ±{halfWidthPct.toFixed(1)}%
       </td>
     </tr>
   );
@@ -152,8 +147,14 @@ export default function ModelPage() {
   const router = useRouter();
   const [players, setPlayers] = useState<PlayerWithVal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [backtest, setBacktest] = useState<BacktestResponse | null>(null);
+  const [backtestError, setBacktestError] = useState<string | null>(null);
 
   useEffect(() => {
+    getBacktest()
+      .then(setBacktest)
+      .catch((e: unknown) => setBacktestError(e instanceof Error ? e.message : 'Backtest metadata unavailable.'));
+
     searchPlayers(undefined, 50).then((list) => {
       const withVal: PlayerWithVal[] = list.map((p) => ({ ...p }));
       setPlayers(withVal);
@@ -173,16 +174,32 @@ export default function ModelPage() {
   const sorted = [...withVals].sort((a, b) => (b.valuation!.gap_pct ?? 0) - (a.valuation!.gap_pct ?? 0));
   const bargains = sorted.filter((p) => (p.valuation?.gap_pct ?? 0) > 0).slice(0, 6);
   const overpays = [...sorted].reverse().filter((p) => (p.valuation?.gap_pct ?? 0) < 0).slice(0, 6);
+  const metrics = backtest?.metrics;
+  const calibration = metrics?.calibration ?? [];
+  const seasonRange = compactSeasonRange(metrics?.test_seasons);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
       {/* Headline metrics */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--panel-gap)' }}>
+      {backtestError && (
+        <AssumptionFlag tone="negative" title="Backtest metadata unavailable" icon={<TriangleAlert size={16} />}>
+          {backtestError}
+        </AssumptionFlag>
+      )}
+
+      <div className="siq-model-metrics-grid">
         {[
-          { label: 'R² (test 2023–25)', value: METRICS.r2.toFixed(2), sub: `${METRICS.n_test} held-out rows` },
-          { label: 'MAE', value: METRICS.mae_pct.toFixed(1), unit: '%', sub: `Naive baseline ${METRICS.naive_mae_pct.toFixed(2)}%` },
-          { label: '80% coverage', value: (METRICS.coverage80 * 100).toFixed(1), unit: '%', sub: 'Target 80.0%', delta: '+5.0', deltaDir: 'up' as const },
-          { label: 'Interval ±width', value: `±${METRICS.half_width80.toFixed(1)}`, unit: '%', sub: 'at 80% nominal' },
+          { label: `R² (${seasonRange})`, value: metrics ? metrics.r2.toFixed(2) : '—', sub: metrics ? `${metrics.n_test} held-out rows` : 'Loading artifact' },
+          { label: 'MAE', value: metrics ? metrics.mae_pct_of_cap.toFixed(1) : '—', unit: '%', sub: metrics ? `Mean baseline ${metrics.naive_mean_baseline_mae_pct.toFixed(1)}%` : 'Loading artifact' },
+          {
+            label: '80% coverage',
+            value: metrics ? (metrics.interval_80_coverage * 100).toFixed(1) : '—',
+            unit: '%',
+            sub: 'Target 80.0%',
+            delta: metrics ? `${((metrics.interval_80_coverage - 0.8) * 100).toFixed(1)}` : undefined,
+            deltaDir: metrics && metrics.interval_80_coverage >= 0.8 ? 'up' as const : 'down' as const,
+          },
+          { label: 'Interval ±width', value: metrics ? `±${metrics.interval_80_half_width_pct.toFixed(1)}` : '—', unit: '%', sub: 'at 80% nominal' },
         ].map((m) => (
           <Card key={m.label} padded>
             <StatTile {...m} size="md" />
@@ -190,10 +207,10 @@ export default function ModelPage() {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--panel-gap)' }}>
+      <div className="siq-model-grid">
         {/* Scatter */}
         <Card eyebrow="Predicted vs. actual" icon={<Target size={15} />}
-              action={<Badge tone="accent" size="sm" dot>loaded players</Badge>}>
+              action={<Badge tone="accent" size="sm" dot>{withVals.length}-player sample</Badge>}>
           {loading
             ? <div style={{ height: 240, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
             : <ScatterPlot players={players} />
@@ -216,7 +233,22 @@ export default function ModelPage() {
               </tr>
             </thead>
             <tbody>
-              {CALIBRATION.map((c) => <CalRow key={c.nominal} {...c} />)}
+              {calibration.length === 0 ? (
+                <tr>
+                  <td colSpan={3} style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>
+                    Loading calibration artifact…
+                  </td>
+                </tr>
+              ) : (
+                calibration.map((c) => (
+                  <CalRow
+                    key={c.nominal}
+                    nominal={c.nominal}
+                    empirical={c.empirical}
+                    halfWidthPct={c.half_width_pct}
+                  />
+                ))
+              )}
             </tbody>
           </table>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '12px 0 0', lineHeight: 1.5 }}>
@@ -226,12 +258,14 @@ export default function ModelPage() {
       </div>
 
       {/* Leaderboards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--panel-gap)' }}>
+      <div className="siq-leader-grid">
         <Card eyebrow="Most underpaid" icon={<TrendingUp size={15} />} flushBody
-              action={<Badge tone="positive" size="sm">bargains</Badge>}>
-          {bargains.length === 0
+              action={<Badge tone="positive" size="sm">sample bargains</Badge>}>
+          {loading || withVals.length === 0
             ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
-            : bargains.map((p) => (
+            : bargains.length === 0
+              ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>No bargains in loaded sample.</div>
+              : bargains.map((p) => (
               <LeaderRow key={p.player_id} player={p}
                 onPick={() => router.push(`/players/${p.player_id}`)} />
             ))
@@ -239,10 +273,12 @@ export default function ModelPage() {
         </Card>
 
         <Card eyebrow="Most overpaid" icon={<TrendingDown size={15} />} flushBody
-              action={<Badge tone="negative" size="sm">overpays</Badge>}>
-          {overpays.length === 0
+              action={<Badge tone="negative" size="sm">sample overpays</Badge>}>
+          {loading || withVals.length === 0
             ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
-            : overpays.map((p) => (
+            : overpays.length === 0
+              ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>No overpays in loaded sample.</div>
+              : overpays.map((p) => (
               <LeaderRow key={p.player_id} player={p}
                 onPick={() => router.push(`/players/${p.player_id}`)} />
             ))
@@ -251,10 +287,8 @@ export default function ModelPage() {
       </div>
 
       <AssumptionFlag tone="warning" title="Honest caveat — salary stickiness" icon={<TriangleAlert size={16} />}>
-        On mid-contract players, a naive &ldquo;next year = current salary&rdquo; reference beats this model
-        (2.19% vs 2.9% MAE) — expected, since their pay is contractually locked. We exclude current salary on
-        purpose so the model answers worth, not what is already on the books. Defense and shot-creation gravity
-        are under-weighted by box-score data.
+        {backtest?.caveat ?? 'We exclude current salary on purpose so the model answers worth, not what is already on the books.'}
+        {' '}The scatter and leaderboards above use the currently loaded player sample; headline metrics and calibration come from the committed backtest artifact.
       </AssumptionFlag>
     </div>
   );
