@@ -256,6 +256,34 @@ def test_player_cards_returns_batched_valuation_snippets(monkeypatch):
     assert body[0]["valuation"]["gap_pct"] == 3.58
 
 
+def test_player_watchlist_defaults_to_ranked_recent_mismatches(monkeypatch):
+    monkeypatch.setattr(
+        players_router,
+        "predict_many_from_features",
+        lambda rows: [
+            {
+                "value_pct": 23.5,
+                "lo_pct": 18.1,
+                "hi_pct": 28.9,
+                "model_version": "v0-gbm-conformal",
+            }
+            for _ in rows
+        ],
+    )
+    client = _client(FakeDB())
+
+    response = client.get("/players/watchlist?bucket=underpaid&limit=10")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["bucket"] == "underpaid"
+    assert body["season"] == "2024-25"
+    assert body["qualified_only"] is True
+    assert body["total"] == 1
+    assert body["items"][0]["full_name"] == "Desmond Bane"
+    assert body["items"][0]["valuation"]["gap_pct"] == 3.58
+
+
 def test_valuation_without_season_uses_latest_available_player_season(monkeypatch):
     captured = {}
 

@@ -50,6 +50,7 @@ The tests below use fake sessions/dependency overrides and do not require a live
 curl 'http://127.0.0.1:8000/health'
 curl 'http://127.0.0.1:8000/players?query=bane&limit=5'
 curl 'http://127.0.0.1:8000/players/cards?query=bane&limit=5'
+curl 'http://127.0.0.1:8000/players/watchlist?bucket=all&limit=24&offset=0'
 curl 'http://127.0.0.1:8000/players/1630217'
 curl 'http://127.0.0.1:8000/players/1630217/valuation?season=2024-25'
 curl 'http://127.0.0.1:8000/players/1630217/scout-ratings'

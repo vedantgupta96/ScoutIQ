@@ -72,6 +72,33 @@ export interface PlayerCardResponse extends PlayerSummary {
   valuation: PlayerCardValuation | null;
 }
 
+export type WatchlistBucket = 'all' | 'underpaid' | 'overpaid';
+export type WatchlistSort = 'mismatch' | 'gap' | 'value' | 'pay' | 'name';
+
+export interface PlayerWatchlistResponse {
+  items: PlayerCardResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+  bucket: WatchlistBucket;
+  sort: WatchlistSort;
+  season: string | null;
+  qualified_only: boolean;
+  caveat: string;
+}
+
+export interface PlayerWatchlistParams {
+  query?: string;
+  bucket?: WatchlistBucket;
+  sort?: WatchlistSort;
+  season?: string;
+  position?: string;
+  team?: string;
+  qualifiedOnly?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
 export interface SimulatorRequest {
   player_id: number;
   aav_pct: number;
@@ -254,6 +281,21 @@ export function getPlayerCards(query?: string, limit = 40, signal?: AbortSignal)
   const params = new URLSearchParams({ limit: String(limit) });
   if (query) params.set('query', query);
   return apiFetch<PlayerCardResponse[]>(`/players/cards?${params}`, { signal });
+}
+
+export function getPlayerWatchlist(params: PlayerWatchlistParams = {}, signal?: AbortSignal): Promise<PlayerWatchlistResponse> {
+  const qs = new URLSearchParams({
+    limit: String(params.limit ?? 24),
+    offset: String(params.offset ?? 0),
+    bucket: params.bucket ?? 'all',
+    sort: params.sort ?? 'mismatch',
+    qualified_only: String(params.qualifiedOnly ?? true),
+  });
+  if (params.query) qs.set('query', params.query);
+  if (params.season) qs.set('season', params.season);
+  if (params.position) qs.set('position', params.position);
+  if (params.team) qs.set('team', params.team);
+  return apiFetch<PlayerWatchlistResponse>(`/players/watchlist?${qs}`, { signal });
 }
 
 export function getPlayer(id: number, signal?: AbortSignal): Promise<PlayerSummary> {
