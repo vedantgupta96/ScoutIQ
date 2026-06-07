@@ -1,9 +1,13 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (init?.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   const res = await fetch(`${BASE}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers,
   });
   if (!res.ok) {
     const detail = await res.json().catch(() => ({ detail: res.statusText }));
@@ -47,6 +51,25 @@ export interface ValuationResponse {
   value_usd: number | null;
   model_version: string;
   features: Record<string, number> | null;
+}
+
+export type ValuationStatus = 'ready' | 'unavailable';
+
+export interface PlayerCardValuation {
+  season: string;
+  value_pct: number;
+  lo_pct: number;
+  hi_pct: number;
+  actual_pct: number | null;
+  actual_usd: number | null;
+  gap_pct: number | null;
+  salary_cap: number | null;
+  model_version: string;
+}
+
+export interface PlayerCardResponse extends PlayerSummary {
+  valuation_status: ValuationStatus;
+  valuation: PlayerCardValuation | null;
 }
 
 export interface SimulatorRequest {
@@ -221,25 +244,32 @@ export interface PlayerScoutRatingsResponse {
 
 // ---- API functions -------------------------------------------
 
-export function searchPlayers(query?: string, limit = 20): Promise<PlayerSummary[]> {
+export function searchPlayers(query?: string, limit = 20, signal?: AbortSignal): Promise<PlayerSummary[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (query) params.set('query', query);
-  return apiFetch<PlayerSummary[]>(`/players?${params}`);
+  return apiFetch<PlayerSummary[]>(`/players?${params}`, { signal });
 }
 
-export function getPlayer(id: number): Promise<PlayerSummary> {
-  return apiFetch<PlayerSummary>(`/players/${id}`);
+export function getPlayerCards(query?: string, limit = 40, signal?: AbortSignal): Promise<PlayerCardResponse[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (query) params.set('query', query);
+  return apiFetch<PlayerCardResponse[]>(`/players/cards?${params}`, { signal });
 }
 
-export function getValuation(id: number, season?: string): Promise<ValuationResponse> {
+export function getPlayer(id: number, signal?: AbortSignal): Promise<PlayerSummary> {
+  return apiFetch<PlayerSummary>(`/players/${id}`, { signal });
+}
+
+export function getValuation(id: number, season?: string, signal?: AbortSignal): Promise<ValuationResponse> {
   const params = season ? `?season=${season}` : '';
-  return apiFetch<ValuationResponse>(`/players/${id}/valuation${params}`);
+  return apiFetch<ValuationResponse>(`/players/${id}/valuation${params}`, { signal });
 }
 
-export function simulateContract(req: SimulatorRequest): Promise<SimulatorResponse> {
+export function simulateContract(req: SimulatorRequest, signal?: AbortSignal): Promise<SimulatorResponse> {
   return apiFetch<SimulatorResponse>('/simulate/contract', {
     method: 'POST',
     body: JSON.stringify(req),
+    signal,
   });
 }
 

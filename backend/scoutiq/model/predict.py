@@ -60,31 +60,11 @@ def predict_from_features(features: dict[str, Any]) -> dict:
     Missing features should be None / NaN — HistGradientBoosting handles them natively.
     Returns value_pct, lo_pct, hi_pct (all as % of cap, e.g. 18.5 means 18.5%).
     """
-    art = load_artifact()
-    df = pd.DataFrame([features]).reindex(columns=FEATURE_COLS)
-    pred = float(art["model"].predict(df)[0])
-    qhat = art["qhat_80"]
-    return {
-        "value_pct": round(pred * 100, 2),
-        "lo_pct": round(max(pred - qhat, 0.0) * 100, 2),
-        "hi_pct": round((pred + qhat) * 100, 2),
-        "model_version": art["version"],
-    }
+    return predict_many_from_features([features])[0]
 
 
-def build_player_features(player_id: int, season: str, session: Session) -> dict[str, Any]:
-    """Fetch a player+season from the DB and return a feature dict ready for predict_from_features."""
-    from sqlalchemy import select
-    ps = session.scalars(
-        select(PlayerSeason).where(
-            PlayerSeason.player_id == player_id,
-            PlayerSeason.season == season,
-        )
-    ).first()
-    if ps is None:
-        raise LookupError(f"No stats for player_id={player_id} season={season}")
-
-    player = session.get(Player, player_id)
+def build_features_from_season(ps: PlayerSeason, player: Player | None) -> dict[str, Any]:
+    """Build model features from already-loaded ORM rows."""
     box = ps.box or {}
     adv = ps.advanced or {}
     gp = ps.gp or 0
@@ -110,6 +90,41 @@ def build_player_features(player_id: int, season: str, session: Session) -> dict
         features[f"pos_{p}"] = 1.0 if pos == p else 0.0
 
     return features
+
+
+def predict_many_from_features(feature_rows: list[dict[str, Any]]) -> list[dict]:
+    """Vectorized prediction for batch API responses."""
+    if not feature_rows:
+        return []
+    art = load_artifact()
+    df = pd.DataFrame(feature_rows).reindex(columns=FEATURE_COLS)
+    preds = art["model"].predict(df)
+    qhat = art["qhat_80"]
+    return [
+        {
+            "value_pct": round(float(pred) * 100, 2),
+            "lo_pct": round(max(float(pred) - qhat, 0.0) * 100, 2),
+            "hi_pct": round((float(pred) + qhat) * 100, 2),
+            "model_version": art["version"],
+        }
+        for pred in preds
+    ]
+
+
+def build_player_features(player_id: int, season: str, session: Session) -> dict[str, Any]:
+    """Fetch a player+season from the DB and return a feature dict ready for predict_from_features."""
+    from sqlalchemy import select
+    ps = session.scalars(
+        select(PlayerSeason).where(
+            PlayerSeason.player_id == player_id,
+            PlayerSeason.season == season,
+        )
+    ).first()
+    if ps is None:
+        raise LookupError(f"No stats for player_id={player_id} season={season}")
+
+    player = session.get(Player, player_id)
+    return build_features_from_season(ps, player)
 
 
 def predict_for_player(player_id: int, season: str, session: Session) -> dict:

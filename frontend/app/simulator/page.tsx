@@ -1,7 +1,7 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useEffect, useRef, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, SlidersHorizontal, TriangleAlert } from 'lucide-react';
 import {
@@ -184,6 +184,7 @@ function SimulatorContent() {
   const [result, setResult] = useState<SimulatorResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestSeq = useRef(0);
 
   // Auto-load player from query param — fetch directly by ID, not from alphabetical list
   useEffect(() => {
@@ -191,35 +192,43 @@ function SimulatorContent() {
     getPlayer(initialPlayerId).then(setPlayer).catch(() => {});
   }, [initialPlayerId]);
 
-  const simulate = useCallback(async () => {
-    if (!player) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await simulateContract({
-        player_id: player.player_id,
-        aav_pct: aav,
-        years,
-        guaranteed_years: guaranteed,
-        player_option_years: playerOpts,
-        team_option_years: teamOpts,
-        start_season: '2025-26',
-      });
-      setResult(res);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Simulation failed.');
-    } finally {
-      setLoading(false);
-    }
-  }, [player, aav, years, guaranteed, playerOpts, teamOpts]);
-
-  // Auto-run when player or params change
-  useEffect(() => {
-    if (player) simulate();
-  }, [player, simulate]);
-
   const totalOptions = playerOpts + teamOpts;
   const effectiveGuaranteed = Math.min(guaranteed, years - totalOptions);
+
+  // Debounced live simulation. Keep the previous result on screen while the
+  // latest request is running, and ignore stale responses from older slider ticks.
+  useEffect(() => {
+    if (!player) return;
+    const controller = new AbortController();
+    const seq = ++requestSeq.current;
+    setLoading(true);
+    setError(null);
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await simulateContract({
+          player_id: player.player_id,
+          aav_pct: aav,
+          years,
+          guaranteed_years: effectiveGuaranteed,
+          player_option_years: playerOpts,
+          team_option_years: teamOpts,
+          start_season: '2025-26',
+        }, controller.signal);
+        if (seq === requestSeq.current) setResult(res);
+      } catch (e: unknown) {
+        if (controller.signal.aborted || seq !== requestSeq.current) return;
+        setError(e instanceof Error ? e.message : 'Simulation failed.');
+      } finally {
+        if (seq === requestSeq.current) setLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [player, aav, years, effectiveGuaranteed, playerOpts, teamOpts]);
 
   const taxYears = result?.years.filter((y) => y.cap_hit_usd >= y.tax_line).length ?? 0;
   const apronYears = result?.years.filter((y) => y.cap_hit_usd >= y.first_apron).length ?? 0;
@@ -250,6 +259,11 @@ function SimulatorContent() {
             {result?.value_pct != null && (
               <Badge tone="confidence" variant="outline" size="sm">
                 Model value {fmtPct(result.value_pct)}
+              </Badge>
+            )}
+            {loading && result && (
+              <Badge tone="neutral" variant="outline" size="sm" dot>
+                Updating
               </Badge>
             )}
             <button
@@ -302,10 +316,12 @@ function SimulatorContent() {
 
             {/* Results */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
-              {loading && (
-                <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+              {loading && !result && (
+                <Card padded>
+                  <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
                   Running simulation…
-                </div>
+                  </div>
+                </Card>
               )}
 
               {error && (
@@ -314,7 +330,7 @@ function SimulatorContent() {
                 </div>
               )}
 
-              {result && !loading && (
+              {result && (
                 <>
                   {/* Summary card */}
                   <Card padded>

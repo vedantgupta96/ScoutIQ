@@ -52,9 +52,10 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
   const ticks = Array.from({ length: MAX / 10 + 1 }, (_, i) => i * 10);
   const valuePosition = toPosition(valuePct);
   const actualPosition = actualPct == null ? null : toPosition(actualPct);
+  const combinedLabelPosition = actualPosition == null ? valuePosition : (valuePosition + actualPosition) / 2;
   const bandStart = toPosition(Math.min(loPct, hiPct));
   const bandEnd = toPosition(Math.max(loPct, hiPct));
-  const overlap = actualPosition != null && Math.abs(valuePosition - actualPosition) < 8;
+  const overlap = actualPosition != null && Math.abs(valuePosition - actualPosition) < 14;
   const ariaLabel = actualPct == null
     ? `Estimated value ${formatPct(valuePct)}, confidence interval ${formatPct(loPct)} to ${formatPct(hiPct)}.`
     : `Estimated value ${formatPct(valuePct)}, actual pay ${formatPct(actualPct)}, confidence interval ${formatPct(loPct)} to ${formatPct(hiPct)}.`;
@@ -65,7 +66,7 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
       aria-label={ariaLabel}
       style={{
         userSelect: 'none',
-        paddingTop: 30,
+        paddingTop: overlap ? 42 : 30,
         paddingBottom: 26,
       }}
     >
@@ -123,23 +124,25 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
                 background: 'repeating-linear-gradient(to bottom, var(--text-secondary) 0 4px, transparent 4px 7px)',
               }}
             />
-            <span
-              className="ds-tnum"
-              style={{
-                position: 'absolute',
-                bottom: 'calc(100% + 8px)',
-                maxWidth: 92,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                fontSize: 11,
-                lineHeight: 1.1,
-                color: 'var(--text-muted)',
-                whiteSpace: 'nowrap',
-                ...labelPlacement(actualPosition ?? 0, overlap ? 'left' : 'center'),
-              }}
-            >
-              pay {formatPct(actualPct)}
-            </span>
+            {!overlap && (
+              <span
+                className="ds-tnum"
+                style={{
+                  position: 'absolute',
+                  bottom: 'calc(100% + 8px)',
+                  maxWidth: 92,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  fontSize: 11,
+                  lineHeight: 1.1,
+                  color: 'var(--text-muted)',
+                  whiteSpace: 'nowrap',
+                  ...labelPlacement(actualPosition ?? 0),
+                }}
+              >
+                pay {formatPct(actualPct)}
+              </span>
+            )}
           </>
         )}
 
@@ -163,18 +166,20 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
           style={{
             position: 'absolute',
             bottom: 'calc(100% + 8px)',
-            maxWidth: 104,
+            maxWidth: overlap ? 180 : 104,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            fontSize: 11,
+            fontSize: overlap ? 10 : 11,
             lineHeight: 1.1,
-            color: 'var(--accent)',
+            color: overlap ? 'var(--text-primary)' : 'var(--accent)',
             fontWeight: 600,
             whiteSpace: 'nowrap',
-            ...labelPlacement(valuePosition, overlap ? 'right' : 'center'),
+            ...labelPlacement(overlap ? combinedLabelPosition : valuePosition),
           }}
         >
-          value {formatPct(valuePct)}
+          {overlap && actualPct != null
+            ? `value ${formatPct(valuePct)} / pay ${formatPct(actualPct)}`
+            : `value ${formatPct(valuePct)}`}
         </span>
 
         <div
