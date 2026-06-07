@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, SlidersHorizontal, TriangleAlert } from 'lucide-react';
 import {
-  searchPlayers, simulateContract,
+  searchPlayers, getPlayer, simulateContract,
   PlayerSummary, SimulatorResponse, ContractYearResponse,
 } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
@@ -77,7 +77,7 @@ function CapBar({ yr }: { yr: ContractYearResponse }) {
             {label}
           </Badge>
           <span className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            {fmtM(yr.cap_hit_usd)} · {fmtPct(yr.cap_hit_pct * 100)}
+            {fmtM(yr.cap_hit_usd)} · {fmtPct(yr.cap_hit_pct)}
           </span>
         </div>
       </div>
@@ -181,13 +181,10 @@ function SimulatorContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Auto-load player from query param
+  // Auto-load player from query param — fetch directly by ID, not from alphabetical list
   useEffect(() => {
     if (!initialPlayerId) return;
-    searchPlayers(undefined, 50).then((list) => {
-      const found = list.find((p) => p.player_id === initialPlayerId);
-      if (found) setPlayer(found);
-    }).catch(() => {});
+    getPlayer(initialPlayerId).then(setPlayer).catch(() => {});
   }, [initialPlayerId]);
 
   const simulate = useCallback(async () => {

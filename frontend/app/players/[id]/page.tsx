@@ -3,7 +3,7 @@
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Scale, Activity, BarChart3, MessageSquareText, SlidersHorizontal, Info } from 'lucide-react';
+import { ArrowLeft, Scale, Activity, BarChart3, SlidersHorizontal, Info } from 'lucide-react';
 import { getValuation, ValuationResponse } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -31,42 +31,31 @@ function StatRow({ label, value, warn }: { label: string; value: string; warn?: 
   );
 }
 
-function FeatureBar({ label, value, max }: { label: string; value: number; max: number }) {
-  const pct = max > 0 ? (value / max) * 100 : 0;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ fontSize: 12, color: 'var(--text-secondary)', width: 110, flexShrink: 0 }}>{label}</span>
-      <div style={{
-        flex: 1, height: 7, background: 'var(--bg-inset)',
-        borderRadius: 'var(--radius-pill)', overflow: 'hidden',
-        border: '1px solid var(--border-subtle)',
-      }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', borderRadius: 'var(--radius-pill)' }} />
-      </div>
-      <span className="ds-tnum" style={{ fontSize: 11, color: 'var(--text-muted)', width: 38, textAlign: 'right' }}>
-        {(value * 100).toFixed(0)}%
-      </span>
-    </div>
-  );
-}
+// Feature metadata: label + how to format the raw value from the API
+const FEATURE_META: Record<string, { label: string; fmt: (v: number) => string }> = {
+  pts_per_game:  { label: 'Points / game',    fmt: (v) => v.toFixed(1) },
+  reb_per_game:  { label: 'Rebounds / game',  fmt: (v) => v.toFixed(1) },
+  ast_per_game:  { label: 'Assists / game',   fmt: (v) => v.toFixed(1) },
+  ts_pct:        { label: 'True shooting',    fmt: (v) => (v * 100).toFixed(1) + '%' },
+  ws:            { label: 'Win Shares',       fmt: (v) => v.toFixed(1) },
+  ws_per_48:     { label: 'WS / 48',          fmt: (v) => v.toFixed(3) },
+  age:           { label: 'Age',              fmt: (v) => v.toFixed(0) },
+  gp:            { label: 'Games played',     fmt: (v) => v.toFixed(0) },
+  minutes:       { label: 'Season minutes',   fmt: (v) => Math.round(v).toLocaleString() },
+  vorp:          { label: 'VORP',             fmt: (v) => v.toFixed(1) },
+  bpm:           { label: 'BPM',              fmt: (v) => v.toFixed(1) },
+  obpm:          { label: 'Off. BPM',         fmt: (v) => v.toFixed(1) },
+  dbpm:          { label: 'Def. BPM',         fmt: (v) => v.toFixed(1) },
+  per:           { label: 'PER',              fmt: (v) => v.toFixed(1) },
+  off_rating:    { label: 'Off. rating',      fmt: (v) => v.toFixed(1) },
+  def_rating:    { label: 'Def. rating',      fmt: (v) => v.toFixed(1) },
+  pace:          { label: 'Pace',             fmt: (v) => v.toFixed(1) },
+};
 
-function formatFeatureName(key: string): string {
-  const NAMES: Record<string, string> = {
-    pts_per_game: 'Points/game',
-    reb_per_game: 'Rebounds/game',
-    ast_per_game: 'Assists/game',
-    ts_pct: 'True shooting',
-    ws: 'Win Shares',
-    ws_per_48: 'WS/48',
-    age: 'Age',
-    gp: 'Games played',
-    minutes: 'Minutes/game',
-    vorp: 'VORP',
-    bpm: 'BPM',
-    obpm: 'Off. BPM',
-    dbpm: 'Def. BPM',
-  };
-  return NAMES[key] ?? key.replace(/_/g, ' ');
+function formatFeatureValue(key: string, value: number): { label: string; formatted: string } {
+  const meta = FEATURE_META[key];
+  if (meta) return { label: meta.label, formatted: meta.fmt(value) };
+  return { label: key.replace(/_/g, ' '), formatted: value.toFixed(2) };
 }
 
 export default function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
@@ -107,11 +96,10 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   const valueUsd = val.value_usd ?? Math.round(val.value_pct / 100 * capM);
   const actualUsd = val.actual_usd;
 
-  // Build feature importance rows from features dict (approximate from model)
+  // Feature entries — raw stat values from the model input
   const featureEntries = val.features
-    ? Object.entries(val.features).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 6)
+    ? Object.entries(val.features).slice(0, 8)
     : [];
-  const maxImportance = featureEntries.length > 0 ? Math.abs(featureEntries[0][1]) : 1;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
@@ -216,22 +204,21 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
 
         {/* Right column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
-          {/* Stats placeholder — real stats come from the valuation features */}
-          <Card eyebrow="Model features" icon={<Activity size={15} />}>
+          {/* Model input stats */}
+          <Card eyebrow="Model inputs" icon={<Activity size={15} />}>
             {featureEntries.length > 0 ? (
               <>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                  {featureEntries.map(([key, value]) => (
-                    <FeatureBar key={key} label={formatFeatureName(key)} value={Math.abs(value)} max={maxImportance} />
-                  ))}
-                </div>
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '12px 0 0', lineHeight: 1.5 }}>
-                  Feature values used for this prediction. Scoring volume and age are the dominant drivers.
+                {featureEntries.map(([key, value]) => {
+                  const { label, formatted } = formatFeatureValue(key, value);
+                  return <StatRow key={key} label={label} value={formatted} />;
+                })}
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+                  Raw feature values fed to the model for this season.
                 </p>
               </>
             ) : (
               <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-                Feature breakdown not available for this player-season.
+                Feature data not available for this player-season.
               </p>
             )}
           </Card>
