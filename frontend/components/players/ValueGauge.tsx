@@ -88,10 +88,30 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
             top: 2,
             bottom: 2,
             borderRadius: 'var(--radius-pill)',
-            background: 'var(--confidence)',
-            opacity: 0.5,
+            background: 'var(--grad-confidence)',
+            opacity: 0.85,
+            boxShadow: 'var(--glow-confidence)',
           }}
         />
+
+        {/* Verdict gap connector — a colored bar from value to pay encodes
+            bargain (green, value above pay) vs overpay (red, pay above value). */}
+        {actualPct != null && actualPosition != null && (
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: `${Math.min(valuePosition, actualPosition).toFixed(3)}%`,
+              width: `${Math.abs(valuePosition - actualPosition).toFixed(3)}%`,
+              top: '50%',
+              height: 5,
+              transform: 'translateY(-50%)',
+              borderRadius: 'var(--radius-pill)',
+              background: valuePct >= actualPct ? 'var(--grad-positive)' : 'var(--grad-negative)',
+              opacity: 0.92,
+            }}
+          />
+        )}
 
         {ticks.map((t) => (
           <span
@@ -158,7 +178,7 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
             borderRadius: 'var(--radius-pill)',
             background: 'var(--accent)',
             border: '2px solid var(--bg-panel)',
-            boxShadow: '0 1px 4px rgba(16,24,40,0.18)',
+            boxShadow: 'var(--glow-accent)',
           }}
         />
         <span

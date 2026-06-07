@@ -38,6 +38,7 @@ import { VerdictPill } from '@/components/ui/VerdictPill';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
 import { ValueGauge } from '@/components/players/ValueGauge';
+import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
 import { fmtM, fmtPct, signed } from '@/lib/utils';
 
 function StatRow({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
@@ -111,18 +112,27 @@ function traitLabel(trait: string): string {
 }
 
 function ScoutTraitRow({ trait }: { trait: PlayerScoutTraitRating }) {
-  const width = `${Math.min(100, Math.max(0, trait.average_score / 5 * 100))}%`;
+  const score = Math.min(5, Math.max(0, trait.average_score));
+  const width = `${score / 5 * 100}%`;
+  // Quality tone for the score readout: low (red) → mid (amber) → high (green).
+  const scoreColor = score < 2.5 ? 'var(--negative-text)' : score < 3.75 ? 'var(--warning-text)' : 'var(--positive-text)';
   const topEvidence = trait.evidence[0];
   return (
     <div style={{ padding: '9px 0', borderBottom: '1px solid var(--border-subtle)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{traitLabel(trait.trait)}</span>
-        <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-text)' }}>
+        <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: scoreColor }}>
           {trait.average_score.toFixed(1)}/5
         </span>
       </div>
-      <div style={{ height: 7, marginTop: 7, borderRadius: 'var(--radius-pill)', background: 'var(--bg-inset)', overflow: 'hidden' }}>
-        <div style={{ width, height: '100%', background: 'var(--accent)' }} />
+      {/* Full-width quality gradient; a dim overlay masks the unreached portion
+          so the visible fill edge sits at the true score color. */}
+      <div style={{
+        position: 'relative', height: 8, marginTop: 7, borderRadius: 'var(--radius-pill)',
+        background: 'var(--grad-quality)', overflow: 'hidden',
+        boxShadow: 'inset 0 1px 2px rgba(16,24,40,0.06)',
+      }}>
+        <div style={{ position: 'absolute', top: 0, bottom: 0, left: width, right: 0, background: 'var(--bg-inset)' }} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, minWidth: 0 }}>
         <Badge tone={trait.confidence_mix.high > 0 ? 'confidence' : 'neutral'} size="sm">
@@ -181,6 +191,9 @@ function ContractYearRow({ year }: { year: PlayerContractYear }) {
   const gapColor = gap == null
     ? 'var(--text-muted)'
     : gap >= 0 ? 'var(--positive-text)' : 'var(--negative-text)';
+  const barFill = gap == null
+    ? 'var(--border-strong)'
+    : gap >= 0 ? 'var(--grad-positive)' : 'var(--grad-negative)';
 
   return (
     <div style={{
@@ -208,6 +221,17 @@ function ContractYearRow({ year }: { year: PlayerContractYear }) {
         {year.value_pct != null && (
           <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>
             Model value {fmtPct(year.value_pct)} of cap
+          </div>
+        )}
+        {year.cap_hit_pct != null && (
+          <div style={{
+            position: 'relative', height: 5, marginTop: 7, borderRadius: 'var(--radius-pill)',
+            background: 'var(--bg-inset)', overflow: 'hidden',
+          }}>
+            <div style={{
+              width: `${Math.min(100, Math.max(0, year.cap_hit_pct / 35 * 100))}%`,
+              height: '100%', background: barFill,
+            }} />
           </div>
         )}
       </div>
@@ -327,7 +351,16 @@ function SimilarPlayerRow({ result }: { result: SimilarPlayerResult }) {
         <span className="ds-tnum" style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-text)' }}>
           {result.similarity_score.toFixed(1)}
         </span>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>match</span>
+        <span className="ds-eyebrow">match strength</span>
+        <div style={{ width: 124, height: 6, borderRadius: 'var(--radius-pill)', background: 'var(--bg-inset)', overflow: 'hidden' }}>
+          <div style={{
+            width: `${Math.min(100, Math.max(0, result.similarity_score)).toFixed(1)}%`,
+            height: '100%', background: 'var(--grad-confidence)', boxShadow: 'var(--glow-confidence)',
+          }} />
+        </div>
+        <div style={{ width: 124, marginTop: 3 }}>
+          <MiniValuePayGauge valuePct={result.value_pct} payPct={result.salary_pct} />
+        </div>
         <div style={{ textAlign: 'right', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
           <div>Value {result.value_pct != null ? fmtPct(result.value_pct) : '—'}</div>
           <div>Pay {result.salary_pct != null ? fmtPct(result.salary_pct) : '—'}</div>
@@ -552,6 +585,14 @@ function FrontOfficeRead({
             {topMatch ? <> with <strong>{topMatch.player.full_name}</strong> as the closest visible market comp.</> : <> while the market set loads.</>}
           </p>
         </div>
+        <div style={{ margin: '4px 0 14px' }}>
+          <ValueGauge
+            valuePct={val.value_pct}
+            loPct={val.lo_pct}
+            hiPct={val.hi_pct}
+            actualPct={val.actual_pct}
+          />
+        </div>
         <div className="siq-brief-strip">
           <RiskLine label="Value dollars" value={fmtM(valueUsd)} tone="positive" />
           <RiskLine label="Pay dollars" value={actualUsd != null ? fmtM(actualUsd) : '—'} tone={val.gap_pct != null && val.gap_pct < 0 ? 'negative' : 'neutral'} />
@@ -579,6 +620,7 @@ function FrontOfficeRead({
                 <Badge key={tag} tone="neutral" variant="outline" size="sm">{tag}</Badge>
               ))}
             </div>
+            <MiniValuePayGauge valuePct={topMatch.value_pct} payPct={topMatch.salary_pct} />
             <RiskLine label="Comp value" value={topMatch.value_pct != null ? fmtPct(topMatch.value_pct) : '—'} />
             <RiskLine label="Comp pay" value={topMatch.salary_pct != null ? fmtPct(topMatch.salary_pct) : '—'} />
             <RiskLine label="Comp gap" value={topMatch.gap_pct != null ? `${signed(topMatch.gap_pct)}%` : '—'} tone={topMatch.gap_pct != null && topMatch.gap_pct >= 0 ? 'positive' : 'negative'} />

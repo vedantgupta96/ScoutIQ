@@ -109,6 +109,14 @@
   --confidence-soft: rgba(14,156,156,0.13);
   --focus-ring:    var(--orange-500);
 
+  /* Data gradients — vivid fills reserved for data surfaces (not chrome) */
+  --grad-quality:    linear-gradient(90deg, var(--red-500) 0%, var(--amber-500) 50%, var(--green-500) 100%);
+  --grad-confidence: linear-gradient(180deg, var(--teal-400), var(--teal-600));
+  --grad-positive:   linear-gradient(90deg, var(--green-400), var(--green-600));
+  --grad-negative:   linear-gradient(90deg, var(--red-400), var(--red-600));
+  --glow-confidence: 0 0 10px rgba(31,193,193,0.35);
+  --glow-accent:     0 0 0 4px var(--orange-soft), 0 2px 8px var(--orange-glow);
+
   /* Shadows */
   --shadow-card: 0 1px 2px rgba(16,24,40,0.04), 0 4px 12px rgba(16,24,40,0.06);
   --shadow-md:   0 4px 12px rgba(16,24,40,0.08), 0 2px 4px rgba(16,24,40,0.05);
