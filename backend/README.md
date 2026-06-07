@@ -51,7 +51,9 @@ curl 'http://127.0.0.1:8000/health'
 curl 'http://127.0.0.1:8000/players?query=bane&limit=5'
 curl 'http://127.0.0.1:8000/players/1630217'
 curl 'http://127.0.0.1:8000/players/1630217/valuation?season=2024-25'
+curl 'http://127.0.0.1:8000/players/1630217/scout-ratings'
 curl 'http://127.0.0.1:8000/backtest'
+curl 'http://127.0.0.1:8000/llm/scout-ratings/eval'
 curl -X POST 'http://127.0.0.1:8000/simulate/contract' \
   -H 'content-type: application/json' \
   -d '{"player_id":1630217,"aav_pct":20,"years":4,"player_option_years":1,"start_season":"2025-26"}'
@@ -82,6 +84,47 @@ python3 -m py_compile scoutiq/api/main.py scoutiq/api/cap_simulator.py scoutiq/a
 `backend/scoutiq/model/artifacts/model.joblib` is intentionally gitignored because it is regenerable.
 The API returns `503` from valuation endpoints if the model binary is missing.
 
+## LLM scout-rating eval
+Phase 2 starts with an offline-first eval harness for scouting-text → structured ratings. The gold set
+and deterministic fixture predictions are synthetic, project-authored JSONL files; tests never call the
+network.
+
+Offline fixture mode:
+```bash
+python -m scoutiq.llm.eval_scout_ratings \
+  --gold scoutiq/llm/eval_data/scout_ratings_gold.jsonl \
+  --predictions scoutiq/llm/eval_data/scout_ratings_predictions_fixture.jsonl
+```
+
+The CLI writes `scoutiq/llm/artifacts/scout_ratings_eval.json` with trait coverage, exact score
+agreement, within-1 agreement, evidence hit rate, and invalid-output counts. Generated JSON reports are
+gitignored.
+
+The API exposes the same committed fixture as read-only metadata for the model page:
+```bash
+curl 'http://127.0.0.1:8000/llm/scout-ratings/eval'
+```
+That endpoint computes the offline fixture report on demand and does not write artifacts or call a live
+LLM.
+
+Optional live Claude mode is manual only:
+```bash
+ANTHROPIC_API_KEY=... SCOUTIQ_LLM_MODEL=... \
+python -m scoutiq.llm.eval_scout_ratings \
+  --gold scoutiq/llm/eval_data/scout_ratings_gold.jsonl \
+  --live
+```
+
+If either environment variable is missing, live mode exits cleanly without writing a report. Do not
+commit API keys, model names, or live LLM outputs.
+
+Player scout ratings are exposed from a committed synthetic fixture:
+```bash
+curl 'http://127.0.0.1:8000/players/1630217/scout-ratings'
+```
+This is a player-profile UI/API contract preview. It does not read real scouting reports, Sonar results,
+or live Claude outputs yet.
+
 ## Config
 `scoutiq/config.py` (env-overridable): `SEASON_START_YEAR`/`SEASON_END_YEAR` (default 2012–2024),
 `BBREF_DELAY_SECONDS`, `BBREF_USER_AGENT`.
@@ -95,6 +138,7 @@ scoutiq/
              repair_team_history.py  check_coverage.py
   api/       main.py  routers/players.py  routers/simulator.py  routers/backtest.py
   model/     train.py  predict.py  artifacts/
+  llm/       schemas.py  scoring.py  eval_scout_ratings.py  eval_data/  artifacts/
   data/      cap_constants_seed.csv   raw/ (cached HTML, gitignored)
 alembic/     versions/0001_initial.py  versions/0002_contracts.py
 ```

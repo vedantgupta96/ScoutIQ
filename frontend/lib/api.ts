@@ -139,6 +139,86 @@ export interface BacktestValuationRow {
   min_per_g: number;
 }
 
+export type ScoutTrait =
+  | 'leadership'
+  | 'coachability'
+  | 'work_ethic'
+  | 'athleticism'
+  | 'discipline'
+  | 'basketball_iq';
+
+export type ScoutConfidence = 'low' | 'medium' | 'high';
+
+export interface ScoutRatingRow {
+  trait: ScoutTrait;
+  score: number;
+  confidence: ScoutConfidence;
+  evidence_span: string;
+}
+
+export interface ScoutRatingEvalReport {
+  total_notes: number;
+  expected_trait_count: number;
+  predicted_trait_count: number;
+  trait_coverage: number;
+  exact_score_agreement: number;
+  within_one_score_agreement: number;
+  evidence_hit_rate: number;
+  invalid_output_count: number;
+  validation_errors: Record<string, unknown>[];
+}
+
+export interface ScoutRatingEvalExample {
+  note_id: string;
+  player_name: string;
+  source_text: string;
+  ratings: ScoutRatingRow[];
+}
+
+export interface ScoutRatingEvalResponse {
+  mode: 'offline_fixture';
+  report: ScoutRatingEvalReport;
+  traits: ScoutTrait[];
+  gold_count: number;
+  fixture_prediction_count: number;
+  artifact_path: string;
+  caveat: string;
+  examples: ScoutRatingEvalExample[];
+}
+
+export interface ConfidenceMix {
+  low: number;
+  medium: number;
+  high: number;
+}
+
+export interface PlayerScoutTraitRating {
+  trait: ScoutTrait;
+  average_score: number;
+  report_count: number;
+  confidence_mix: ConfidenceMix;
+  evidence: string[];
+}
+
+export interface PlayerScoutReport {
+  report_id: string;
+  player_id: number;
+  player_name: string;
+  source_label: string;
+  source_text: string;
+  ratings: ScoutRatingRow[];
+}
+
+export interface PlayerScoutRatingsResponse {
+  player_id: number;
+  player_name: string;
+  source_mode: 'synthetic_fixture';
+  report_count: number;
+  traits: PlayerScoutTraitRating[];
+  reports: PlayerScoutReport[];
+  caveat: string;
+}
+
 // ---- API functions -------------------------------------------
 
 export function searchPlayers(query?: string, limit = 20): Promise<PlayerSummary[]> {
@@ -169,4 +249,12 @@ export function getBacktest(): Promise<BacktestResponse> {
 
 export function getBacktestValuations(): Promise<BacktestValuationRow[]> {
   return apiFetch<BacktestValuationRow[]>('/backtest/valuations');
+}
+
+export function getScoutRatingEval(): Promise<ScoutRatingEvalResponse> {
+  return apiFetch<ScoutRatingEvalResponse>('/llm/scout-ratings/eval');
+}
+
+export function getPlayerScoutRatings(id: number): Promise<PlayerScoutRatingsResponse> {
+  return apiFetch<PlayerScoutRatingsResponse>(`/players/${id}/scout-ratings`);
 }

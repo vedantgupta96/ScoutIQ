@@ -3,8 +3,8 @@
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Scale, Activity, BarChart3, SlidersHorizontal, Info } from 'lucide-react';
-import { getValuation, ValuationResponse } from '@/lib/api';
+import { ArrowLeft, Scale, Activity, BarChart3, SlidersHorizontal, Info, ClipboardCheck } from 'lucide-react';
+import { getPlayerScoutRatings, getValuation, PlayerScoutRatingsResponse, PlayerScoutTraitRating, ValuationResponse } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { StatTile } from '@/components/ui/StatTile';
@@ -76,12 +76,87 @@ function formatFeatureValue(key: string, value: number): { label: string; format
   return { label: key.replace(/_/g, ' '), formatted: value.toFixed(2) };
 }
 
+function traitLabel(trait: string): string {
+  if (trait === 'basketball_iq') return 'Basketball IQ';
+  return trait
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function ScoutTraitRow({ trait }: { trait: PlayerScoutTraitRating }) {
+  const width = `${Math.min(100, Math.max(0, trait.average_score / 5 * 100))}%`;
+  const topEvidence = trait.evidence[0];
+  return (
+    <div style={{ padding: '9px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{traitLabel(trait.trait)}</span>
+        <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-text)' }}>
+          {trait.average_score.toFixed(1)}/5
+        </span>
+      </div>
+      <div style={{ height: 7, marginTop: 7, borderRadius: 'var(--radius-pill)', background: 'var(--bg-inset)', overflow: 'hidden' }}>
+        <div style={{ width, height: '100%', background: 'var(--accent)' }} />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, minWidth: 0 }}>
+        <Badge tone={trait.confidence_mix.high > 0 ? 'confidence' : 'neutral'} size="sm">
+          {trait.report_count} report{trait.report_count === 1 ? '' : 's'}
+        </Badge>
+        {topEvidence && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            &quot;{topEvidence}&quot;
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsResponse | null; error: string | null }) {
+  return (
+    <Card
+      eyebrow="Scout ratings"
+      icon={<ClipboardCheck size={15} />}
+      action={<Badge tone="warning" variant="outline" size="sm">synthetic fixture</Badge>}
+    >
+      {error ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+          Scout-rating fixture unavailable: {error}
+        </p>
+      ) : ratings == null ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading scout ratings…</p>
+      ) : ratings.report_count === 0 ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+          No synthetic scout-report fixture exists for this player yet.
+        </p>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
+              {ratings.report_count}
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              synthetic report{ratings.report_count === 1 ? '' : 's'} aggregated
+            </span>
+          </div>
+          {ratings.traits.map((trait) => <ScoutTraitRow key={trait.trait} trait={trait} />)}
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+            {ratings.caveat}
+          </p>
+        </>
+      )}
+    </Card>
+  );
+}
+
 export default function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const playerId = Number(id);
   const router = useRouter();
 
   const [val, setVal] = useState<ValuationResponse | null>(null);
+  const [scoutRatings, setScoutRatings] = useState<PlayerScoutRatingsResponse | null>(null);
+  const [scoutError, setScoutError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,6 +166,12 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
       .then(setVal)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load valuation.'))
       .finally(() => setLoading(false));
+
+    setScoutRatings(null);
+    setScoutError(null);
+    getPlayerScoutRatings(playerId)
+      .then(setScoutRatings)
+      .catch((e: unknown) => setScoutError(e instanceof Error ? e.message : 'Failed to load scout ratings.'));
   }, [playerId]);
 
   if (loading) {
@@ -212,6 +293,8 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
             injury risk, defensive impact beyond box-score proxies, or gravity effects. Check the Model &amp;
             backtest view for full performance metrics.
           </AssumptionFlag>
+
+          <ScoutRatingsCard ratings={scoutRatings} error={scoutError} />
         </div>
 
         {/* Right column */}

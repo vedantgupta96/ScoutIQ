@@ -6,7 +6,7 @@ Or from backend/: uvicorn scoutiq.api.main:app --reload
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from scoutiq.api.routers import backtest, health, players, simulator
+from scoutiq.api.routers import backtest, health, llm_eval, players, simulator
 
 app = FastAPI(
     title="ScoutIQ API",
@@ -26,3 +26,4 @@ app.include_router(health.router)
 app.include_router(players.router)
 app.include_router(simulator.router)
 app.include_router(backtest.router)
+app.include_router(llm_eval.router)
