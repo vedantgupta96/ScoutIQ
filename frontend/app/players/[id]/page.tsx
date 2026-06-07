@@ -1,9 +1,22 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, use, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Scale, Activity, BarChart3, SlidersHorizontal, Info, ClipboardCheck, FileText, Users } from 'lucide-react';
+import {
+  ArrowLeft,
+  Scale,
+  Activity,
+  BarChart3,
+  SlidersHorizontal,
+  Info,
+  ClipboardCheck,
+  FileText,
+  Users,
+  Target,
+  DollarSign,
+  GitCompare,
+} from 'lucide-react';
 import {
   getPlayerContract,
   getPlayerScoutRatings,
@@ -392,6 +405,254 @@ function SimilarPlayersCard({
   );
 }
 
+type WorkspaceTab = 'brief' | 'market' | 'contract' | 'scout' | 'model';
+
+const WORKSPACE_TABS: { key: WorkspaceTab; label: string; icon: ReactNode }[] = [
+  { key: 'brief', label: 'Front-office read', icon: <Target size={14} /> },
+  { key: 'market', label: 'Similar market', icon: <Users size={14} /> },
+  { key: 'contract', label: 'Contract', icon: <FileText size={14} /> },
+  { key: 'scout', label: 'Scout', icon: <ClipboardCheck size={14} /> },
+  { key: 'model', label: 'Model', icon: <BarChart3 size={14} /> },
+];
+
+function RiskLine({ label, value, tone = 'neutral' }: { label: string; value: string; tone?: 'positive' | 'negative' | 'neutral' }) {
+  const color = tone === 'positive'
+    ? 'var(--positive-text)'
+    : tone === 'negative' ? 'var(--negative-text)' : 'var(--text-primary)';
+  return (
+    <div className="siq-risk-line">
+      <span>{label}</span>
+      <strong className="ds-tnum" style={{ color }}>{value}</strong>
+    </div>
+  );
+}
+
+function DecisionHero({
+  val,
+  valueUsd,
+  actualUsd,
+  contract,
+  extensionHref,
+  onSimulate,
+}: {
+  val: ValuationResponse;
+  valueUsd: number;
+  actualUsd: number | null;
+  contract: PlayerContractResponse | null;
+  extensionHref: string;
+  onSimulate: () => void;
+}) {
+  return (
+    <section className="siq-decision-hero">
+      <div className="siq-decision-identity">
+        <Avatar name={val.player_name} size="xl" position={val.position} playerId={val.player_id} />
+        <div style={{ minWidth: 0 }}>
+          <div className="siq-decision-kicker">
+            <Badge tone="neutral" size="sm">{val.season}</Badge>
+            <span>{val.current_team?.name ?? 'Team unavailable'}</span>
+          </div>
+          <h1>{val.player_name}</h1>
+          <div className="siq-decision-subline">
+            <span>{val.position ?? 'Position unavailable'}</span>
+            <span>Value case workspace</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="siq-decision-snapshot">
+        <StatTile
+          label="Model value"
+          value={fmtM(valueUsd)}
+          unit={fmtPct(val.value_pct)}
+          sub={`80% range ${fmtPct(val.lo_pct)} to ${fmtPct(val.hi_pct)}`}
+          size="sm"
+        />
+        <StatTile
+          label="Current pay"
+          value={actualUsd != null ? fmtM(actualUsd) : '—'}
+          unit={val.actual_pct != null ? fmtPct(val.actual_pct) : undefined}
+          sub={`${val.season} cap hit`}
+          size="sm"
+        />
+        <StatTile
+          label="Extension window"
+          value={contract?.extension_start_season ?? '—'}
+          sub={contract ? `${contract.years} listed years` : 'Contract data loading'}
+          size="sm"
+        />
+      </div>
+
+      <div className="siq-decision-actions">
+        <VerdictPill gapPct={val.gap_pct} size="lg" />
+        <button onClick={onSimulate} className="siq-primary-button">
+          <SlidersHorizontal size={15} />
+          Run simulation
+        </button>
+        <Link href={extensionHref} className="siq-secondary-button" style={{ textDecoration: 'none' }}>
+          <DollarSign size={15} />
+          Price deal
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function WorkspaceTabs({
+  active,
+  onChange,
+}: {
+  active: WorkspaceTab;
+  onChange: (tab: WorkspaceTab) => void;
+}) {
+  return (
+    <div className="siq-workspace-tabs">
+      {WORKSPACE_TABS.map((tab) => (
+        <button
+          key={tab.key}
+          onClick={() => onChange(tab.key)}
+          className={active === tab.key ? 'is-active' : undefined}
+        >
+          {tab.icon}
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FrontOfficeRead({
+  val,
+  valueUsd,
+  actualUsd,
+  contract,
+  similarMarket,
+  scoutRatings,
+}: {
+  val: ValuationResponse;
+  valueUsd: number;
+  actualUsd: number | null;
+  contract: PlayerContractResponse | null;
+  similarMarket: SimilarPlayersResponse | null;
+  scoutRatings: PlayerScoutRatingsResponse | null;
+}) {
+  const topMatch = similarMarket?.results[0];
+  const gapTone = val.gap_pct == null ? 'neutral' : val.gap_pct >= 0 ? 'positive' : 'negative';
+  const scoutTop = scoutRatings?.traits[0];
+
+  return (
+    <div className="siq-read-grid">
+      <Card eyebrow="Decision brief" icon={<Target size={15} />}>
+        <div className="siq-brief-copy">
+          <p>
+            Production prices {val.player_name} at <strong>{fmtPct(val.value_pct)}</strong> of the cap
+            {val.actual_pct != null ? <> against a <strong>{fmtPct(val.actual_pct)}</strong> current hit</> : null}.
+          </p>
+          <p>
+            The current case reads as <strong>{val.gap_pct != null ? `${signed(val.gap_pct)}% of cap` : 'incomplete'}</strong>
+            {topMatch ? <> with <strong>{topMatch.player.full_name}</strong> as the closest visible market comp.</> : <> while the market set loads.</>}
+          </p>
+        </div>
+        <div className="siq-brief-strip">
+          <RiskLine label="Value dollars" value={fmtM(valueUsd)} tone="positive" />
+          <RiskLine label="Pay dollars" value={actualUsd != null ? fmtM(actualUsd) : '—'} tone={val.gap_pct != null && val.gap_pct < 0 ? 'negative' : 'neutral'} />
+          <RiskLine label="Gap to pay" value={val.gap_pct != null ? `${signed(val.gap_pct)}%` : '—'} tone={gapTone} />
+          <RiskLine label="Extension start" value={contract?.extension_start_season ?? '—'} />
+        </div>
+      </Card>
+
+      <Card eyebrow="Market signal" icon={<GitCompare size={15} />}>
+        {topMatch ? (
+          <div className="siq-market-signal">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <Avatar name={topMatch.player.full_name} size="md" position={topMatch.player.position} playerId={topMatch.player.player_id} />
+              <div style={{ minWidth: 0 }}>
+                <Link href={`/players/${topMatch.player.player_id}`} style={{ textDecoration: 'none', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  {topMatch.player.full_name}
+                </Link>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {topMatch.player.current_team?.abbreviation ?? '—'} · {topMatch.similarity_score.toFixed(1)} match
+                </div>
+              </div>
+            </div>
+            <div className="siq-market-chip-row">
+              {topMatch.explanation_tags.slice(0, 4).map((tag) => (
+                <Badge key={tag} tone="neutral" variant="outline" size="sm">{tag}</Badge>
+              ))}
+            </div>
+            <RiskLine label="Comp value" value={topMatch.value_pct != null ? fmtPct(topMatch.value_pct) : '—'} />
+            <RiskLine label="Comp pay" value={topMatch.salary_pct != null ? fmtPct(topMatch.salary_pct) : '—'} />
+            <RiskLine label="Comp gap" value={topMatch.gap_pct != null ? `${signed(topMatch.gap_pct)}%` : '—'} tone={topMatch.gap_pct != null && topMatch.gap_pct >= 0 ? 'positive' : 'negative'} />
+          </div>
+        ) : (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading market signal…</p>
+        )}
+      </Card>
+
+      <Card eyebrow="Confidence notes" icon={<Info size={15} />}>
+        <div className="siq-confidence-stack">
+          <RiskLine label="Model interval" value={`${fmtPct(val.lo_pct)} to ${fmtPct(val.hi_pct)}`} />
+          <RiskLine label="Scout fixture" value={scoutRatings ? `${scoutRatings.report_count} reports` : 'Loading'} />
+          <RiskLine label="Top trait" value={scoutTop ? `${traitLabel(scoutTop.trait)} ${scoutTop.average_score.toFixed(1)}/5` : '—'} />
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0 0', lineHeight: 1.5 }}>
+          Use the tabs to move from the executive read into the market, contract structure, scout context, and raw model inputs.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
+function ActionRail({
+  val,
+  contract,
+  similarMarket,
+  extensionHref,
+  activeTab,
+  onTab,
+  onSimulate,
+}: {
+  val: ValuationResponse;
+  contract: PlayerContractResponse | null;
+  similarMarket: SimilarPlayersResponse | null;
+  extensionHref: string;
+  activeTab: WorkspaceTab;
+  onTab: (tab: WorkspaceTab) => void;
+  onSimulate: () => void;
+}) {
+  const topMatch = similarMarket?.results[0];
+  return (
+    <aside className="siq-action-rail">
+      <Card eyebrow="Action rail" icon={<SlidersHorizontal size={15} />}>
+        <div className="siq-action-stack">
+          <button onClick={onSimulate} className="siq-primary-button">
+            <SlidersHorizontal size={15} />
+            Simulate extension
+          </button>
+          <Link href={extensionHref} className="siq-secondary-button" style={{ textDecoration: 'none' }}>
+            <DollarSign size={15} />
+            Open contract pricer
+          </Link>
+          <button onClick={() => onTab('market')} className="siq-secondary-button">
+            <Users size={15} />
+            Review comps
+          </button>
+          <button onClick={() => onTab('model')} className="siq-secondary-button">
+            <BarChart3 size={15} />
+            Inspect model inputs
+          </button>
+        </div>
+      </Card>
+
+      <Card eyebrow="Case file" icon={<FileText size={15} />}>
+        <RiskLine label="Active view" value={WORKSPACE_TABS.find((tab) => tab.key === activeTab)?.label ?? '—'} />
+        <RiskLine label="Value gap" value={val.gap_pct != null ? `${signed(val.gap_pct)}%` : '—'} tone={val.gap_pct != null && val.gap_pct >= 0 ? 'positive' : 'negative'} />
+        <RiskLine label="Top comp" value={topMatch?.player.full_name ?? 'Loading'} />
+        <RiskLine label="Extension window" value={contract?.extension_start_season ?? '—'} />
+      </Card>
+    </aside>
+  );
+}
+
 export default function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const playerId = Number(id);
@@ -403,6 +664,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   const [similarMode, setSimilarMode] = useState<SimilarPlayersMode>('twins');
   const [similarMarket, setSimilarMarket] = useState<SimilarPlayersResponse | null>(null);
   const [similarError, setSimilarError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('brief');
   const [scoutRatings, setScoutRatings] = useState<PlayerScoutRatingsResponse | null>(null);
   const [scoutError, setScoutError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -472,153 +734,153 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
     ? `/simulator?player=${playerId}&start=${encodeURIComponent(contract.extension_start_season)}&aav=${extensionAav}&years=4`
     : `/simulator?player=${playerId}&aav=${extensionAav}`;
 
+  const modelInputs = (
+    <div className="siq-read-grid">
+      <Card
+        eyebrow="Production-implied value"
+        icon={<Scale size={15} />}
+        action={<Badge tone="confidence" variant="outline" size="sm">80% interval</Badge>}
+      >
+        <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 20 }}>
+          <StatTile
+            label="Model value"
+            value={fmtM(valueUsd)}
+            unit={` · ${fmtPct(val.value_pct)}`}
+            delta={val.gap_pct != null ? signed(val.gap_pct) + '%' : undefined}
+            deltaDir={val.gap_pct != null ? (val.gap_pct >= 0 ? 'up' : 'down') : undefined}
+            sub={`80% CI: ${fmtPct(val.lo_pct)}–${fmtPct(val.hi_pct)} of cap`}
+            size="md"
+          />
+          {actualUsd && (
+            <StatTile
+              label="Actual pay"
+              value={fmtM(actualUsd)}
+              unit={val.actual_pct != null ? ` · ${fmtPct(val.actual_pct)}` : undefined}
+              sub={`${val.season} cap hit`}
+              size="md"
+            />
+          )}
+        </div>
+        <ValueGauge
+          valuePct={val.value_pct}
+          loPct={val.lo_pct}
+          hiPct={val.hi_pct}
+          actualPct={val.actual_pct}
+        />
+      </Card>
+
+      <Card eyebrow="Model inputs" icon={<Activity size={15} />}>
+        {featureEntries.length > 0 ? (
+          <>
+            {featureEntries.map(([key, value]) => {
+              const { label, formatted } = formatFeatureValue(key, value);
+              return <StatRow key={key} label={label} value={formatted} />;
+            })}
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+              Raw feature values fed to the model for this season.
+            </p>
+          </>
+        ) : (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+            Feature data not available for this player-season.
+          </p>
+        )}
+      </Card>
+
+      <Card eyebrow="Model info" icon={<BarChart3 size={15} />}>
+        <StatRow label="Model version" value={val.model_version ?? '—'} />
+        <StatRow label="Season" value={val.season} />
+        <StatRow label="Value" value={`${fmtPct(val.value_pct)} of cap`} />
+        <StatRow label="80% interval" value={`${fmtPct(val.lo_pct)} – ${fmtPct(val.hi_pct)}`} />
+        {val.gap_pct != null && (
+          <StatRow
+            label="Gap to pay"
+            value={`${signed(val.gap_pct)}%`}
+          />
+        )}
+      </Card>
+
+      <AssumptionFlag tone="confidence" title="Calibrated honesty" icon={<Info size={16} />}>
+        This is a production-implied valuation, not a market-value estimate. It does not account for
+        injury risk, defensive impact beyond box-score proxies, or gravity effects. Check the Model &amp;
+        backtest view for full performance metrics.
+      </AssumptionFlag>
+    </div>
+  );
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
-      {/* Back */}
-      <Link href="/players" style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        padding: '5px 10px', borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--border-subtle)', background: 'var(--bg-panel)',
-        textDecoration: 'none', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500,
-        alignSelf: 'flex-start',
-      }}>
+    <div className="siq-decision-page">
+      <Link href="/players" className="siq-back-link">
         <ArrowLeft size={15} /> All players
       </Link>
 
-      {/* Player header card */}
-      <Card padded>
-        <div className="siq-player-card-row">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: '1 1 260px' }}>
-            <Avatar name={val.player_name} size="xl" position={val.position} playerId={val.player_id} />
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <h2 style={{
-                  fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 28,
-                  color: 'var(--text-primary)', margin: 0, lineHeight: 1.15,
-                }}>
-                  {val.player_name}
-                </h2>
-                <Badge tone="neutral" size="sm">{val.season}</Badge>
+      <DecisionHero
+        val={val}
+        valueUsd={valueUsd}
+        actualUsd={actualUsd}
+        contract={contract}
+        extensionHref={extensionHref}
+        onSimulate={() => router.push(extensionHref)}
+      />
+
+      <div className="siq-workspace-layout">
+        <main className="siq-workspace-main">
+          <WorkspaceTabs active={activeTab} onChange={setActiveTab} />
+
+          <div className="siq-workspace-panel">
+            {activeTab === 'brief' && (
+              <FrontOfficeRead
+                val={val}
+                valueUsd={valueUsd}
+                actualUsd={actualUsd}
+                contract={contract}
+                similarMarket={similarMarket}
+                scoutRatings={scoutRatings}
+              />
+            )}
+
+            {activeTab === 'market' && (
+              <SimilarPlayersCard
+                market={similarMarket}
+                error={similarError}
+                mode={similarMode}
+                onModeChange={setSimilarMode}
+              />
+            )}
+
+            {activeTab === 'contract' && (
+              <ContractCard
+                contract={contract}
+                error={contractError}
+                onSimulateExtension={() => router.push(extensionHref)}
+              />
+            )}
+
+            {activeTab === 'scout' && (
+              <div className="siq-read-grid">
+                <ScoutRatingsCard ratings={scoutRatings} error={scoutError} />
+                <Card eyebrow="How to read this" icon={<Info size={15} />}>
+                  <p style={{ font: '14px/1.6 var(--font-sans)', color: 'var(--text-primary)', margin: 0 }}>
+                    Scout ratings are fixture-backed qualitative context for the portfolio demo. Treat them as
+                    a separate lens from the deterministic model and cap math.
+                  </p>
+                </Card>
               </div>
-              <div style={{ marginTop: 4, fontSize: 14, color: 'var(--text-secondary)' }}>
-                {val.position} · {val.current_team?.name ?? '—'}
-              </div>
-            </div>
+            )}
+
+            {activeTab === 'model' && modelInputs}
           </div>
-          <VerdictPill gapPct={val.gap_pct} size="lg" />
-          <button
-            onClick={() => router.push(extensionHref)}
-            className="siq-primary-button"
-          >
-            <SlidersHorizontal size={15} />
-            Run cap simulation
-          </button>
-        </div>
-      </Card>
+        </main>
 
-      <div className="siq-profile-grid">
-        {/* Left column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
-          <ContractCard
-            contract={contract}
-            error={contractError}
-            onSimulateExtension={() => router.push(extensionHref)}
-          />
-
-          {/* Valuation card */}
-          <Card
-            eyebrow="Production-implied value"
-            icon={<Scale size={15} />}
-            action={<Badge tone="confidence" variant="outline" size="sm">80% interval</Badge>}
-          >
-            <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 20 }}>
-              <StatTile
-                label="Model value"
-                value={fmtM(valueUsd)}
-                unit={` · ${fmtPct(val.value_pct)}`}
-                delta={val.gap_pct != null ? signed(val.gap_pct) + '%' : undefined}
-                deltaDir={val.gap_pct != null ? (val.gap_pct >= 0 ? 'up' : 'down') : undefined}
-                sub={`80% CI: ${fmtPct(val.lo_pct)}–${fmtPct(val.hi_pct)} of cap`}
-                size="md"
-              />
-              {actualUsd && (
-                <StatTile
-                  label="Actual pay"
-                  value={fmtM(actualUsd)}
-                  unit={val.actual_pct != null ? ` · ${fmtPct(val.actual_pct)}` : undefined}
-                  sub={`${val.season} cap hit`}
-                  size="md"
-                />
-              )}
-            </div>
-            <ValueGauge
-              valuePct={val.value_pct}
-              loPct={val.lo_pct}
-              hiPct={val.hi_pct}
-              actualPct={val.actual_pct}
-            />
-          </Card>
-
-          {/* Rationale placeholder */}
-          <Card eyebrow="How to read this" icon={<Info size={15} />}>
-            <p style={{ font: '14px/1.6 var(--font-sans)', color: 'var(--text-primary)', margin: 0 }}>
-              Value is what production says the player is worth — the model never sees their current salary,
-              so the gap to pay is the signal. The 80% conformal interval is calibrated on held-out seasons;
-              coverage holds 85% of the time in the backtest.
-            </p>
-          </Card>
-
-          <AssumptionFlag tone="confidence" title="Calibrated honesty" icon={<Info size={16} />}>
-            This is a production-implied valuation, not a market-value estimate. It does not account for
-            injury risk, defensive impact beyond box-score proxies, or gravity effects. Check the Model &amp;
-            backtest view for full performance metrics.
-          </AssumptionFlag>
-
-          <ScoutRatingsCard ratings={scoutRatings} error={scoutError} />
-        </div>
-
-        {/* Right column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
-          <SimilarPlayersCard
-            market={similarMarket}
-            error={similarError}
-            mode={similarMode}
-            onModeChange={setSimilarMode}
-          />
-
-          {/* Model input stats */}
-          <Card eyebrow="Model inputs" icon={<Activity size={15} />}>
-            {featureEntries.length > 0 ? (
-              <>
-                {featureEntries.map(([key, value]) => {
-                  const { label, formatted } = formatFeatureValue(key, value);
-                  return <StatRow key={key} label={label} value={formatted} />;
-                })}
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
-                  Raw feature values fed to the model for this season.
-                </p>
-              </>
-            ) : (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-                Feature data not available for this player-season.
-              </p>
-            )}
-          </Card>
-
-          {/* Model metadata */}
-          <Card eyebrow="Model info" icon={<BarChart3 size={15} />}>
-            <StatRow label="Model version" value={val.model_version ?? '—'} />
-            <StatRow label="Season" value={val.season} />
-            <StatRow label="Value" value={`${fmtPct(val.value_pct)} of cap`} />
-            <StatRow label="80% interval" value={`${fmtPct(val.lo_pct)} – ${fmtPct(val.hi_pct)}`} />
-            {val.gap_pct != null && (
-              <StatRow
-                label="Gap to pay"
-                value={`${signed(val.gap_pct)}%`}
-              />
-            )}
-          </Card>
-        </div>
+        <ActionRail
+          val={val}
+          contract={contract}
+          similarMarket={similarMarket}
+          extensionHref={extensionHref}
+          activeTab={activeTab}
+          onTab={setActiveTab}
+          onSimulate={() => router.push(extensionHref)}
+        />
       </div>
     </div>
   );
