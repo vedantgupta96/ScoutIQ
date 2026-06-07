@@ -315,7 +315,8 @@ def test_backtest_returns_committed_metrics():
     assert response.status_code == 200
     body = response.json()
     assert body["model_version"] == "v0-gbm-conformal"
-    assert body["metrics"]["n_test"] == 796
+    assert body["metrics"]["n_test"] == 699
+    assert body["metrics"]["test_seasons"] == ["2024-25", "2025-26"]
     assert "metrics.json" in body["artifacts"]
 
 
