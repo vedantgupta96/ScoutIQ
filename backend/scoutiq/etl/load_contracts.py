@@ -194,55 +194,78 @@ def scrape_team(team_slug: str) -> list[dict]:
 # Step 2 — scrape individual player page → year-by-year
 # ---------------------------------------------------------------------------
 
-def scrape_player_contract(spotrac_id: str, name_slug: str) -> list[dict] | None:
-    """Return list of {season, aav, cap_pct, is_guaranteed, is_player_option, is_team_option}."""
-    url = f"https://www.spotrac.com/nba/player/_/id/{spotrac_id}/{name_slug}"
-    html = _get(url, f"player_{spotrac_id}")
-    if not html:
-        return None
+def _parse_contract_table(table) -> list[dict]:
+    """Parse one Spotrac cap-hit table into year rows, or [] if it isn't one.
 
-    soup = BeautifulSoup(html, "html5lib")
-    tables = soup.find_all("table")
-    if not tables:
-        return None
+    Columns vary by page: some include a "Status" column, some do not, which
+    shifts Cap Hit / Cap % by one. Locate columns by header text instead of
+    fixed indices, or the dollar/percent cells silently misalign.
+    """
+    header_row = table.find("tr")
+    if header_row is None:
+        return []
+    headers = [c.get_text(strip=True).lower() for c in header_row.find_all(["td", "th"])]
 
-    # table[0] has: Year, [icon], Age, Status, Cap Hit Annual, Cap %, ...
-    table = tables[0]
+    def _col(prefix: str) -> int | None:
+        return next((i for i, h in enumerate(headers) if h.startswith(prefix)), None)
+
+    cap_hit_idx = _col("cap hit")
+    cap_pct_idx = _col("cap %")
+    status_idx = _col("status")
+    if cap_hit_idx is None or cap_pct_idx is None:
+        return []  # not a cap-hit table (base-salary / cash tables share the page)
+
     rows = []
     for row in table.find_all("tr")[1:]:
         cells = row.find_all(["td", "th"])
-        if len(cells) < 5:
-            continue
+        if len(cells) <= cap_pct_idx:
+            continue  # short rows (e.g. future UFA years) have no cap figures
 
         season = cells[0].get_text(strip=True)   # '2024-25'
         # skip non-season rows (UFA, RFA, etc.) — must match YYYY-YY
         if not re.match(r"^\d{4}-\d{2}$", season):
             continue
 
-        status = cells[3].get_text(strip=True).lower()  # '', 'player', 'team', 'ufa', ...
+        status = cells[status_idx].get_text(strip=True).lower() if status_idx is not None else ""
         # skip free-agent / post-contract rows
         if status in ("ufa", "rfa", "two-way"):
             continue
 
-        cap_hit_txt = cells[4].get_text(strip=True)
-        cap_pct_txt = cells[5].get_text(strip=True) if len(cells) > 5 else ""
-
-        aav = _parse_dollars(cap_hit_txt)
-        cap_pct = _parse_pct(cap_pct_txt)
-
         is_player_option = "player" in status
         is_team_option = "team" in status
-        is_guaranteed = not is_player_option and not is_team_option
-
         rows.append({
             "season": season,
-            "aav": aav,
-            "cap_pct": cap_pct,
-            "is_guaranteed": is_guaranteed,
+            "aav": _parse_dollars(cells[cap_hit_idx].get_text(strip=True)),
+            "cap_pct": _parse_pct(cells[cap_pct_idx].get_text(strip=True)),
+            "is_guaranteed": not is_player_option and not is_team_option,
             "is_player_option": is_player_option,
             "is_team_option": is_team_option,
         })
+    return rows
 
+
+def scrape_player_contract(spotrac_id: str, name_slug: str) -> list[dict] | None:
+    """Return list of {season, aav, cap_pct, is_guaranteed, is_player_option, is_team_option}.
+
+    A recently-extended player's page leads with the extension table while the
+    current contract (the years we actually need, e.g. 2025-26) sits in a later
+    cap-hit table. Merge across every cap-hit table, keeping the first non-null
+    cap hit per season, so those current years aren't dropped.
+    """
+    url = f"https://www.spotrac.com/nba/player/_/id/{spotrac_id}/{name_slug}"
+    html = _get(url, f"player_{spotrac_id}")
+    if not html:
+        return None
+
+    soup = BeautifulSoup(html, "html5lib")
+    by_season: dict[str, dict] = {}
+    for table in soup.find_all("table"):
+        for row in _parse_contract_table(table):
+            existing = by_season.get(row["season"])
+            if existing is None or (existing["aav"] is None and row["aav"] is not None):
+                by_season[row["season"]] = row
+
+    rows = [by_season[s] for s in sorted(by_season)]
     return rows if rows else None
 
 
