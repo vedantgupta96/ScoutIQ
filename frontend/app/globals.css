@@ -1,0 +1,206 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+/* ============================================================
+   Design tokens — ScoutIQ color, type, spacing, motion
+   ============================================================ */
+:root {
+  /* Raw ink scale */
+  --ink-950: #08090B;
+  --ink-900: #0B0D10;
+  --ink-850: #0F1216;
+  --ink-800: #14181D;
+  --ink-750: #191E24;
+  --ink-700: #1F252C;
+  --ink-650: #262D35;
+  --ink-600: #2F3741;
+  --ink-500: #3D4651;
+  --ink-400: #697585;
+  --ink-350: #828E9C;
+  --ink-300: #9AA6B4;
+  --ink-200: #BAC4D0;
+  --ink-100: #D8DEE6;
+  --ink-50:  #EDF1F5;
+
+  /* Brand */
+  --orange-700: #BE3F12;
+  --orange-600: #DD4E18;
+  --orange-500: #F4621F;
+  --orange-400: #FF7E40;
+  --orange-300: #FFA372;
+  --orange-soft: rgba(244,98,31,0.14);
+  --orange-glow: rgba(244,98,31,0.35);
+
+  /* Verdicts */
+  --green-700: #117A47;
+  --green-600: #15945A;
+  --green-500: #1FBE74;
+  --green-400: #3DD98E;
+  --green-300: #74E8B0;
+  --green-soft: rgba(31,190,116,0.14);
+
+  --red-700: #A81F1F;
+  --red-600: #CB2C2C;
+  --red-500: #EE4747;
+  --red-400: #FF6B6B;
+  --red-300: #FF9A9A;
+  --red-soft: rgba(238,71,71,0.14);
+
+  --amber-700: #8A5E0C;
+  --amber-600: #C68A12;
+  --amber-500: #ECB22E;
+  --amber-300: #FBDD92;
+  --amber-soft: rgba(236,178,46,0.14);
+
+  --blue-600: #2F6FE0;
+  --blue-500: #4D8DFF;
+  --blue-400: #79A9FF;
+  --blue-soft: rgba(77,141,255,0.14);
+
+  --teal-600: #0E9C9C;
+  --teal-500: #1FC1C1;
+  --teal-400: #4FD6D6;
+  --teal-soft: rgba(31,193,193,0.14);
+
+  /* Semantic surfaces (LIGHT default) */
+  --bg-app:      #EEF1F6;
+  --bg-inset:    #EDF0F5;
+  --bg-panel:    #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --bg-hover:    #F3F5F9;
+  --bg-active:   #E8ECF3;
+
+  /* Borders */
+  --border-subtle:  rgba(16,24,40,0.08);
+  --border-default: rgba(16,24,40,0.16);
+  --border-strong:  rgba(16,24,40,0.24);
+
+  /* Text */
+  --text-primary:   #0E1116;
+  --text-secondary: #4B5563;
+  --text-muted:     #79828F;
+
+  /* Brand semantic */
+  --accent:       var(--orange-500);
+  --accent-hover: var(--orange-600);
+  --accent-soft:  rgba(244,98,31,0.12);
+  --accent-text:  var(--orange-600);
+
+  /* Verdict semantic */
+  --positive:      var(--green-600);
+  --positive-text: var(--green-700);
+  --positive-soft: var(--green-soft);
+  --negative:      var(--red-600);
+  --negative-text: var(--red-700);
+  --negative-soft: var(--red-soft);
+  --warning:       var(--amber-600);
+  --warning-text:  var(--amber-700);
+  --warning-soft:  var(--amber-soft);
+  --confidence:    var(--teal-600);
+  --confidence-text: var(--teal-600);
+  --confidence-soft: rgba(14,156,156,0.13);
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px rgba(16,24,40,0.04), 0 4px 12px rgba(16,24,40,0.06);
+  --shadow-md:   0 4px 12px rgba(16,24,40,0.08), 0 2px 4px rgba(16,24,40,0.05);
+  --shadow-focus: 0 0 0 3px rgba(244,98,31,0.25);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22,1,0.36,1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+
+  /* Layout */
+  --sidebar-width: 232px;
+  --topbar-height: 56px;
+  --panel-gap: 16px;
+
+  /* Fonts */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-sans:    'Hanken Grotesk', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, monospace;
+
+  /* Radii */
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-pill: 999px;
+}
+
+[data-theme="dark"] {
+  --bg-app:      var(--ink-900);
+  --bg-inset:    var(--ink-850);
+  --bg-panel:    var(--ink-800);
+  --bg-elevated: var(--ink-750);
+  --bg-hover:    var(--ink-650);
+  --bg-active:   var(--ink-600);
+
+  --border-subtle:  rgba(255,255,255,0.06);
+  --border-default: var(--ink-500);
+  --border-strong:  var(--ink-600);
+
+  --text-primary:   var(--ink-50);
+  --text-secondary: var(--ink-300);
+  --text-muted:     var(--ink-400);
+
+  --accent:       var(--orange-500);
+  --accent-hover: var(--orange-400);
+  --accent-soft:  var(--orange-soft);
+  --accent-text:  var(--orange-300);
+
+  --positive:      var(--green-500);
+  --positive-text: var(--green-300);
+  --positive-soft: var(--green-soft);
+  --negative:      var(--red-500);
+  --negative-text: var(--red-300);
+  --negative-soft: var(--red-soft);
+  --warning:       var(--amber-500);
+  --warning-text:  var(--amber-300);
+  --warning-soft:  var(--amber-soft);
+  --confidence:    var(--teal-500);
+  --confidence-text: var(--teal-400);
+  --confidence-soft: var(--teal-soft);
+
+  --shadow-card: none;
+  --shadow-md:   0 4px 12px rgba(0,0,0,0.45);
+}
+
+/* ============================================================
+   Global base
+   ============================================================ */
+html, body { height: 100%; }
+
+body {
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Eyebrow / overline labels ---- */
+.ds-eyebrow {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ---- Tabular numerics: always for stats, money, %, deltas ---- */
+.ds-tnum {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+  letter-spacing: -0.015em;
+}
+
+/* ---- Thin scrollbars ---- */
+* { scrollbar-width: thin; scrollbar-color: var(--border-default) transparent; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 999px; }
+::-webkit-scrollbar-track { background: transparent; }
