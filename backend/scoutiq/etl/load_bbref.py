@@ -25,9 +25,11 @@ from scoutiq.etl._util import clean
 from scoutiq.models import Player, PlayerSalary, PlayerSeason, PlayerXref
 from scoutiq.sources import bbref
 from scoutiq.sources.crosswalk import resolve_slug
+from scoutiq.sources.nba import team_id_for_abbreviation
 
 # BBRef advanced columns -> keys stored in player_seasons.advanced (no collision with nba.com keys)
 BBREF_ADV = {"BPM": "BPM", "OBPM": "OBPM", "DBPM": "DBPM", "VORP": "VORP", "WS": "WS", "WS/48": "WS48", "PER": "PER"}
+MULTI_TEAM_CODES = {"TOT", "2TM", "3TM", "4TM", "5TM"}
 
 # Real position codes (PG/SG/SF/PF/C and combos). BBRef sometimes puts notes like
 # "Did not play - other pro league" in the Pos cell — reject those.
@@ -94,6 +96,17 @@ def _enrich_one(session, player_id: int, full_name: str, season_set: set[str]) -
             ).scalar_one_or_none()
             if ps is None:
                 continue
+            team_abbr = clean(r.get("Team") or r.get("Tm"))
+            if team_abbr:
+                # BBRef combined rows for traded players use 2TM/3TM/etc.; a total-season row has
+                # no single team, so clear team_id rather than storing a misleading current team.
+                team_code = str(team_abbr).upper()
+                if team_code in MULTI_TEAM_CODES:
+                    ps.team_id = None
+                else:
+                    team_id = team_id_for_abbreviation(team_code)
+                    if team_id is not None:
+                        ps.team_id = team_id
             metrics = {key: clean(r[col]) for col, key in BBREF_ADV.items() if col in r and clean(r[col]) is not None}
             ps.advanced = {**(ps.advanced or {}), **metrics}
             n_adv += 1
