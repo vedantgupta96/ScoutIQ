@@ -3,15 +3,19 @@
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Scale, Activity, BarChart3, SlidersHorizontal, Info, ClipboardCheck, FileText } from 'lucide-react';
+import { ArrowLeft, Scale, Activity, BarChart3, SlidersHorizontal, Info, ClipboardCheck, FileText, Users } from 'lucide-react';
 import {
   getPlayerContract,
   getPlayerScoutRatings,
+  getSimilarPlayers,
   getValuation,
   PlayerContractResponse,
   PlayerContractYear,
   PlayerScoutRatingsResponse,
   PlayerScoutTraitRating,
+  SimilarPlayerResult,
+  SimilarPlayersMode,
+  SimilarPlayersResponse,
   ValuationResponse,
 } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
@@ -256,6 +260,138 @@ function ContractCard({
   );
 }
 
+const SIMILAR_MODE_LABELS: Record<SimilarPlayersMode, string> = {
+  twins: 'Twins',
+  contract_comps: 'Contract comps',
+  replacements: 'Replacements',
+};
+
+function SimilarPlayerRow({ result }: { result: SimilarPlayerResult }) {
+  const gap = result.gap_pct;
+  const gapColor = gap == null
+    ? 'var(--text-muted)'
+    : gap >= 0 ? 'var(--positive-text)' : 'var(--negative-text)';
+  const simHref = `/simulator?player=${result.player.player_id}&aav=${Math.max(1, Math.min(35, result.value_pct ?? 15))}`;
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) auto',
+      gap: 12,
+      padding: '12px 0',
+      borderBottom: '1px solid var(--border-subtle)',
+      alignItems: 'start',
+    }}>
+      <Link href={`/players/${result.player.player_id}`} style={{ textDecoration: 'none', minWidth: 0 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+          <Avatar name={result.player.full_name} size="md" position={result.player.position} playerId={result.player.player_id} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {result.player.full_name}
+              </span>
+              <Badge tone="neutral" variant="outline" size="sm">
+                {result.player.position ?? '—'}
+              </Badge>
+            </div>
+            <div style={{ marginTop: 3, fontSize: 11, color: 'var(--text-muted)' }}>
+              {result.player.current_team?.abbreviation ?? result.player.latest_stats_team?.abbreviation ?? '—'}
+              {result.age != null ? ` · age ${result.age.toFixed(0)}` : ''}
+            </div>
+          </div>
+        </div>
+        {result.explanation_tags.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+            {result.explanation_tags.map((tag) => (
+              <Badge key={tag} tone={tag.includes('cheaper') || tag.includes('surplus') ? 'positive' : 'neutral'} variant="outline" size="sm">
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </Link>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
+        <span className="ds-tnum" style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-text)' }}>
+          {result.similarity_score.toFixed(1)}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>match</span>
+        <div style={{ textAlign: 'right', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          <div>Value {result.value_pct != null ? fmtPct(result.value_pct) : '—'}</div>
+          <div>Pay {result.salary_pct != null ? fmtPct(result.salary_pct) : '—'}</div>
+          <div style={{ color: gapColor }}>Gap {gap != null ? `${signed(gap)}%` : '—'}</div>
+        </div>
+        <Link
+          href={simHref}
+          className="siq-secondary-button"
+          style={{ padding: '5px 8px', fontSize: 11, textDecoration: 'none' }}
+        >
+          <SlidersHorizontal size={13} />
+          Sim
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function SimilarPlayersCard({
+  market,
+  error,
+  mode,
+  onModeChange,
+}: {
+  market: SimilarPlayersResponse | null;
+  error: string | null;
+  mode: SimilarPlayersMode;
+  onModeChange: (mode: SimilarPlayersMode) => void;
+}) {
+  return (
+    <Card
+      eyebrow="Similar player market"
+      icon={<Users size={15} />}
+      action={market ? <Badge tone="confidence" variant="outline" size="sm">{market.season}</Badge> : undefined}
+    >
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+        {(Object.keys(SIMILAR_MODE_LABELS) as SimilarPlayersMode[]).map((key) => (
+          <button
+            key={key}
+            onClick={() => onModeChange(key)}
+            className={key === mode ? 'siq-primary-button' : 'siq-secondary-button'}
+            style={{ padding: '6px 10px', fontSize: 12, width: 'auto' }}
+          >
+            {SIMILAR_MODE_LABELS[key]}
+          </button>
+        ))}
+      </div>
+
+      {error ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+          Similar-player market unavailable: {error}
+        </p>
+      ) : market == null ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading similar players…</p>
+      ) : market.results.length === 0 ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+          No qualified matches found for this mode.
+        </p>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
+            {market.basis.slice(0, 5).map((basis) => (
+              <Badge key={basis} tone="neutral" variant="outline" size="sm">{basis}</Badge>
+            ))}
+          </div>
+          {market.results.slice(0, 6).map((result) => (
+            <SimilarPlayerRow key={result.player.player_id} result={result} />
+          ))}
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+            {market.caveat}
+          </p>
+        </>
+      )}
+    </Card>
+  );
+}
+
 export default function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const playerId = Number(id);
@@ -264,6 +400,9 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   const [val, setVal] = useState<ValuationResponse | null>(null);
   const [contract, setContract] = useState<PlayerContractResponse | null>(null);
   const [contractError, setContractError] = useState<string | null>(null);
+  const [similarMode, setSimilarMode] = useState<SimilarPlayersMode>('twins');
+  const [similarMarket, setSimilarMarket] = useState<SimilarPlayersResponse | null>(null);
+  const [similarError, setSimilarError] = useState<string | null>(null);
   const [scoutRatings, setScoutRatings] = useState<PlayerScoutRatingsResponse | null>(null);
   const [scoutError, setScoutError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -288,6 +427,20 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
       .then(setScoutRatings)
       .catch((e: unknown) => setScoutError(e instanceof Error ? e.message : 'Failed to load scout ratings.'));
   }, [playerId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setSimilarMarket(null);
+    setSimilarError(null);
+    getSimilarPlayers(playerId, { mode: similarMode, limit: 8 }, controller.signal)
+      .then(setSimilarMarket)
+      .catch((e: unknown) => {
+        if (!controller.signal.aborted) {
+          setSimilarError(e instanceof Error ? e.message : 'Failed to load similar players.');
+        }
+      });
+    return () => controller.abort();
+  }, [playerId, similarMode]);
 
   if (loading) {
     return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>;
@@ -426,6 +579,13 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
 
         {/* Right column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
+          <SimilarPlayersCard
+            market={similarMarket}
+            error={similarError}
+            mode={similarMode}
+            onModeChange={setSimilarMode}
+          />
+
           {/* Model input stats */}
           <Card eyebrow="Model inputs" icon={<Activity size={15} />}>
             {featureEntries.length > 0 ? (

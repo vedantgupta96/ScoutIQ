@@ -11,6 +11,13 @@ from sqlalchemy import and_, desc, select
 from scoutiq.api.deps import DB
 from scoutiq.llm.player_ratings import PlayerScoutRatings, aggregate_player_scout_ratings, load_player_reports
 from scoutiq.model.predict import build_features_from_season, predict_for_player, predict_many_from_features
+from scoutiq.model.similarity import (
+    SIMILARITY_BASIS,
+    SimilarityMode,
+    SimilarityRecord,
+    build_similarity_features,
+    rank_similar_players,
+)
 from scoutiq.models import CapConstants, Contract, ContractYear, Player, PlayerSalary, PlayerSeason, Team
 
 router = APIRouter(prefix="/players", tags=["players"])
@@ -89,6 +96,28 @@ class PlayerContractResponse(BaseModel):
     scraped_at: str | None
     extension_start_season: str | None
     years_detail: list[PlayerContractYear]
+    caveat: str
+
+
+class SimilarPlayerResult(BaseModel):
+    player: PlayerSummary
+    similarity_score: float
+    value_pct: float | None
+    salary_pct: float | None
+    actual_usd: int | None
+    gap_pct: float | None
+    age: float | None
+    explanation_tags: list[str]
+    deltas: dict[str, float]
+
+
+class SimilarPlayersResponse(BaseModel):
+    player_id: int
+    player_name: str
+    season: str
+    mode: SimilarityMode
+    basis: list[str]
+    results: list[SimilarPlayerResult]
     caveat: str
 
 
@@ -457,6 +486,128 @@ def get_player_watchlist(
         caveat=(
             "Default watchlist ranks qualified players from the latest loaded season by absolute value/pay gap. "
             "Historical players remain searchable by name."
+        ),
+    )
+
+
+@router.get("/{player_id}/similar", response_model=SimilarPlayersResponse)
+def get_similar_players(
+    player_id: int,
+    mode: SimilarityMode = Query("twins"),
+    season: str | None = Query(None, description="Stats season to compare; defaults to player's latest loaded season."),
+    limit: int = Query(8, ge=1, le=15),
+    min_gp: int = Query(15, ge=0, le=82),
+    min_minutes: int = Query(300, ge=0),
+    db: DB = None,
+):
+    """Return role-aware similar players, contract comps, or cheaper replacements."""
+    player = db.get(Player, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail=f"Player {player_id} not found.")
+
+    latest = _latest_stats_row(player_id, db)
+    target_season = season or (latest[0] if latest else LATEST_SEASON)
+    season_rows = db.scalars(
+        select(PlayerSeason)
+        .where(PlayerSeason.season == target_season)
+        .where(PlayerSeason.gp >= min_gp)
+        .where(PlayerSeason.minutes >= min_minutes)
+        .order_by(desc(PlayerSeason.minutes))
+        .limit(900)
+    ).all()
+
+    if not any(row.player_id == player_id for row in season_rows):
+        target_row = db.scalars(
+            select(PlayerSeason).where(
+                PlayerSeason.player_id == player_id,
+                PlayerSeason.season == target_season,
+            )
+        ).first()
+        if target_row is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No stats for player_id={player_id} in season {target_season}.",
+            )
+        season_rows = [target_row, *season_rows]
+
+    player_ids = sorted({row.player_id for row in season_rows})
+    players = db.scalars(select(Player).where(Player.player_id.in_(player_ids))).all()
+    player_by_id = {row.player_id: row for row in players}
+    if player_id not in player_by_id:
+        player_by_id[player_id] = player
+        players = [player, *players]
+
+    cap_row = db.get(CapConstants, target_season)
+    salary_cap = cap_row.salary_cap if cap_row else None
+    salary_rows = db.scalars(
+        select(PlayerSalary)
+        .where(PlayerSalary.player_id.in_(player_ids))
+        .where(PlayerSalary.season == target_season)
+    ).all()
+    salary_by_player = {row.player_id: row.salary for row in salary_rows}
+
+    value_by_player: dict[int, float | None] = {}
+    try:
+        feature_rows = []
+        feature_player_ids = []
+        for row in season_rows:
+            candidate = player_by_id.get(row.player_id)
+            if candidate is None:
+                continue
+            feature_rows.append(build_features_from_season(row, candidate))
+            feature_player_ids.append(row.player_id)
+        for candidate_id, prediction in zip(feature_player_ids, predict_many_from_features(feature_rows)):
+            value_by_player[candidate_id] = prediction["value_pct"]
+    except FileNotFoundError:
+        value_by_player = {}
+
+    records: list[SimilarityRecord] = []
+    for row in season_rows:
+        candidate = player_by_id.get(row.player_id)
+        if candidate is None:
+            continue
+        actual_usd = salary_by_player.get(row.player_id)
+        salary_pct = round(actual_usd / salary_cap * 100, 2) if actual_usd and salary_cap else None
+        value_pct = value_by_player.get(row.player_id)
+        records.append(SimilarityRecord(
+            player_id=row.player_id,
+            full_name=candidate.full_name,
+            position=candidate.position,
+            features=build_similarity_features(row),
+            value_pct=value_pct,
+            salary_pct=salary_pct,
+            actual_usd=actual_usd,
+            gap_pct=round(value_pct - salary_pct, 2) if value_pct is not None and salary_pct is not None else None,
+        ))
+
+    summaries = _batched_summaries(players, db)
+    results = []
+    for item in rank_similar_players(records, player_id, mode, limit):
+        summary = summaries.get(item.record.player_id)
+        if summary is None:
+            continue
+        results.append(SimilarPlayerResult(
+            player=summary,
+            similarity_score=item.score,
+            value_pct=item.record.value_pct,
+            salary_pct=item.record.salary_pct,
+            actual_usd=item.record.actual_usd,
+            gap_pct=item.record.gap_pct,
+            age=item.record.features.get("age"),
+            explanation_tags=item.explanation_tags,
+            deltas=item.deltas,
+        ))
+
+    return SimilarPlayersResponse(
+        player_id=player_id,
+        player_name=player.full_name,
+        season=target_season,
+        mode=mode,
+        basis=SIMILARITY_BASIS[mode],
+        results=results,
+        caveat=(
+            "Similarity uses same-season role, efficiency, advanced-stat, age, position, value, and cap-hit "
+            "features where available. It is deterministic and separate from the valuation model artifact."
         ),
     )
 

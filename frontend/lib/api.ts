@@ -98,6 +98,30 @@ export interface PlayerContractResponse {
   caveat: string;
 }
 
+export type SimilarPlayersMode = 'twins' | 'contract_comps' | 'replacements';
+
+export interface SimilarPlayerResult {
+  player: PlayerSummary;
+  similarity_score: number;
+  value_pct: number | null;
+  salary_pct: number | null;
+  actual_usd: number | null;
+  gap_pct: number | null;
+  age: number | null;
+  explanation_tags: string[];
+  deltas: Record<string, number>;
+}
+
+export interface SimilarPlayersResponse {
+  player_id: number;
+  player_name: string;
+  season: string;
+  mode: SimilarPlayersMode;
+  basis: string[];
+  results: SimilarPlayerResult[];
+  caveat: string;
+}
+
 export type WatchlistBucket = 'all' | 'underpaid' | 'overpaid';
 export type WatchlistSort = 'mismatch' | 'gap' | 'value' | 'pay' | 'name';
 
@@ -335,6 +359,19 @@ export function getValuation(id: number, season?: string, signal?: AbortSignal):
 
 export function getPlayerContract(id: number, signal?: AbortSignal): Promise<PlayerContractResponse> {
   return apiFetch<PlayerContractResponse>(`/players/${id}/contract`, { signal });
+}
+
+export function getSimilarPlayers(
+  id: number,
+  params: { mode?: SimilarPlayersMode; season?: string; limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<SimilarPlayersResponse> {
+  const qs = new URLSearchParams({
+    mode: params.mode ?? 'twins',
+    limit: String(params.limit ?? 8),
+  });
+  if (params.season) qs.set('season', params.season);
+  return apiFetch<SimilarPlayersResponse>(`/players/${id}/similar?${qs}`, { signal });
 }
 
 export function simulateContract(req: SimulatorRequest, signal?: AbortSignal): Promise<SimulatorResponse> {
