@@ -272,7 +272,9 @@ def test_player_watchlist_defaults_to_ranked_recent_mismatches(monkeypatch):
     )
     client = _client(FakeDB())
 
-    response = client.get("/players/watchlist?bucket=underpaid&limit=10")
+    # Pin to the fixture's season (FakeDB models a 2024-25 player); the default
+    # season tracks LATEST_SEASON, which is exercised separately at the API level.
+    response = client.get("/players/watchlist?bucket=underpaid&season=2024-25&limit=10")
 
     assert response.status_code == 200
     body = response.json()
