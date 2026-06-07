@@ -14,6 +14,7 @@ import { StatTile } from '@/components/ui/StatTile';
 import { VerdictPill } from '@/components/ui/VerdictPill';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
+import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
 import { capTier, fmtM, fmtPct, signed } from '@/lib/utils';
 
 // ---- Slider -------------------------------------------------------
@@ -45,10 +46,19 @@ function DSSlider({
 
 // ---- CapBar -------------------------------------------------------
 const TIER_COLORS = {
-  'below-tax':   { fill: 'var(--positive)',  label: 'Under tax' },
-  'taxpayer':    { fill: 'var(--warning)',    label: 'Over tax' },
-  'first-apron': { fill: 'var(--warning)',    label: 'First apron' },
-  'second-apron':{ fill: 'var(--negative)',   label: 'Second apron' },
+  'below-tax':   { label: 'Under tax' },
+  'taxpayer':    { label: 'Over tax' },
+  'first-apron': { label: 'First apron' },
+  'second-apron':{ label: 'Second apron' },
+};
+
+// Vivid fill + danger glow that intensifies as the cap hit climbs through the
+// tax line and the two aprons. Chrome stays quiet; the bar carries the alarm.
+const TIER_FILL = {
+  'below-tax':    { fill: 'var(--grad-positive)',                                  glow: 'none' },
+  'taxpayer':     { fill: 'linear-gradient(90deg, var(--amber-500), var(--amber-600))',  glow: '0 0 8px rgba(236,178,46,0.40)' },
+  'first-apron':  { fill: 'linear-gradient(90deg, var(--amber-500), var(--orange-500))', glow: '0 0 9px rgba(244,98,31,0.42)' },
+  'second-apron': { fill: 'var(--grad-negative)',                                  glow: '0 0 11px rgba(238,71,71,0.50)' },
 };
 
 function CapBar({ yr }: { yr: ContractYearResponse }) {
@@ -59,7 +69,8 @@ function CapBar({ yr }: { yr: ContractYearResponse }) {
   const ap2Pct  = (yr.second_apron / MAX_USD) * 100;
 
   const tier = capTier(yr.cap_hit_usd, yr.tax_line, yr.first_apron, yr.second_apron);
-  const { fill, label } = TIER_COLORS[tier];
+  const { label } = TIER_COLORS[tier];
+  const { fill, glow } = TIER_FILL[tier];
 
   const optionLabel = yr.is_player_option ? 'Player opt.' : yr.is_team_option ? 'Team opt.' : null;
 
@@ -87,22 +98,29 @@ function CapBar({ yr }: { yr: ContractYearResponse }) {
       </div>
 
       {/* Bar */}
-      <div style={{
-        height: 12, background: 'var(--bg-inset)', borderRadius: 'var(--radius-pill)',
-        position: 'relative', overflow: 'visible',
-      }}>
+      <div style={{ position: 'relative' }}>
         <div style={{
-          width: `${pctOfMax}%`, height: '100%',
-          background: fill, borderRadius: 'var(--radius-pill)',
-          opacity: 0.85,
-        }} />
-        {/* Threshold markers */}
+          height: 12, background: 'var(--bg-inset)', borderRadius: 'var(--radius-pill)',
+          position: 'relative', overflow: 'hidden',
+        }}>
+          {/* Tinted threshold zones: amber from the tax line through the aprons,
+              red beyond the second apron. Context the fill is read against. */}
+          <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${taxPct}%`, width: `${Math.max(0, ap1Pct - taxPct)}%`, background: 'rgba(236,178,46,0.10)' }} />
+          <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${ap1Pct}%`, width: `${Math.max(0, ap2Pct - ap1Pct)}%`, background: 'rgba(236,178,46,0.18)' }} />
+          <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${ap2Pct}%`, right: 0, background: 'rgba(238,71,71,0.13)' }} />
+          <div style={{
+            width: `${pctOfMax}%`, height: '100%',
+            background: fill, borderRadius: 'var(--radius-pill)',
+            boxShadow: glow,
+          }} />
+        </div>
+        {/* Threshold markers ride above the track so they read at the edges */}
         {[taxPct, ap1Pct, ap2Pct].map((pct, i) => (
           <div key={i} style={{
             position: 'absolute', left: `${pct}%`, top: -3, bottom: -3,
             width: 1.5,
-            background: i === 0 ? 'var(--amber-300)' : i === 1 ? 'var(--warning)' : 'var(--negative)',
-            opacity: 0.6,
+            background: i === 0 ? 'var(--amber-500)' : i === 1 ? 'var(--orange-500)' : 'var(--negative)',
+            opacity: 0.7,
           }} />
         ))}
       </div>
@@ -393,6 +411,15 @@ function SimulatorContent() {
                         <VerdictPill gapPct={result.value_gap_pct} size="md" />
                       </div>
                     </div>
+                    {result.value_pct != null && (
+                      <div style={{ marginTop: 16 }}>
+                        <div className="ds-eyebrow" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ color: 'var(--confidence-text)' }}>model value {fmtPct(result.value_pct)}</span>
+                          <span>proposed AAV {fmtPct(result.proposed_aav_pct)}</span>
+                        </div>
+                        <MiniValuePayGauge valuePct={result.value_pct} payPct={result.proposed_aav_pct} />
+                      </div>
+                    )}
                   </Card>
 
                   {/* Year-by-year */}
@@ -407,9 +434,22 @@ function SimulatorContent() {
                       </div>
                     }
                   >
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 16px', lineHeight: 1.5 }}>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.5 }}>
                       Cap hit for this contract each season. Markers show tax line and apron thresholds.
                     </p>
+                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16, fontSize: 11, color: 'var(--text-muted)' }}>
+                      {[
+                        { c: 'var(--grad-positive)', t: 'Under tax' },
+                        { c: 'rgba(236,178,46,0.5)', t: 'Tax → apron' },
+                        { c: 'rgba(244,98,31,0.6)', t: 'First apron' },
+                        { c: 'rgba(238,71,71,0.6)', t: 'Second apron' },
+                      ].map((z) => (
+                        <span key={z.t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ width: 14, height: 8, borderRadius: 3, background: z.c }} />
+                          {z.t}
+                        </span>
+                      ))}
+                    </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                       {result.years.map((yr) => <CapBar key={yr.season} yr={yr} />)}
                     </div>
