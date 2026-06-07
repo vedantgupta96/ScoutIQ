@@ -176,7 +176,11 @@ def _watchlist_candidate_rows(
             Team.abbreviation.ilike(team.strip())
         )
 
-    return db.scalars(stmt.order_by(Player.full_name).limit(candidate_limit)).all()
+    # Order so the candidate cap, if it ever bites, keeps the most relevant
+    # players rather than an alphabetical prefix: most-played for the season
+    # board, name for free-text search (which has no season row to sort on).
+    order_by = Player.full_name if query else PlayerSeason.minutes.desc().nulls_last()
+    return db.scalars(stmt.order_by(order_by).limit(candidate_limit)).all()
 
 
 def _batched_summaries(players: list[Player], db: DB) -> dict[int, PlayerSummary]:
@@ -358,7 +362,7 @@ def get_player_watchlist(
         position=position,
         team=team,
         qualified_only=qualified_only,
-        candidate_limit=300,
+        candidate_limit=800,  # comfortably exceeds one season's player count
         db=db,
     )
     # Pin valuation to the season the watchlist is showing (default latest), so a
