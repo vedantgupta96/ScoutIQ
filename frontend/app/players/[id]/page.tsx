@@ -216,19 +216,21 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
       {/* Player header card */}
       <Card padded>
         <div className="siq-player-card-row">
-          <Avatar name={val.player_name} size="xl" position={val.position} />
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <h2 style={{
-                fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 28,
-                color: 'var(--text-primary)', margin: 0, lineHeight: 1.15,
-              }}>
-                {val.player_name}
-              </h2>
-              <Badge tone="neutral" size="sm">{val.season}</Badge>
-            </div>
-            <div style={{ marginTop: 4, fontSize: 14, color: 'var(--text-secondary)' }}>
-              {val.position} · {val.current_team?.name ?? '—'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: '1 1 260px' }}>
+            <Avatar name={val.player_name} size="xl" position={val.position} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <h2 style={{
+                  fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 28,
+                  color: 'var(--text-primary)', margin: 0, lineHeight: 1.15,
+                }}>
+                  {val.player_name}
+                </h2>
+                <Badge tone="neutral" size="sm">{val.season}</Badge>
+              </div>
+              <div style={{ marginTop: 4, fontSize: 14, color: 'var(--text-secondary)' }}>
+                {val.position} · {val.current_team?.name ?? '—'}
+              </div>
             </div>
           </div>
           <VerdictPill gapPct={val.gap_pct} size="lg" />

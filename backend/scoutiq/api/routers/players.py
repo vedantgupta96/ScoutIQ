@@ -1,13 +1,15 @@
 """GET /players/{player_id}/valuation — production-implied value for a player's most recent season."""
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import desc, select
+from sqlalchemy import and_, desc, select
 
 from scoutiq.api.deps import DB
 from scoutiq.llm.player_ratings import PlayerScoutRatings, aggregate_player_scout_ratings, load_player_reports
-from scoutiq.model.predict import predict_for_player
+from scoutiq.model.predict import build_features_from_season, predict_for_player, predict_many_from_features
 from scoutiq.models import CapConstants, Player, PlayerSalary, PlayerSeason, Team
 
 router = APIRouter(prefix="/players", tags=["players"])
@@ -34,6 +36,23 @@ class PlayerSummary(BaseModel):
     team_data_note: str | None
 
 
+class PlayerCardValuation(BaseModel):
+    season: str
+    value_pct: float
+    lo_pct: float
+    hi_pct: float
+    actual_pct: float | None
+    actual_usd: int | None
+    gap_pct: float | None
+    salary_cap: int | None
+    model_version: str
+
+
+class PlayerCard(PlayerSummary):
+    valuation_status: str
+    valuation: PlayerCardValuation | None
+
+
 def _team_summary(team: Team | None) -> TeamSummary | None:
     if team is None:
         return None
@@ -50,18 +69,26 @@ def _latest_stats_row(player_id: int, db: DB):
     ).first()
 
 
-def _player_summary(player: Player, db: DB) -> PlayerSummary:
-    latest = _latest_stats_row(player.player_id, db)
-    latest_season = latest[0] if latest else None
-    latest_stats_team = _team_summary(latest[1]) if latest else None
-    current_team = _team_summary(db.get(Team, player.current_team_id)) if player.current_team_id else None
+def _query_terms(query: str | None) -> list[str]:
+    if not query:
+        return []
+    return [term for term in re.split(r"[\s,.'’-]+", query.strip()) if term]
 
+
+def _player_summary_from_parts(
+    player: Player,
+    latest_season: str | None,
+    latest_stats_team: Team | None,
+    current_team: Team | None,
+) -> PlayerSummary:
     note = None
-    if current_team and latest_stats_team and current_team.team_id != latest_stats_team.team_id:
+    latest_stats_team_summary = _team_summary(latest_stats_team)
+    current_team_summary = _team_summary(current_team)
+    if current_team_summary and latest_stats_team_summary and current_team_summary.team_id != latest_stats_team_summary.team_id:
         note = "Current roster team differs from latest loaded stats-season team."
-    elif current_team and latest_season is None:
+    elif current_team_summary and latest_season is None:
         note = "Current roster team is available, but no loaded stats season exists for this player."
-    elif latest_stats_team and not current_team:
+    elif latest_stats_team_summary and not current_team_summary:
         note = "Current roster team has not been loaded; latest stats-season team is historical."
 
     return PlayerSummary(
@@ -69,11 +96,66 @@ def _player_summary(player: Player, db: DB) -> PlayerSummary:
         full_name=player.full_name,
         position=player.position,
         latest_season=latest_season,
-        latest_stats_team=latest_stats_team,
-        current_team=current_team,
+        latest_stats_team=latest_stats_team_summary,
+        current_team=current_team_summary,
         current_team_source=player.current_team_source,
         team_data_note=note,
     )
+
+
+def _player_summary(player: Player, db: DB) -> PlayerSummary:
+    latest = _latest_stats_row(player.player_id, db)
+    latest_season = latest[0] if latest else None
+    latest_stats_team = latest[1] if latest else None
+    current_team = db.get(Team, player.current_team_id) if player.current_team_id else None
+    return _player_summary_from_parts(player, latest_season, latest_stats_team, current_team)
+
+
+def _search_player_rows(query: str | None, limit: int, db: DB) -> list[Player]:
+    stmt = select(Player).order_by(Player.full_name).limit(limit)
+    if query:
+        terms = _query_terms(query)
+        if terms:
+            stmt = (
+                select(Player)
+                .where(and_(*(Player.full_name.ilike(f"%{term}%") for term in terms)))
+                .order_by(Player.full_name)
+                .limit(limit)
+            )
+    return db.scalars(stmt).all()
+
+
+def _batched_summaries(players: list[Player], db: DB) -> dict[int, PlayerSummary]:
+    if not players:
+        return {}
+
+    player_ids = [player.player_id for player in players]
+    latest_by_player: dict[int, tuple[str, Team | None]] = {}
+    for player_id, season, team in db.execute(
+        select(PlayerSeason.player_id, PlayerSeason.season, Team)
+        .outerjoin(Team, Team.team_id == PlayerSeason.team_id)
+        .where(PlayerSeason.player_id.in_(player_ids))
+        .order_by(PlayerSeason.player_id, desc(PlayerSeason.season))
+    ).all():
+        if player_id not in latest_by_player:
+            latest_by_player[player_id] = (season, team)
+
+    current_team_ids = {player.current_team_id for player in players if player.current_team_id}
+    current_teams = {
+        team.team_id: team
+        for team in db.scalars(select(Team).where(Team.team_id.in_(current_team_ids))).all()
+    } if current_team_ids else {}
+
+    summaries: dict[int, PlayerSummary] = {}
+    for player in players:
+        latest = latest_by_player.get(player.player_id)
+        summaries[player.player_id] = _player_summary_from_parts(
+            player,
+            latest[0] if latest else None,
+            latest[1] if latest else None,
+            current_teams.get(player.current_team_id) if player.current_team_id else None,
+        )
+    return summaries
 
 
 @router.get("", response_model=list[PlayerSummary])
@@ -87,12 +169,96 @@ def search_players(
     If `query` is omitted, returns the first `limit` players alphabetically. This keeps the endpoint
     useful for dashboard bootstrap/autocomplete without inventing a ranking model.
     """
-    stmt = select(Player).order_by(Player.full_name).limit(limit)
-    if query:
-        stmt = select(Player).where(Player.full_name.ilike(f"%{query}%")).order_by(Player.full_name).limit(limit)
+    players = _search_player_rows(query, limit, db)
+    summaries = _batched_summaries(players, db)
+    return [summaries[p.player_id] for p in players]
 
-    players = db.scalars(stmt).all()
-    return [_player_summary(p, db) for p in players]
+
+def _card_valuations(players: list[Player], summaries: dict[int, PlayerSummary], db: DB) -> dict[int, PlayerCardValuation]:
+    player_ids = [player.player_id for player in players if summaries[player.player_id].latest_season]
+    if not player_ids:
+        return {}
+
+    player_by_id = {player.player_id: player for player in players}
+    target_seasons = {summaries[player_id].latest_season for player_id in player_ids}
+    seasons = sorted(season for season in target_seasons if season)
+
+    season_rows = db.scalars(
+        select(PlayerSeason)
+        .where(PlayerSeason.player_id.in_(player_ids))
+        .where(PlayerSeason.season.in_(seasons))
+    ).all()
+    season_by_key = {(row.player_id, row.season): row for row in season_rows}
+
+    salary_rows = db.scalars(
+        select(PlayerSalary)
+        .where(PlayerSalary.player_id.in_(player_ids))
+        .where(PlayerSalary.season.in_(seasons))
+    ).all()
+    salary_by_key = {(row.player_id, row.season): row for row in salary_rows}
+
+    cap_rows = db.scalars(select(CapConstants).where(CapConstants.season.in_(seasons))).all()
+    cap_by_season = {row.season: row for row in cap_rows}
+
+    feature_rows: list[dict] = []
+    feature_keys: list[tuple[int, str]] = []
+    for player_id in player_ids:
+        season = summaries[player_id].latest_season
+        if not season:
+            continue
+        season_row = season_by_key.get((player_id, season))
+        if season_row is None:
+            continue
+        feature_rows.append(build_features_from_season(season_row, player_by_id[player_id]))
+        feature_keys.append((player_id, season))
+
+    predictions = predict_many_from_features(feature_rows)
+    valuations: dict[int, PlayerCardValuation] = {}
+    for (player_id, season), prediction in zip(feature_keys, predictions):
+        salary_row = salary_by_key.get((player_id, season))
+        cap_row = cap_by_season.get(season)
+        salary_cap = cap_row.salary_cap if cap_row else None
+        actual_usd = salary_row.salary if salary_row else None
+        actual_pct = round(actual_usd / salary_cap * 100, 2) if (actual_usd and salary_cap) else None
+        value_pct = prediction["value_pct"]
+        valuations[player_id] = PlayerCardValuation(
+            season=season,
+            value_pct=value_pct,
+            lo_pct=prediction["lo_pct"],
+            hi_pct=prediction["hi_pct"],
+            actual_pct=actual_pct,
+            actual_usd=actual_usd,
+            gap_pct=round(value_pct - actual_pct, 2) if actual_pct is not None else None,
+            salary_cap=salary_cap,
+            model_version=prediction["model_version"],
+        )
+    return valuations
+
+
+@router.get("/cards", response_model=list[PlayerCard])
+def get_player_cards(
+    query: str | None = Query(None, min_length=1, description="Case-insensitive player-name search"),
+    limit: int = Query(40, ge=1, le=50),
+    db: DB = None,
+):
+    """Return player-card summaries plus valuation snippets using batched DB/model work."""
+    players = _search_player_rows(query, limit, db)
+    summaries = _batched_summaries(players, db)
+    try:
+        valuations = _card_valuations(players, summaries, db)
+    except FileNotFoundError:
+        valuations = {}
+
+    cards: list[PlayerCard] = []
+    for player in players:
+        summary = summaries[player.player_id]
+        valuation = valuations.get(player.player_id)
+        cards.append(PlayerCard(
+            **summary.model_dump(),
+            valuation_status="ready" if valuation else "unavailable",
+            valuation=valuation,
+        ))
+    return cards
 
 
 @router.get("/{player_id}", response_model=PlayerSummary)
@@ -115,11 +281,12 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
     - `gap_pct` = value_pct - actual_pct  (positive → underpaid, negative → overpaid).
     - `lo_pct` / `hi_pct` are the 80% conformal prediction interval bounds.
     """
-    target_season = season or LATEST_SEASON
-
     player = db.get(Player, player_id)
     if not player:
         raise HTTPException(status_code=404, detail=f"Player {player_id} not found.")
+
+    latest = _latest_stats_row(player_id, db)
+    target_season = season or (latest[0] if latest else LATEST_SEASON)
 
     try:
         prediction = predict_for_player(player_id, target_season, db)

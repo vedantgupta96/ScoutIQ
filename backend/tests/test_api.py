@@ -1,9 +1,10 @@
 from fastapi.testclient import TestClient
 
 import scoutiq.api.routers.simulator as simulator_router
+import scoutiq.api.routers.players as players_router
 from scoutiq.api.deps import get_db
 from scoutiq.api.main import app
-from scoutiq.models import CapConstants, Player, Team
+from scoutiq.models import CapConstants, Player, PlayerSalary, PlayerSeason, Team
 
 
 class FakeScalarResult:
@@ -28,6 +29,22 @@ class FakeDB:
         )
         self.memphis = Team(team_id=1610612763, abbreviation="MEM", name="Memphis Grizzlies")
         self.orlando = Team(team_id=1610612753, abbreviation="ORL", name="Orlando Magic")
+        self.player_season = PlayerSeason(
+            player_id=1630217,
+            season="2024-25",
+            team_id=1610612763,
+            age=26,
+            gp=70,
+            minutes=2400,
+            box={"PTS": 1500, "REB": 300, "AST": 400, "STL": 80, "BLK": 20, "TOV": 150, "FG3M": 200},
+            advanced={},
+        )
+        self.salary = PlayerSalary(
+            player_id=1630217,
+            season="2024-25",
+            salary=28_000_000,
+            source="bbref",
+        )
         self.cap_rows = [
             CapConstants(
                 season="2024-25",
@@ -49,20 +66,26 @@ class FakeDB:
 
     def execute(self, stmt):
         sql = str(stmt)
+        if "SELECT player_seasons.player_id" in sql and "player_seasons.season" in sql and "teams" in sql:
+            return FakeScalarResult([(self.player.player_id, "2024-25", self.memphis)] if self.player else [])
         if "player_seasons.season" in sql and "teams" in sql:
             return FakeScalarResult([("2024-25", self.memphis)] if self.player else [])
         return FakeScalarResult([])
 
     def scalars(self, stmt):
         sql = str(stmt)
+        if "FROM teams" in sql:
+            return FakeScalarResult([self.memphis, self.orlando])
         if "cap_constants" in sql:
             return FakeScalarResult(self.cap_rows)
+        if "player_salaries" in sql:
+            return FakeScalarResult([self.salary] if self.player else [])
         if "SELECT players." in sql:
             return FakeScalarResult([self.player] if self.player else [])
         if "SELECT player_seasons.season" in sql:
             return FakeScalarResult(["2024-25"] if self.player else [])
         if "player_seasons" in sql:
-            return FakeScalarResult([object()] if self.player else [])
+            return FakeScalarResult([self.player_season] if self.player else [])
         return FakeScalarResult([])
 
 
@@ -192,6 +215,68 @@ def test_player_search_and_profile_shapes():
     assert profile.json()["latest_season"] == "2024-25"
     assert profile.json()["latest_stats_team"]["abbreviation"] == "MEM"
     assert profile.json()["current_team"]["abbreviation"] == "ORL"
+
+
+def test_player_search_accepts_reordered_name_tokens():
+    client = _client(FakeDB())
+
+    response = client.get("/players?query=bane%20des&limit=5")
+
+    assert response.status_code == 200
+    assert response.json()[0]["full_name"] == "Desmond Bane"
+
+
+def test_player_cards_returns_batched_valuation_snippets(monkeypatch):
+    monkeypatch.setattr(
+        players_router,
+        "predict_many_from_features",
+        lambda rows: [
+            {
+                "value_pct": 23.5,
+                "lo_pct": 18.1,
+                "hi_pct": 28.9,
+                "model_version": "v0-gbm-conformal",
+            }
+            for _ in rows
+        ],
+    )
+    client = _client(FakeDB())
+
+    response = client.get("/players/cards?query=bane%20des&limit=5")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[0]["full_name"] == "Desmond Bane"
+    assert body[0]["latest_stats_team"]["abbreviation"] == "MEM"
+    assert body[0]["current_team"]["abbreviation"] == "ORL"
+    assert body[0]["valuation_status"] == "ready"
+    assert body[0]["valuation"]["season"] == "2024-25"
+    assert body[0]["valuation"]["value_pct"] == 23.5
+    assert body[0]["valuation"]["actual_pct"] == 19.92
+    assert body[0]["valuation"]["gap_pct"] == 3.58
+
+
+def test_valuation_without_season_uses_latest_available_player_season(monkeypatch):
+    captured = {}
+
+    def fake_predict(player_id, season, db):
+        captured["season"] = season
+        return {
+            "value_pct": 23.5,
+            "lo_pct": 18.1,
+            "hi_pct": 28.9,
+            "model_version": "v0-gbm-conformal",
+            "features": {"gp": 70},
+        }
+
+    monkeypatch.setattr(players_router, "predict_for_player", fake_predict)
+    client = _client(FakeDB())
+
+    response = client.get("/players/1630217/valuation")
+
+    assert response.status_code == 200
+    assert response.json()["season"] == "2024-25"
+    assert captured["season"] == "2024-25"
 
 
 def test_backtest_returns_committed_metrics():

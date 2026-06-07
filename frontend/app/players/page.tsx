@@ -1,18 +1,19 @@
 'use client';
 
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useEffect, useMemo, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { PlayerSummary, searchPlayers } from '@/lib/api';
-import { getValuation, ValuationResponse } from '@/lib/api';
+import { Search } from 'lucide-react';
+import { getPlayerCards, PlayerCardResponse } from '@/lib/api';
 import { VerdictPill } from '@/components/ui/VerdictPill';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { fmtPct } from '@/lib/utils';
 
-function RosterCard({ player }: { player: PlayerSummary & { valuation?: ValuationResponse } }) {
+function RosterCard({ player }: { player: PlayerCardResponse }) {
   const [hovered, setHovered] = useState(false);
   const team = player.current_team ?? player.latest_stats_team;
+  const valuation = player.valuation_status === 'ready' ? player.valuation : undefined;
 
   return (
     <Link href={`/players/${player.player_id}`} style={{ textDecoration: 'none' }}>
@@ -53,16 +54,20 @@ function RosterCard({ player }: { player: PlayerSummary & { valuation?: Valuatio
 
         {/* Value row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          {player.valuation ? (
+          {valuation ? (
             <>
-              <VerdictPill gapPct={player.valuation.gap_pct} size="sm" />
+              <VerdictPill gapPct={valuation.gap_pct} size="sm" />
               <div style={{ textAlign: 'right' }}>
                 <div className="ds-eyebrow">value / pay</div>
                 <div className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-                  {fmtPct(player.valuation.value_pct)} / {player.valuation.actual_pct != null ? fmtPct(player.valuation.actual_pct) : '—'}
+                  {fmtPct(valuation.value_pct)} / {valuation.actual_pct != null ? fmtPct(valuation.actual_pct) : '—'}
                 </div>
               </div>
             </>
+          ) : player.valuation_status === 'unavailable' ? (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              No valuation data
+            </div>
           ) : (
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading valuation…</div>
           )}
@@ -80,70 +85,113 @@ function EmptyState({ query }: { query: string }) {
   );
 }
 
-type PlayerWithVal = PlayerSummary & { valuation?: ValuationResponse };
-
 function PlayersContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const q = searchParams.get('q') ?? '';
 
-  const [players, setPlayers] = useState<PlayerWithVal[]>([]);
+  const [draftQuery, setDraftQuery] = useState(q);
+  const [players, setPlayers] = useState<PlayerCardResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (query: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const list = await searchPlayers(query || undefined, 40);
-      setPlayers(list.map((p) => ({ ...p, valuation: undefined })));
+  useEffect(() => {
+    setDraftQuery(q);
+  }, [q]);
 
-      // Hydrate valuations in background — non-blocking
-      list.forEach((p) => {
-        getValuation(p.player_id).then((val) => {
-          setPlayers((prev) =>
-            prev.map((r) => r.player_id === p.player_id ? { ...r, valuation: val } : r)
-          );
-        }).catch(() => {});
-      });
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load players.');
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (draftQuery === q) return;
+    const t = setTimeout(() => {
+      const trimmed = draftQuery.trim();
+      router.replace(trimmed ? `/players?q=${encodeURIComponent(trimmed)}` : '/players');
+    }, 250);
+    return () => clearTimeout(t);
+  }, [draftQuery, q, router]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const list = await getPlayerCards(q || undefined, 40, controller.signal);
+        if (cancelled) return;
+        setPlayers(list);
+        setLoading(false);
+      } catch (e: unknown) {
+        if (cancelled) return;
+        if (e instanceof DOMException && e.name === 'AbortError') return;
+        setError(e instanceof Error ? e.message : 'Failed to load players.');
+        setPlayers([]);
+        setLoading(false);
+      }
     }
-  }, []);
 
-  useEffect(() => { load(q); }, [q, load]);
+    load();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [q]);
 
-  const sorted = [...players].sort((a, b) => {
+  const sorted = useMemo(() => [...players].sort((a, b) => {
     const ag = a.valuation?.gap_pct;
     const bg = b.valuation?.gap_pct;
     if (ag == null && bg == null) return 0;
     if (ag == null) return 1;
     if (bg == null) return -1;
     return Math.abs(bg) - Math.abs(ag);
-  });
+  }), [players]);
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 16 }}>
-        <span className="ds-eyebrow">Watchlist</span>
-        {!loading && (
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {players.length} players · sorted by |value − pay| gap
-          </span>
-        )}
-        {q && (
-          <Badge tone="accent" size="sm">
-            Searching: {q}
-            <button
-              onClick={() => router.push('/players')}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: 4, color: 'inherit', padding: 0 }}
-            >
-              ✕
-            </button>
-          </Badge>
-        )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+          <span className="ds-eyebrow">Watchlist</span>
+          {!loading && (
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              {players.length} players · sorted by |value − pay| gap
+            </span>
+          )}
+          {q && (
+            <Badge tone="accent" size="sm">
+              Searching: {q}
+              <button
+                onClick={() => { setDraftQuery(''); router.push('/players'); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: 4, color: 'inherit', padding: 0 }}
+              >
+                x
+              </button>
+            </Badge>
+          )}
+        </div>
+
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '9px 12px', background: 'var(--bg-panel)',
+          border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)',
+          maxWidth: 520,
+        }}>
+          <Search size={15} color="var(--text-muted)" />
+          <input
+            type="text"
+            value={draftQuery}
+            onChange={(e) => setDraftQuery(e.target.value)}
+            placeholder="Search by first name, last name, or both..."
+            style={{
+              flex: 1,
+              minWidth: 0,
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              fontFamily: 'var(--font-sans)',
+              fontSize: 14,
+              color: 'var(--text-primary)',
+            }}
+          />
+        </div>
       </div>
 
       {loading && (

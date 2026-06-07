@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Users, SlidersHorizontal, Target, Moon, Sun, Bell, Search } from 'lucide-react';
@@ -183,13 +183,27 @@ export function Shell({ children }: ShellProps) {
   const baseTitle = TITLES[pathname] ?? TITLES[`/${pathname.split('/')[1]}`] ?? 'ScoutIQ';
 
   const [query, setQuery] = useState('');
+  const lastSubmittedQuery = useRef('');
 
   const handleQuery = (q: string) => {
     setQuery(q);
-    if (q.trim()) {
-      router.push(`/players?q=${encodeURIComponent(q.trim())}`);
-    }
   };
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    const t = setTimeout(() => {
+      if (trimmed) {
+        if (trimmed !== lastSubmittedQuery.current) {
+          lastSubmittedQuery.current = trimmed;
+          router.replace(`/players?q=${encodeURIComponent(trimmed)}`);
+        }
+      } else if (lastSubmittedQuery.current && pathname.startsWith('/players')) {
+        lastSubmittedQuery.current = '';
+        router.replace('/players');
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [pathname, query, router]);
 
   return (
     <div className="siq-shell">
