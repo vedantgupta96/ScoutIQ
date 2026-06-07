@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
+import { animate, motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
@@ -9,20 +10,144 @@ import {
   PlayerCardResponse,
   PlayerWatchlistResponse,
   WatchlistBucket,
+  WatchlistSort,
 } from '@/lib/api';
-import { VerdictPill } from '@/components/ui/VerdictPill';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
-import { fmtPct } from '@/lib/utils';
+import { fmtM, fmtPct, gapLabel, gapTone, signed } from '@/lib/utils';
+
+type GapTone = 'positive' | 'negative' | 'neutral';
+
+const TONE_COLOR: Record<GapTone, string> = {
+  positive: 'var(--positive)',
+  negative: 'var(--negative)',
+  neutral: 'var(--text-secondary)',
+};
+const TONE_TEXT: Record<GapTone, string> = {
+  positive: 'var(--positive-text)',
+  negative: 'var(--negative-text)',
+  neutral: 'var(--text-secondary)',
+};
+
+// Count a numeric label up from its previous value on mount / change. Calm,
+// one-shot ease-out; honors prefers-reduced-motion by snapping to the value.
+function CountUpPct({
+  value, decimals = 1, withSign = false, style,
+}: { value: number; decimals?: number; withSign?: boolean; style?: React.CSSProperties }) {
+  const reduce = useReducedMotion();
+  const mv = useMotionValue(reduce ? value : 0);
+  const [shown, setShown] = useState(reduce ? value : 0);
+
+  useEffect(() => {
+    if (reduce) { setShown(value); return; }
+    const controls = animate(mv, value, {
+      duration: 0.6,
+      ease: [0.22, 1, 0.36, 1],
+      onUpdate: (v) => setShown(v),
+    });
+    return () => controls.stop();
+  }, [value, reduce, mv]);
+
+  return (
+    <span className="ds-tnum" style={style}>
+      {withSign ? signed(shown, decimals) : shown.toFixed(decimals)}%
+    </span>
+  );
+}
+
+// The signature ScoutIQ read: production-implied value with its 80% interval
+// (teal band + value marker) against the actual pay marker. Distance between
+// the pay marker and the band is the bargain/overpay story.
+function ValuePayGauge({
+  value, lo, hi, pay, tone,
+}: { value: number; lo: number; hi: number; pay: number | null; tone: GapTone }) {
+  const reduce = useReducedMotion();
+  const domainMax = Math.max(hi, value, pay ?? 0) * 1.12 || 6;
+  const pct = (x: number) => Math.max(0, Math.min(100, (x / domainMax) * 100));
+  const bandLeft = pct(lo);
+  const bandWidth = Math.max(pct(hi) - bandLeft, 1.5);
+  const valuePos = pct(value);
+  const payPos = pay != null ? pct(pay) : null;
+  const payColor = TONE_COLOR[tone];
+
+  return (
+    <div style={{ position: 'relative', paddingTop: 7 }}>
+      {/* markers float above the track so they read past the rounded ends */}
+      <div style={{
+        position: 'absolute', top: 0, left: `calc(${valuePos}% - 3px)`,
+        width: 6, height: 6, borderRadius: '50%', background: 'var(--confidence)',
+        border: '1px solid var(--bg-panel)',
+      }} />
+      {payPos != null && (
+        <div style={{
+          position: 'absolute', top: 0, left: `calc(${payPos}% - 3px)`,
+          width: 6, height: 6, borderRadius: '50%', background: payColor,
+          border: '1px solid var(--bg-panel)',
+        }} />
+      )}
+      <div style={{
+        position: 'relative', height: 11, borderRadius: 'var(--radius-pill)',
+        background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
+        overflow: 'hidden',
+      }}>
+        <motion.div
+          initial={reduce ? false : { width: 0 }}
+          animate={{ width: `${bandWidth}%` }}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+          style={{
+            position: 'absolute', top: 0, bottom: 0, left: `${bandLeft}%`,
+            background: 'var(--confidence-soft)',
+            borderLeft: '1.5px solid var(--confidence)',
+            borderRight: '1.5px solid var(--confidence)',
+          }}
+        />
+        <div style={{
+          position: 'absolute', top: 0, bottom: 0, left: `calc(${valuePos}% - 1px)`,
+          width: 2, background: 'var(--confidence)',
+        }} />
+        {payPos != null && (
+          <div style={{
+            position: 'absolute', top: 0, bottom: 0, left: `calc(${payPos}% - 1px)`,
+            width: 2, background: payColor,
+          }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MetricCell({
+  label, dotColor, pct, usd, align = 'left',
+}: { label: string; dotColor: string; pct: number | null; usd: number | null; align?: 'left' | 'right' }) {
+  return (
+    <div style={{ textAlign: align }}>
+      <div className="ds-eyebrow" style={{
+        display: 'flex', alignItems: 'center', gap: 5,
+        justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
+      }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: dotColor }} />
+        {label}
+      </div>
+      <div className="ds-tnum" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginTop: 3 }}>
+        {pct != null ? fmtPct(pct) : '—'}
+      </div>
+      <div className="ds-tnum" style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+        {usd != null ? fmtM(usd) : '—'}
+      </div>
+    </div>
+  );
+}
 
 function RosterCard({ player }: { player: PlayerCardResponse }) {
   const [hovered, setHovered] = useState(false);
   const team = player.current_team ?? player.latest_stats_team;
   const valuation = player.valuation_status === 'ready' ? player.valuation : undefined;
   const gap = valuation?.gap_pct ?? null;
-  const accent = gap == null
-    ? 'var(--border-subtle)'
-    : gap >= 0 ? 'var(--positive)' : 'var(--negative)';
+  const tone: GapTone = gapTone(gap);
+  const accent = gap == null ? 'var(--border-strong)' : TONE_COLOR[tone];
+  const valueUsd = valuation?.salary_cap != null
+    ? (valuation.value_pct / 100) * valuation.salary_cap
+    : null;
 
   return (
     <Link href={`/players/${player.player_id}`} style={{ textDecoration: 'none' }}>
@@ -39,9 +164,10 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
           cursor: 'pointer',
           display: 'flex',
           flexDirection: 'column',
-          gap: 14,
+          gap: 13,
           boxShadow: hovered ? 'var(--shadow-md)' : 'var(--shadow-card)',
-          transition: 'border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out)',
+          transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
+          transition: 'border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out)',
         }}
       >
         {/* Header row */}
@@ -61,26 +187,56 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
           </div>
         </div>
 
-        {/* Value row */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          {valuation ? (
-            <>
-              <VerdictPill gapPct={valuation.gap_pct} size="sm" />
-              <div style={{ textAlign: 'right' }}>
-                <div className="ds-eyebrow">value / pay</div>
-                <div className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-                  {fmtPct(valuation.value_pct)} / {valuation.actual_pct != null ? fmtPct(valuation.actual_pct) : '—'}
-                </div>
-              </div>
-            </>
-          ) : player.valuation_status === 'unavailable' ? (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              No valuation data
+        {valuation ? (
+          <>
+            {/* Verdict + hero gap */}
+            <div style={{
+              display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+              gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-subtle)',
+            }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: TONE_TEXT[tone] }}>
+                {gapLabel(gap)}
+              </span>
+              {gap != null && (
+                <CountUpPct
+                  value={gap}
+                  withSign
+                  style={{
+                    fontSize: 24, fontWeight: 700, lineHeight: 1,
+                    fontFamily: 'var(--font-display)', color: TONE_COLOR[tone],
+                  }}
+                />
+              )}
             </div>
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading valuation…</div>
-          )}
-        </div>
+
+            <ValuePayGauge
+              value={valuation.value_pct}
+              lo={valuation.lo_pct}
+              hi={valuation.hi_pct}
+              pay={valuation.actual_pct}
+              tone={tone}
+            />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <MetricCell label="value" dotColor="var(--confidence)" pct={valuation.value_pct} usd={valueUsd} />
+              <MetricCell label="pay" dotColor={TONE_COLOR[tone]} pct={valuation.actual_pct} usd={valuation.actual_usd} align="right" />
+            </div>
+          </>
+        ) : player.valuation_status === 'unavailable' ? (
+          <div style={{
+            paddingTop: 12, borderTop: '1px solid var(--border-subtle)',
+            fontSize: 12, color: 'var(--text-muted)',
+          }}>
+            No valuation data
+          </div>
+        ) : (
+          <div style={{
+            paddingTop: 12, borderTop: '1px solid var(--border-subtle)',
+            fontSize: 12, color: 'var(--text-muted)',
+          }}>
+            Loading valuation…
+          </div>
+        )}
       </button>
     </Link>
   );
@@ -101,6 +257,25 @@ const BUCKETS: Array<{ value: WatchlistBucket; label: string }> = [
   { value: 'overpaid', label: 'Overpaid' },
 ];
 const POSITIONS = ['', 'PG', 'SG', 'SF', 'PF', 'C'];
+const SORTS: Array<{ value: WatchlistSort; label: string }> = [
+  { value: 'mismatch', label: 'Largest mismatch' },
+  { value: 'gap', label: 'Signed gap' },
+  { value: 'value', label: 'Highest value' },
+  { value: 'pay', label: 'Highest pay' },
+  { value: 'name', label: 'Name (A–Z)' },
+];
+
+const SELECT_STYLE: React.CSSProperties = {
+  height: 34,
+  borderRadius: 'var(--radius-md)',
+  border: '1px solid var(--border-subtle)',
+  background: 'var(--bg-panel)',
+  color: 'var(--text-primary)',
+  padding: '0 10px',
+  fontFamily: 'var(--font-sans)',
+  fontSize: 12,
+  fontWeight: 600,
+};
 
 function PlayersContent() {
   const searchParams = useSearchParams();
@@ -110,6 +285,7 @@ function PlayersContent() {
   const [draftQuery, setDraftQuery] = useState(q);
   const [watchlist, setWatchlist] = useState<PlayerWatchlistResponse | null>(null);
   const [bucket, setBucket] = useState<WatchlistBucket>('all');
+  const [sort, setSort] = useState<WatchlistSort>('mismatch');
   const [position, setPosition] = useState('');
   const [qualifiedOnly, setQualifiedOnly] = useState(true);
   const [offset, setOffset] = useState(0);
@@ -131,7 +307,7 @@ function PlayersContent() {
 
   useEffect(() => {
     setOffset(0);
-  }, [q, bucket, position, qualifiedOnly]);
+  }, [q, bucket, sort, position, qualifiedOnly]);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,6 +320,7 @@ function PlayersContent() {
         const response = await getPlayerWatchlist({
           query: q || undefined,
           bucket,
+          sort,
           position: position || undefined,
           qualifiedOnly,
           limit: PAGE_SIZE,
@@ -166,7 +343,7 @@ function PlayersContent() {
       cancelled = true;
       controller.abort();
     };
-  }, [q, bucket, position, qualifiedOnly, offset]);
+  }, [q, bucket, sort, position, qualifiedOnly, offset]);
 
   const players = watchlist?.items ?? [];
   const total = watchlist?.total ?? 0;
@@ -258,20 +435,21 @@ function PlayersContent() {
           <select
             value={position}
             onChange={(e) => setPosition(e.target.value)}
-            style={{
-              height: 34,
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-subtle)',
-              background: 'var(--bg-panel)',
-              color: 'var(--text-primary)',
-              padding: '0 10px',
-              fontFamily: 'var(--font-sans)',
-              fontSize: 12,
-              fontWeight: 600,
-            }}
+            style={SELECT_STYLE}
           >
             {POSITIONS.map((p) => (
               <option key={p || 'all'} value={p}>{p || 'All positions'}</option>
+            ))}
+          </select>
+
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as WatchlistSort)}
+            aria-label="Sort players"
+            style={SELECT_STYLE}
+          >
+            {SORTS.map((s) => (
+              <option key={s.value} value={s.value}>Sort: {s.label}</option>
             ))}
           </select>
 
@@ -316,6 +494,21 @@ function PlayersContent() {
 
       {!loading && players.length > 0 && (
         <>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+            marginBottom: 12, fontSize: 11.5, color: 'var(--text-muted)',
+          }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 16, height: 9, borderRadius: 3, background: 'var(--confidence-soft)', border: '1.5px solid var(--confidence)' }} />
+              Production-implied value · 80% interval
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-secondary)' }} />
+              Actual pay
+            </span>
+            <span>Value excludes current salary on purpose — this is worth, not what is on the books.</span>
+          </div>
+
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))',
