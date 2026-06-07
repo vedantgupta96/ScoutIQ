@@ -40,14 +40,114 @@ class FakeDB:
             gp=70,
             minutes=2400,
             box={"PTS": 1500, "REB": 300, "AST": 400, "STL": 80, "BLK": 20, "TOV": 150, "FG3M": 200},
-            advanced={},
+            advanced={
+                "USG_PCT": 0.23,
+                "TS_PCT": 0.60,
+                "AST_PCT": 0.22,
+                "REB_PCT": 0.07,
+                "BPM": 2.5,
+                "OBPM": 3.2,
+                "DBPM": -0.7,
+                "PER": 16.0,
+            },
         )
+        self.similar_players = [
+            self.player,
+            Player(
+                player_id=203924,
+                full_name="Buddy Hield",
+                position="SG",
+                current_team_id=1610612744,
+                current_team_source="nba_api.commonallplayers:2025-26",
+            ),
+            Player(
+                player_id=1630591,
+                full_name="Jalen Suggs",
+                position="SG-PG",
+                current_team_id=1610612753,
+                current_team_source="nba_api.commonallplayers:2025-26",
+            ),
+            Player(
+                player_id=1628976,
+                full_name="Wendell Carter Jr.",
+                position="C",
+                current_team_id=1610612753,
+                current_team_source="nba_api.commonallplayers:2025-26",
+            ),
+        ]
+        self.golden_state = Team(team_id=1610612744, abbreviation="GSW", name="Golden State Warriors")
+        self.similar_seasons = [
+            self.player_season,
+            PlayerSeason(
+                player_id=203924,
+                season="2024-25",
+                team_id=1610612744,
+                age=32,
+                gp=72,
+                minutes=2200,
+                box={"PTS": 1250, "REB": 260, "AST": 180, "STL": 60, "BLK": 20, "TOV": 110, "FG3M": 260},
+                advanced={
+                    "USG_PCT": 0.21,
+                    "TS_PCT": 0.59,
+                    "AST_PCT": 0.14,
+                    "REB_PCT": 0.06,
+                    "BPM": 1.8,
+                    "OBPM": 2.8,
+                    "DBPM": -1.0,
+                    "PER": 14.5,
+                },
+            ),
+            PlayerSeason(
+                player_id=1630591,
+                season="2024-25",
+                team_id=1610612753,
+                age=23,
+                gp=75,
+                minutes=2300,
+                box={"PTS": 1125, "REB": 310, "AST": 330, "STL": 115, "BLK": 35, "TOV": 135, "FG3M": 145},
+                advanced={
+                    "USG_PCT": 0.20,
+                    "TS_PCT": 0.57,
+                    "AST_PCT": 0.20,
+                    "REB_PCT": 0.075,
+                    "BPM": 2.1,
+                    "OBPM": 1.5,
+                    "DBPM": 0.6,
+                    "PER": 15.0,
+                },
+            ),
+            PlayerSeason(
+                player_id=1628976,
+                season="2024-25",
+                team_id=1610612753,
+                age=25,
+                gp=60,
+                minutes=1500,
+                box={"PTS": 700, "REB": 500, "AST": 120, "STL": 40, "BLK": 45, "TOV": 75, "FG3M": 55},
+                advanced={
+                    "USG_PCT": 0.18,
+                    "TS_PCT": 0.61,
+                    "AST_PCT": 0.10,
+                    "REB_PCT": 0.17,
+                    "BPM": 1.2,
+                    "OBPM": 0.3,
+                    "DBPM": 0.9,
+                    "PER": 16.8,
+                },
+            ),
+        ]
         self.salary = PlayerSalary(
             player_id=1630217,
             season="2024-25",
             salary=28_000_000,
             source="bbref",
         )
+        self.salaries = [
+            self.salary,
+            PlayerSalary(player_id=203924, season="2024-25", salary=9_000_000, source="bbref"),
+            PlayerSalary(player_id=1630591, season="2024-25", salary=8_000_000, source="bbref"),
+            PlayerSalary(player_id=1628976, season="2024-25", salary=12_000_000, source="bbref"),
+        ]
         self.contract = Contract(
             id=42,
             player_id=1630217,
@@ -95,12 +195,25 @@ class FakeDB:
             return self.memphis
         if model is Team and key == self.orlando.team_id:
             return self.orlando
+        if model is Team and key == self.golden_state.team_id:
+            return self.golden_state
+        if model is CapConstants and key == "2024-25":
+            return self.cap_rows[0]
         return None
 
     def execute(self, stmt):
         sql = str(stmt)
         if "SELECT player_seasons.player_id" in sql and "player_seasons.season" in sql and "teams" in sql:
-            return FakeScalarResult([(self.player.player_id, "2024-25", self.memphis)] if self.player else [])
+            team_by_id = {
+                self.memphis.team_id: self.memphis,
+                self.orlando.team_id: self.orlando,
+                self.golden_state.team_id: self.golden_state,
+            }
+            rows = [
+                (season.player_id, "2024-25", team_by_id.get(season.team_id))
+                for season in self.similar_seasons
+            ]
+            return FakeScalarResult(rows if self.player else [])
         if "player_seasons.season" in sql and "teams" in sql:
             return FakeScalarResult([("2024-25", self.memphis)] if self.player else [])
         return FakeScalarResult([])
@@ -112,16 +225,20 @@ class FakeDB:
         if "FROM contract_years" in sql:
             return FakeScalarResult(self.contract_years if self.player else [])
         if "FROM teams" in sql:
-            return FakeScalarResult([self.memphis, self.orlando])
+            return FakeScalarResult([self.memphis, self.orlando, self.golden_state])
         if "cap_constants" in sql:
             return FakeScalarResult(self.cap_rows)
         if "player_salaries" in sql:
-            return FakeScalarResult([self.salary] if self.player else [])
+            return FakeScalarResult(self.salaries if self.player else [])
         if "SELECT players." in sql:
+            if "players.player_id IN" in sql:
+                return FakeScalarResult(self.similar_players if self.player else [])
             return FakeScalarResult([self.player] if self.player else [])
         if "SELECT player_seasons.season" in sql:
             return FakeScalarResult(["2024-25"] if self.player else [])
         if "player_seasons" in sql:
+            if "player_seasons.gp >=" in sql or "player_seasons.minutes >=" in sql:
+                return FakeScalarResult(self.similar_seasons if self.player else [])
             return FakeScalarResult([self.player_season] if self.player else [])
         return FakeScalarResult([])
 
@@ -375,6 +492,48 @@ def test_player_contract_returns_current_contract_timeline(monkeypatch):
     assert body["years_detail"][0]["value_gap_pct"] == 3.58
     assert body["years_detail"][1]["is_player_option"] is True
     assert body["years_detail"][1]["value_pct"] is None
+
+
+def test_similar_players_returns_role_and_market_context(monkeypatch):
+    def fake_predict_many(rows):
+        predictions = []
+        for row in rows:
+            pts_pg = row.get("pts_pg") or 0
+            if pts_pg > 20:
+                value = 23.5
+            elif pts_pg > 16:
+                value = 14.0
+            elif pts_pg > 14:
+                value = 20.5
+            else:
+                value = 10.0
+            predictions.append({
+                "value_pct": value,
+                "lo_pct": max(value - 4, 0),
+                "hi_pct": value + 4,
+                "model_version": "v0-gbm-conformal",
+            })
+        return predictions
+
+    monkeypatch.setattr(players_router, "predict_many_from_features", fake_predict_many)
+    client = _client(FakeDB())
+
+    response = client.get("/players/1630217/similar?mode=replacements&season=2024-25&limit=5&min_minutes=0")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "replacements"
+    assert body["season"] == "2024-25"
+    assert "lower cap hit" in body["basis"]
+    assert body["results"]
+    result_names = [row["player"]["full_name"] for row in body["results"]]
+    assert "Jalen Suggs" in result_names
+    assert "Wendell Carter Jr." not in result_names
+    first = body["results"][0]
+    assert first["player"]["player_id"] != 1630217
+    assert first["salary_pct"] < 19.92
+    assert first["explanation_tags"]
+    assert "salary_pct" in first["deltas"]
 
 
 def test_backtest_returns_committed_metrics():
