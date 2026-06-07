@@ -10,6 +10,8 @@ import {
   ValuationResponse,
   getBacktest,
   BacktestResponse,
+  getBacktestValuations,
+  BacktestValuationRow,
 } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -95,20 +97,14 @@ function LeaderRow({ player, onPick }: { player: PlayerWithVal; onPick: () => vo
   );
 }
 
+type ScatterPoint = { name: string; actual: number; value: number };
+
 // SVG scatter plot: predicted vs actual
-function ScatterPlot({ players }: { players: PlayerWithVal[] }) {
+function ScatterPlot({ points }: { points: ScatterPoint[] }) {
   const W = 320, H = 260, pad = 36, MAX = 40;
   const sx = (v: number) => pad + (Math.min(v, MAX) / MAX) * (W - pad - 8);
   const sy = (v: number) => H - pad - (Math.min(v, MAX) / MAX) * (H - pad - 8);
   const ticks = [0, 10, 20, 30, 40];
-
-  const points = players
-    .filter((p) => p.valuation?.actual_pct != null && p.valuation?.value_pct != null)
-    .map((p) => ({
-      name: p.full_name,
-      actual: p.valuation!.actual_pct!,
-      value: p.valuation!.value_pct,
-    }));
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
@@ -149,11 +145,18 @@ export default function ModelPage() {
   const [loading, setLoading] = useState(true);
   const [backtest, setBacktest] = useState<BacktestResponse | null>(null);
   const [backtestError, setBacktestError] = useState<string | null>(null);
+  const [scatterPoints, setScatterPoints] = useState<ScatterPoint[]>([]);
 
   useEffect(() => {
     getBacktest()
       .then(setBacktest)
       .catch((e: unknown) => setBacktestError(e instanceof Error ? e.message : 'Backtest metadata unavailable.'));
+
+    getBacktestValuations()
+      .then((rows: BacktestValuationRow[]) =>
+        setScatterPoints(rows.map((r) => ({ name: r.full_name, actual: r.actual_pct, value: r.value_pct })))
+      )
+      .catch(() => {});
 
     searchPlayers(undefined, 50).then((list) => {
       const withVal: PlayerWithVal[] = list.map((p) => ({ ...p }));
@@ -210,10 +213,12 @@ export default function ModelPage() {
       <div className="siq-model-grid">
         {/* Scatter */}
         <Card eyebrow="Predicted vs. actual" icon={<Target size={15} />}
-              action={<Badge tone="accent" size="sm" dot>{withVals.length}-player sample</Badge>}>
-          {loading
+              action={scatterPoints.length > 0
+                ? <Badge tone="accent" size="sm" dot>{scatterPoints.length} test-set rows</Badge>
+                : <Badge tone="accent" size="sm" dot>loading…</Badge>}>
+          {scatterPoints.length === 0
             ? <div style={{ height: 240, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
-            : <ScatterPlot players={players} />
+            : <ScatterPlot points={scatterPoints} />
           }
         </Card>
 

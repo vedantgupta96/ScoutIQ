@@ -129,6 +129,14 @@ export interface BacktestResponse {
   caveat: string;
 }
 
+export interface BacktestValuationRow {
+  full_name: string;
+  next_season: string;
+  actual_pct: number;
+  value_pct: number;
+  gap_pct: number;
+}
+
 // ---- API functions -------------------------------------------
 
 export function searchPlayers(query?: string, limit = 20): Promise<PlayerSummary[]> {
@@ -155,4 +163,8 @@ export function simulateContract(req: SimulatorRequest): Promise<SimulatorRespon
 
 export function getBacktest(): Promise<BacktestResponse> {
   return apiFetch<BacktestResponse>('/backtest');
+}
+
+export function getBacktestValuations(): Promise<BacktestValuationRow[]> {
+  return apiFetch<BacktestValuationRow[]>('/backtest/valuations');
 }
