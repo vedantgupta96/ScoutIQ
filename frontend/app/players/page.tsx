@@ -1,10 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
-import { getPlayerCards, PlayerCardResponse } from '@/lib/api';
+import {
+  getPlayerWatchlist,
+  PlayerCardResponse,
+  PlayerWatchlistResponse,
+  WatchlistBucket,
+} from '@/lib/api';
 import { VerdictPill } from '@/components/ui/VerdictPill';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
@@ -14,6 +19,10 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
   const [hovered, setHovered] = useState(false);
   const team = player.current_team ?? player.latest_stats_team;
   const valuation = player.valuation_status === 'ready' ? player.valuation : undefined;
+  const gap = valuation?.gap_pct ?? null;
+  const accent = gap == null
+    ? 'var(--border-subtle)'
+    : gap >= 0 ? 'var(--positive)' : 'var(--negative)';
 
   return (
     <Link href={`/players/${player.player_id}`} style={{ textDecoration: 'none' }}>
@@ -24,7 +33,7 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
           width: '100%',
           textAlign: 'left',
           border: `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border-subtle)'}`,
-          background: 'var(--bg-panel)',
+          background: `linear-gradient(180deg, ${accent} 0 3px, var(--bg-panel) 3px)`,
           borderRadius: 'var(--radius-lg)',
           padding: 16,
           cursor: 'pointer',
@@ -85,13 +94,25 @@ function EmptyState({ query }: { query: string }) {
   );
 }
 
+const PAGE_SIZE = 24;
+const BUCKETS: Array<{ value: WatchlistBucket; label: string }> = [
+  { value: 'all', label: 'All mismatches' },
+  { value: 'underpaid', label: 'Underpaid' },
+  { value: 'overpaid', label: 'Overpaid' },
+];
+const POSITIONS = ['', 'PG', 'SG', 'SF', 'PF', 'C'];
+
 function PlayersContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const q = searchParams.get('q') ?? '';
 
   const [draftQuery, setDraftQuery] = useState(q);
-  const [players, setPlayers] = useState<PlayerCardResponse[]>([]);
+  const [watchlist, setWatchlist] = useState<PlayerWatchlistResponse | null>(null);
+  const [bucket, setBucket] = useState<WatchlistBucket>('all');
+  const [position, setPosition] = useState('');
+  const [qualifiedOnly, setQualifiedOnly] = useState(true);
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,6 +130,10 @@ function PlayersContent() {
   }, [draftQuery, q, router]);
 
   useEffect(() => {
+    setOffset(0);
+  }, [q, bucket, position, qualifiedOnly]);
+
+  useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
 
@@ -116,15 +141,22 @@ function PlayersContent() {
       setLoading(true);
       setError(null);
       try {
-        const list = await getPlayerCards(q || undefined, 40, controller.signal);
+        const response = await getPlayerWatchlist({
+          query: q || undefined,
+          bucket,
+          position: position || undefined,
+          qualifiedOnly,
+          limit: PAGE_SIZE,
+          offset,
+        }, controller.signal);
         if (cancelled) return;
-        setPlayers(list);
+        setWatchlist(response);
         setLoading(false);
       } catch (e: unknown) {
         if (cancelled) return;
         if (e instanceof DOMException && e.name === 'AbortError') return;
         setError(e instanceof Error ? e.message : 'Failed to load players.');
-        setPlayers([]);
+        setWatchlist(null);
         setLoading(false);
       }
     }
@@ -134,25 +166,23 @@ function PlayersContent() {
       cancelled = true;
       controller.abort();
     };
-  }, [q]);
+  }, [q, bucket, position, qualifiedOnly, offset]);
 
-  const sorted = useMemo(() => [...players].sort((a, b) => {
-    const ag = a.valuation?.gap_pct;
-    const bg = b.valuation?.gap_pct;
-    if (ag == null && bg == null) return 0;
-    if (ag == null) return 1;
-    if (bg == null) return -1;
-    return Math.abs(bg) - Math.abs(ag);
-  }), [players]);
+  const players = watchlist?.items ?? [];
+  const total = watchlist?.total ?? 0;
+  const pageStart = total === 0 ? 0 : offset + 1;
+  const pageEnd = Math.min(offset + PAGE_SIZE, total);
+  const canPageBack = offset > 0;
+  const canPageForward = offset + PAGE_SIZE < total;
 
   return (
     <div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-          <span className="ds-eyebrow">Watchlist</span>
+          <span className="ds-eyebrow">Contract Watchlist</span>
           {!loading && (
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              {players.length} players · sorted by |value − pay| gap
+              {total} players · largest value/pay mismatches{watchlist?.season ? ` · ${watchlist.season}` : ''}
             </span>
           )}
           {q && (
@@ -192,6 +222,80 @@ function PlayersContent() {
             }}
           />
         </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          <div style={{
+            display: 'inline-flex',
+            padding: 3,
+            gap: 3,
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-panel)',
+          }}>
+            {BUCKETS.map((b) => {
+              const active = bucket === b.value;
+              return (
+                <button
+                  key={b.value}
+                  onClick={() => setBucket(b.value)}
+                  style={{
+                    border: 'none',
+                    borderRadius: 'calc(var(--radius-md) - 3px)',
+                    padding: '7px 10px',
+                    background: active ? 'var(--accent-soft)' : 'transparent',
+                    color: active ? 'var(--accent-text)' : 'var(--text-secondary)',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {b.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <select
+            value={position}
+            onChange={(e) => setPosition(e.target.value)}
+            style={{
+              height: 34,
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-subtle)',
+              background: 'var(--bg-panel)',
+              color: 'var(--text-primary)',
+              padding: '0 10px',
+              fontFamily: 'var(--font-sans)',
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            {POSITIONS.map((p) => (
+              <option key={p || 'all'} value={p}>{p || 'All positions'}</option>
+            ))}
+          </select>
+
+          <label style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 7,
+            height: 34,
+            padding: '0 10px',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-panel)',
+            color: 'var(--text-secondary)',
+            fontSize: 12,
+            fontWeight: 600,
+          }}>
+            <input
+              type="checkbox"
+              checked={qualifiedOnly}
+              onChange={(e) => setQualifiedOnly(e.target.checked)}
+            />
+            Qualified only
+          </label>
+        </div>
       </div>
 
       {loading && (
@@ -210,14 +314,63 @@ function PlayersContent() {
 
       {!loading && !error && players.length === 0 && <EmptyState query={q} />}
 
-      {!loading && sorted.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))',
-          gap: 'var(--panel-gap)',
-        }}>
-          {sorted.map((p) => <RosterCard key={p.player_id} player={p} />)}
-        </div>
+      {!loading && players.length > 0 && (
+        <>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))',
+            gap: 'var(--panel-gap)',
+          }}>
+            {players.map((p) => <RosterCard key={p.player_id} player={p} />)}
+          </div>
+
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            marginTop: 18,
+            flexWrap: 'wrap',
+          }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Showing {pageStart}-{pageEnd} of {total}
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                disabled={!canPageBack}
+                onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-panel)',
+                  color: canPageBack ? 'var(--text-primary)' : 'var(--text-muted)',
+                  cursor: canPageBack ? 'pointer' : 'not-allowed',
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                Previous
+              </button>
+              <button
+                disabled={!canPageForward}
+                onClick={() => setOffset(offset + PAGE_SIZE)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-subtle)',
+                  background: canPageForward ? 'var(--accent)' : 'var(--bg-panel)',
+                  color: canPageForward ? 'var(--text-on-accent)' : 'var(--text-muted)',
+                  cursor: canPageForward ? 'pointer' : 'not-allowed',
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

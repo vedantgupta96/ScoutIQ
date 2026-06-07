@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -51,6 +52,18 @@ class PlayerCardValuation(BaseModel):
 class PlayerCard(PlayerSummary):
     valuation_status: str
     valuation: PlayerCardValuation | None
+
+
+class PlayerWatchlistResponse(BaseModel):
+    items: list[PlayerCard]
+    total: int
+    limit: int
+    offset: int
+    bucket: str
+    sort: str
+    season: str | None
+    qualified_only: bool
+    caveat: str
 
 
 def _team_summary(team: Team | None) -> TeamSummary | None:
@@ -123,6 +136,47 @@ def _search_player_rows(query: str | None, limit: int, db: DB) -> list[Player]:
                 .limit(limit)
             )
     return db.scalars(stmt).all()
+
+
+def _watchlist_candidate_rows(
+    *,
+    query: str | None,
+    season: str | None,
+    position: str | None,
+    team: str | None,
+    qualified_only: bool,
+    candidate_limit: int,
+    db: DB,
+) -> list[Player]:
+    """Fetch a broad candidate set before valuation ranking.
+
+    Empty-query watchlists default to the latest loaded season so retired or
+    stale historical players do not dominate the homepage. Explicit searches
+    can still find older players through the normal player-name match.
+    """
+    if query:
+        stmt = select(Player)
+        terms = _query_terms(query)
+        if terms:
+            stmt = stmt.where(and_(*(Player.full_name.ilike(f"%{term}%") for term in terms)))
+    else:
+        target_season = season or LATEST_SEASON
+        stmt = (
+            select(Player)
+            .join(PlayerSeason, PlayerSeason.player_id == Player.player_id)
+            .where(PlayerSeason.season == target_season)
+        )
+        if qualified_only:
+            stmt = stmt.where(PlayerSeason.gp >= 20).where(PlayerSeason.minutes >= 600)
+
+    if position:
+        stmt = stmt.where(Player.position.ilike(f"{position}%"))
+    if team:
+        stmt = stmt.outerjoin(Team, Team.team_id == Player.current_team_id).where(
+            Team.abbreviation.ilike(team.strip())
+        )
+
+    return db.scalars(stmt.order_by(Player.full_name).limit(candidate_limit)).all()
 
 
 def _batched_summaries(players: list[Player], db: DB) -> dict[int, PlayerSummary]:
@@ -235,6 +289,23 @@ def _card_valuations(players: list[Player], summaries: dict[int, PlayerSummary],
     return valuations
 
 
+def _player_cards_from_parts(
+    players: list[Player],
+    summaries: dict[int, PlayerSummary],
+    valuations: dict[int, PlayerCardValuation],
+) -> list[PlayerCard]:
+    cards: list[PlayerCard] = []
+    for player in players:
+        summary = summaries[player.player_id]
+        valuation = valuations.get(player.player_id)
+        cards.append(PlayerCard(
+            **summary.model_dump(),
+            valuation_status="ready" if valuation else "unavailable",
+            valuation=valuation,
+        ))
+    return cards
+
+
 @router.get("/cards", response_model=list[PlayerCard])
 def get_player_cards(
     query: str | None = Query(None, min_length=1, description="Case-insensitive player-name search"),
@@ -249,16 +320,81 @@ def get_player_cards(
     except FileNotFoundError:
         valuations = {}
 
-    cards: list[PlayerCard] = []
-    for player in players:
-        summary = summaries[player.player_id]
-        valuation = valuations.get(player.player_id)
-        cards.append(PlayerCard(
-            **summary.model_dump(),
-            valuation_status="ready" if valuation else "unavailable",
-            valuation=valuation,
-        ))
-    return cards
+    return _player_cards_from_parts(players, summaries, valuations)
+
+
+@router.get("/watchlist", response_model=PlayerWatchlistResponse)
+def get_player_watchlist(
+    query: str | None = Query(None, min_length=1, description="Case-insensitive player-name search"),
+    bucket: Literal["all", "underpaid", "overpaid"] = Query("all"),
+    sort: Literal["mismatch", "gap", "value", "pay", "name"] = Query("mismatch"),
+    season: str | None = Query(None, description="Stats season for the default watchlist; defaults to latest."),
+    position: str | None = Query(None, min_length=1, max_length=8),
+    team: str | None = Query(None, min_length=2, max_length=4, description="Current-team abbreviation."),
+    qualified_only: bool = Query(True),
+    limit: int = Query(24, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+    db: DB = None,
+):
+    """Return ranked contract mismatches for the homepage watchlist."""
+    players = _watchlist_candidate_rows(
+        query=query,
+        season=season,
+        position=position,
+        team=team,
+        qualified_only=qualified_only,
+        candidate_limit=300,
+        db=db,
+    )
+    summaries = _batched_summaries(players, db)
+    try:
+        valuations = _card_valuations(players, summaries, db)
+    except FileNotFoundError:
+        valuations = {}
+
+    cards = [
+        card
+        for card in _player_cards_from_parts(players, summaries, valuations)
+        if card.valuation and card.valuation.gap_pct is not None
+    ]
+
+    if bucket == "underpaid":
+        cards = [card for card in cards if (card.valuation and card.valuation.gap_pct > 0)]
+    elif bucket == "overpaid":
+        cards = [card for card in cards if (card.valuation and card.valuation.gap_pct < 0)]
+
+    def sort_key(card: PlayerCard):
+        valuation = card.valuation
+        gap = valuation.gap_pct if valuation and valuation.gap_pct is not None else 0
+        if sort == "gap":
+            return gap
+        if sort == "value":
+            return valuation.value_pct if valuation else 0
+        if sort == "pay":
+            return valuation.actual_pct if valuation and valuation.actual_pct is not None else 0
+        if sort == "name":
+            return card.full_name.lower()
+        return abs(gap)
+
+    reverse = sort != "name"
+    cards = sorted(cards, key=sort_key, reverse=reverse)
+    total = len(cards)
+    page = cards[offset:offset + limit]
+
+    return PlayerWatchlistResponse(
+        items=page,
+        total=total,
+        limit=limit,
+        offset=offset,
+        bucket=bucket,
+        sort=sort,
+        season=season or (None if query else LATEST_SEASON),
+        qualified_only=qualified_only,
+        caveat=(
+            "Default watchlist ranks qualified players from the latest loaded season by absolute value/pay gap. "
+            "Historical players remain searchable by name."
+        ),
+    )
 
 
 @router.get("/{player_id}", response_model=PlayerSummary)
