@@ -321,6 +321,18 @@ def test_backtest_returns_committed_metrics():
     assert "metrics.json" in body["artifacts"]
 
 
+def test_health_exposes_current_season():
+    client = _client(FakeDB())
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    # current_season is the UI's source of truth; it must mirror LATEST_SEASON.
+    assert body["current_season"] == players_router.LATEST_SEASON
+
+
 def test_scout_ratings_eval_returns_offline_fixture_report():
     client = _client(FakeDB())
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Users, SlidersHorizontal, Target, Moon, Sun, Bell, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
+import { getHealth } from '@/lib/api';
 
 const NAV = [
   { id: 'players',   href: '/players',   label: 'Players',      Icon: Users },
@@ -87,12 +88,23 @@ function Sidebar({ active }: { active: string }) {
 
 function TopBar({ title, query, onQuery }: { title: string; query: string; onQuery: (q: string) => void }) {
   const [dark, setDark] = useState(false);
+  const [season, setSeason] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('siq-theme') : null;
     const isDark = saved === 'dark';
     setDark(isDark);
     document.documentElement.setAttribute('data-theme', isDark ? 'dark' : '');
+  }, []);
+
+  // Season label is sourced from the backend (LATEST_SEASON) so it tracks the
+  // loaded data instead of being hardcoded here.
+  useEffect(() => {
+    const controller = new AbortController();
+    getHealth(controller.signal)
+      .then((h) => setSeason(h.current_season))
+      .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   const toggleTheme = () => {
@@ -148,9 +160,11 @@ function TopBar({ title, query, onQuery }: { title: string; query: string; onQue
 
       <div className="siq-topbar-spacer" style={{ flex: 1 }} />
 
-      <span className="siq-season-badge">
-        <Badge tone="neutral">2024-25</Badge>
-      </span>
+      {season && (
+        <span className="siq-season-badge">
+          <Badge tone="neutral">{season}</Badge>
+        </span>
+      )}
 
       <button onClick={toggleTheme} style={{
         display: 'inline-flex', padding: 7, borderRadius: 'var(--radius-md)',
