@@ -206,29 +206,42 @@ def scrape_player_contract(spotrac_id: str, name_slug: str) -> list[dict] | None
     if not tables:
         return None
 
-    # table[0] has: Year, [icon], Age, Status, Cap Hit Annual, Cap %, ...
+    # table[0] columns vary by page: some include a "Status" column, some do not,
+    # which shifts Cap Hit / Cap % by one. Locate columns by header text instead
+    # of fixed indices, or the dollar/percent cells silently misalign.
     table = tables[0]
+    header_row = table.find("tr")
+    if header_row is None:
+        return None
+    headers = [c.get_text(strip=True).lower() for c in header_row.find_all(["td", "th"])]
+
+    def _col(prefix: str) -> int | None:
+        return next((i for i, h in enumerate(headers) if h.startswith(prefix)), None)
+
+    cap_hit_idx = _col("cap hit")
+    cap_pct_idx = _col("cap %")
+    status_idx = _col("status")
+    if cap_hit_idx is None or cap_pct_idx is None:
+        return None  # unrecognized layout — better no data than misaligned data
+
     rows = []
     for row in table.find_all("tr")[1:]:
         cells = row.find_all(["td", "th"])
-        if len(cells) < 5:
-            continue
+        if len(cells) <= cap_pct_idx:
+            continue  # short rows (e.g. future UFA years) have no cap figures
 
         season = cells[0].get_text(strip=True)   # '2024-25'
         # skip non-season rows (UFA, RFA, etc.) — must match YYYY-YY
         if not re.match(r"^\d{4}-\d{2}$", season):
             continue
 
-        status = cells[3].get_text(strip=True).lower()  # '', 'player', 'team', 'ufa', ...
+        status = cells[status_idx].get_text(strip=True).lower() if status_idx is not None else ""
         # skip free-agent / post-contract rows
         if status in ("ufa", "rfa", "two-way"):
             continue
 
-        cap_hit_txt = cells[4].get_text(strip=True)
-        cap_pct_txt = cells[5].get_text(strip=True) if len(cells) > 5 else ""
-
-        aav = _parse_dollars(cap_hit_txt)
-        cap_pct = _parse_pct(cap_pct_txt)
+        aav = _parse_dollars(cells[cap_hit_idx].get_text(strip=True))
+        cap_pct = _parse_pct(cells[cap_pct_idx].get_text(strip=True))
 
         is_player_option = "player" in status
         is_team_option = "team" in status
