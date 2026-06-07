@@ -126,7 +126,7 @@ def test_simulate_contract_happy_path(monkeypatch):
     body = response.json()
     assert body["player_name"] == "Desmond Bane"
     assert body["value_gap_pct"] == 3.5
-    assert body["valuation_season"] == "2024-25"
+    assert body["valuation_season"] == "2025-26"  # defaults to VALUATION_SEASON
     assert body["assumptions"]["standalone_contract_only"] is True
     assert body["years"][0]["is_projected_cap"] is False
     assert body["years"][1]["is_projected_cap"] is True
