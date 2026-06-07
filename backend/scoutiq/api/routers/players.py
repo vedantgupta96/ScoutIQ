@@ -176,7 +176,11 @@ def _watchlist_candidate_rows(
             Team.abbreviation.ilike(team.strip())
         )
 
-    return db.scalars(stmt.order_by(Player.full_name).limit(candidate_limit)).all()
+    # Order so the candidate cap, if it ever bites, keeps the most relevant
+    # players rather than an alphabetical prefix: most-played for the season
+    # board, name for free-text search (which has no season row to sort on).
+    order_by = Player.full_name if query else PlayerSeason.minutes.desc().nulls_last()
+    return db.scalars(stmt.order_by(order_by).limit(candidate_limit)).all()
 
 
 def _batched_summaries(players: list[Player], db: DB) -> dict[int, PlayerSummary]:
@@ -228,13 +232,28 @@ def search_players(
     return [summaries[p.player_id] for p in players]
 
 
-def _card_valuations(players: list[Player], summaries: dict[int, PlayerSummary], db: DB) -> dict[int, PlayerCardValuation]:
-    player_ids = [player.player_id for player in players if summaries[player.player_id].latest_season]
+def _card_valuations(
+    players: list[Player],
+    summaries: dict[int, PlayerSummary],
+    db: DB,
+    season: str | None = None,
+) -> dict[int, PlayerCardValuation]:
+    """Value each player at `season` if given, else at their latest season.
+
+    The watchlist pins valuation to its target season so a player's gap is
+    computed against the season actually being shown. Without this, loading a
+    newer stats season (with no salary yet) silently drops everyone, because
+    their latest_season has no pay and gap_pct collapses to None.
+    """
+    def _target(player_id: int) -> str | None:
+        return season or summaries[player_id].latest_season
+
+    player_ids = [player.player_id for player in players if _target(player.player_id)]
     if not player_ids:
         return {}
 
     player_by_id = {player.player_id: player for player in players}
-    target_seasons = {summaries[player_id].latest_season for player_id in player_ids}
+    target_seasons = {_target(player_id) for player_id in player_ids}
     seasons = sorted(season for season in target_seasons if season)
 
     season_rows = db.scalars(
@@ -257,14 +276,14 @@ def _card_valuations(players: list[Player], summaries: dict[int, PlayerSummary],
     feature_rows: list[dict] = []
     feature_keys: list[tuple[int, str]] = []
     for player_id in player_ids:
-        season = summaries[player_id].latest_season
-        if not season:
+        target_season = _target(player_id)
+        if not target_season:
             continue
-        season_row = season_by_key.get((player_id, season))
+        season_row = season_by_key.get((player_id, target_season))
         if season_row is None:
             continue
         feature_rows.append(build_features_from_season(season_row, player_by_id[player_id]))
-        feature_keys.append((player_id, season))
+        feature_keys.append((player_id, target_season))
 
     predictions = predict_many_from_features(feature_rows)
     valuations: dict[int, PlayerCardValuation] = {}
@@ -343,12 +362,16 @@ def get_player_watchlist(
         position=position,
         team=team,
         qualified_only=qualified_only,
-        candidate_limit=300,
+        candidate_limit=800,  # comfortably exceeds one season's player count
         db=db,
     )
+    # Pin valuation to the season the watchlist is showing (default latest), so a
+    # player's gap is computed against that season's pay rather than their newest
+    # stats season, which may have no salary loaded yet.
+    valuation_season = season or LATEST_SEASON
     summaries = _batched_summaries(players, db)
     try:
-        valuations = _card_valuations(players, summaries, db)
+        valuations = _card_valuations(players, summaries, db, season=valuation_season)
     except FileNotFoundError:
         valuations = {}
 
@@ -388,7 +411,7 @@ def get_player_watchlist(
         offset=offset,
         bucket=bucket,
         sort=sort,
-        season=season or (None if query else LATEST_SEASON),
+        season=valuation_season,
         qualified_only=qualified_only,
         caveat=(
             "Default watchlist ranks qualified players from the latest loaded season by absolute value/pay gap. "
