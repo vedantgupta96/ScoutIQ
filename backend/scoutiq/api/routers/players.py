@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import desc, select
 
 from scoutiq.api.deps import DB
+from scoutiq.llm.player_ratings import PlayerScoutRatings, aggregate_player_scout_ratings, load_player_reports
 from scoutiq.model.predict import predict_for_player
 from scoutiq.models import CapConstants, Player, PlayerSalary, PlayerSeason, Team
 
@@ -163,3 +164,22 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
         "model_version": prediction["model_version"],
         "features": prediction.get("features"),
     }
+
+
+@router.get("/{player_id}/scout-ratings", response_model=PlayerScoutRatings)
+def get_scout_ratings(player_id: int, db: DB = None):
+    """Return fixture-backed scout-rating aggregates for a player.
+
+    Phase 2B is intentionally offline-first: this reads committed synthetic
+    reports and does not call live LLMs, Sonar, or a scout-report database.
+    """
+    player = db.get(Player, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail=f"Player {player_id} not found.")
+
+    try:
+        reports = load_player_reports()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Scout-rating fixture unavailable: {exc}") from exc
+
+    return aggregate_player_scout_ratings(player_id, player.full_name, reports)

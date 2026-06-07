@@ -204,3 +204,36 @@ def test_backtest_returns_committed_metrics():
     assert body["model_version"] == "v0-gbm-conformal"
     assert body["metrics"]["n_test"] == 796
     assert "metrics.json" in body["artifacts"]
+
+
+def test_scout_ratings_eval_returns_offline_fixture_report():
+    client = _client(FakeDB())
+
+    response = client.get("/llm/scout-ratings/eval")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "offline_fixture"
+    assert body["gold_count"] == 12
+    assert body["fixture_prediction_count"] == 12
+    assert body["report"]["expected_trait_count"] == 72
+    assert body["report"]["trait_coverage"] == 1.0
+    assert body["report"]["invalid_output_count"] == 0
+    assert "basketball_iq" in body["traits"]
+    assert body["examples"][0]["ratings"][0]["evidence_span"]
+
+
+def test_player_scout_ratings_returns_fixture_aggregate():
+    client = _client(FakeDB())
+
+    response = client.get("/players/1630217/scout-ratings")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["player_id"] == 1630217
+    assert body["source_mode"] == "synthetic_fixture"
+    assert body["report_count"] == 2
+    assert len(body["traits"]) == 6
+    assert body["traits"][0]["trait"] == "leadership"
+    assert body["traits"][0]["average_score"] == 4.0
+    assert body["traits"][0]["evidence"]

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
-import { Target, TrendingUp, TrendingDown, TriangleAlert } from 'lucide-react';
+import { ClipboardCheck, Target, TrendingUp, TrendingDown, TriangleAlert } from 'lucide-react';
 import {
   searchPlayers,
   PlayerSummary,
@@ -10,6 +10,9 @@ import {
   BacktestResponse,
   getBacktestValuations,
   BacktestValuationRow,
+  getScoutRatingEval,
+  ScoutRatingEvalResponse,
+  ScoutRatingRow,
 } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -78,6 +81,135 @@ function CalRow({ nominal, empirical, halfWidthPct }: { nominal: number; empiric
         ±{halfWidthPct.toFixed(1)}%
       </td>
     </tr>
+  );
+}
+
+function fmtRate(value: number | undefined): string {
+  return value == null ? '—' : `${(value * 100).toFixed(1)}%`;
+}
+
+function traitLabel(trait: string): string {
+  if (trait === 'basketball_iq') return 'Basketball IQ';
+  return trait
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function RatingPill({ rating }: { rating: ScoutRatingRow }) {
+  return (
+    <div style={{
+      border: '1px solid var(--border-subtle)',
+      borderRadius: 'var(--radius-md)',
+      padding: '8px 10px',
+      background: 'var(--bg-inset)',
+      minWidth: 0,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between', marginBottom: 5 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{traitLabel(rating.trait)}</span>
+        <span className="ds-tnum" style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-text)' }}>
+          {rating.score}/5
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <Badge tone={rating.confidence === 'high' ? 'confidence' : rating.confidence === 'medium' ? 'neutral' : 'warning'} size="sm">
+          {rating.confidence}
+        </Badge>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          &quot;{rating.evidence_span}&quot;
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | null }) {
+  const report = scoutEval?.report;
+  const metrics = [
+    { label: 'Trait coverage', value: fmtRate(report?.trait_coverage), sub: report ? `${report.predicted_trait_count}/${report.expected_trait_count} traits` : 'Loading fixture' },
+    { label: 'Exact agreement', value: fmtRate(report?.exact_score_agreement), sub: 'Score match' },
+    { label: 'Within-1', value: fmtRate(report?.within_one_score_agreement), sub: 'Tolerant score match' },
+    { label: 'Evidence hit', value: fmtRate(report?.evidence_hit_rate), sub: 'Span appears in note' },
+  ];
+
+  return (
+    <Card
+      eyebrow="AI extraction eval"
+      icon={<ClipboardCheck size={15} />}
+      action={<Badge tone="confidence" size="sm" dot>{scoutEval?.mode.replace('_', ' ') ?? 'loading'}</Badge>}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 10 }}>
+          {metrics.map((metric) => (
+            <div key={metric.label} style={{
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              padding: '10px 12px',
+              background: 'var(--bg-inset)',
+              minWidth: 0,
+            }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 5 }}>
+                {metric.label}
+              </div>
+              <div className="ds-tnum" style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
+                {metric.value}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5 }}>{metric.sub}</div>
+            </div>
+          ))}
+          <div style={{
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-md)',
+            padding: '10px 12px',
+            background: 'var(--bg-inset)',
+            minWidth: 0,
+          }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 5 }}>
+              Invalid rows
+            </div>
+            <div className="ds-tnum" style={{
+              fontSize: 22,
+              fontWeight: 800,
+              color: report?.invalid_output_count ? 'var(--negative-text)' : 'var(--confidence-text)',
+              lineHeight: 1,
+            }}>
+              {report?.invalid_output_count ?? '—'}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5 }}>
+              {scoutEval ? `${scoutEval.gold_count} synthetic notes` : 'Loading fixture'}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+          {(scoutEval?.examples ?? []).map((example) => (
+            <div key={example.note_id} style={{
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              padding: 12,
+              minWidth: 0,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{example.player_name}</span>
+                <span className="ds-tnum" style={{ fontSize: 11, color: 'var(--text-muted)' }}>{example.note_id}</span>
+              </div>
+              <p style={{ margin: '0 0 10px', fontSize: 12, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
+                {example.source_text}
+              </p>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {example.ratings.slice(0, 3).map((rating) => <RatingPill key={rating.trait} rating={rating} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+          {scoutEval?.caveat ?? 'Offline fixture metrics are loading from the FastAPI eval endpoint.'}
+          {' '}This is model-quality metadata for the scout-text extractor, not player-profile data yet.
+          {scoutEval ? ` CLI artifact target: ${scoutEval.artifact_path}.` : ''}
+        </p>
+      </div>
+    </Card>
   );
 }
 
@@ -217,6 +349,8 @@ export default function ModelPage() {
   const [backtest, setBacktest] = useState<BacktestResponse | null>(null);
   const [backtestError, setBacktestError] = useState<string | null>(null);
   const [valRows, setValRows] = useState<BacktestValuationRow[]>([]);
+  const [scoutEval, setScoutEval] = useState<ScoutRatingEvalResponse | null>(null);
+  const [scoutEvalError, setScoutEvalError] = useState<string | null>(null);
   const [lookup, setLookup] = useState<Record<string, PlayerSummary | null>>({});
   const [minMpg, setMinMpg] = useState(MIN_MPG);
   const [minGp, setMinGp] = useState(MIN_GP);
@@ -229,6 +363,10 @@ export default function ModelPage() {
     getBacktestValuations()
       .then(setValRows)
       .catch(() => {});
+
+    getScoutRatingEval()
+      .then(setScoutEval)
+      .catch((e: unknown) => setScoutEvalError(e instanceof Error ? e.message : 'Scout-rating eval unavailable.'));
   }, []);
 
   // Single source of truth: the committed held-out backtest rows drive both the
@@ -361,6 +499,14 @@ export default function ModelPage() {
           </p>
         </Card>
       </div>
+
+      {scoutEvalError && (
+        <AssumptionFlag tone="warning" title="AI extraction eval unavailable" icon={<TriangleAlert size={16} />}>
+          {scoutEvalError}
+        </AssumptionFlag>
+      )}
+
+      <ScoutEvalPanel scoutEval={scoutEval} />
 
       {/* Leaderboard qualification controls */}
       <Card padded>

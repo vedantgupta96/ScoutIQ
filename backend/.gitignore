@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 scoutiq/data/raw/
 *.egg-info/
+scoutiq/llm/artifacts/*.json
