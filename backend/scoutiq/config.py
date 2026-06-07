@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     @property
     def seasons(self) -> list[str]:
-        """['2012-13', '2013-14', ..., '2024-25'] — NBA season string format."""
+        """['2012-13', '2013-14', ..., '2025-26'] — NBA season string format."""
         return [
             f"{y}-{str(y + 1)[-2:]}"
             for y in range(self.SEASON_START_YEAR, self.SEASON_END_YEAR + 1)
