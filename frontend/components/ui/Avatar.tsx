@@ -9,14 +9,17 @@ function initials(name: string): string {
     .join('');
 }
 
+import { headshotUrl } from '@/lib/api';
+
 interface AvatarProps {
   name: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   tone?: string;
   position?: string | null;
+  playerId?: number | null;
 }
 
-export function Avatar({ name, size = 'md', position }: AvatarProps) {
+export function Avatar({ name, size = 'md', position, playerId }: AvatarProps) {
   const px = SIZE_PX[size];
   const abbrev = initials(name);
 
@@ -46,6 +49,26 @@ export function Avatar({ name, size = 'md', position }: AvatarProps) {
       }}>
         {abbrev}
       </span>
+      {playerId != null && (
+        // Overlays the initials; on a 404/load error it hides itself, revealing
+        // the initials underneath — no state needed, works without 'use client'.
+        <img
+          src={headshotUrl(playerId)}
+          alt={name}
+          loading="lazy"
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            borderRadius: '50%',
+            objectFit: 'cover',
+            objectPosition: 'center 12%',
+            background: 'var(--bg-panel)',
+          }}
+        />
+      )}
       {position && (
         <span style={{
           position: 'absolute',

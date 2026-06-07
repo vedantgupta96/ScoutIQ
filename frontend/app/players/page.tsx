@@ -46,7 +46,7 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
       >
         {/* Header row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Avatar name={player.full_name} size="lg" position={player.position} />
+          <Avatar name={player.full_name} size="lg" position={player.position} playerId={player.player_id} />
           <div style={{ minWidth: 0 }}>
             <div style={{
               fontSize: 15, fontWeight: 600, fontFamily: 'var(--font-display)',

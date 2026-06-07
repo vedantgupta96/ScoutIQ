@@ -235,7 +235,7 @@ function LeaderRow({ row, summary, onPick }: {
       onMouseEnter={(e) => { if (clickable) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
     >
-      <Avatar name={row.full_name} size="sm" position={summary?.position} />
+      <Avatar name={row.full_name} size="sm" position={summary?.position} playerId={summary?.player_id} />
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {row.full_name}

@@ -340,3 +340,8 @@ export interface HealthResponse {
 export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return apiFetch<HealthResponse>('/health', { signal });
 }
+
+// Player headshot served via our backend proxy (cached), not cdn.nba.com directly.
+export function headshotUrl(playerId: number): string {
+  return `${BASE}/players/${playerId}/headshot`;
+}

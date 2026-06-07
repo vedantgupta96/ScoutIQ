@@ -154,7 +154,7 @@ function PlayerSearch({ onPick }: { onPick: (p: PlayerSummary) => void }) {
                 padding: '10px 14px', background: 'transparent', border: 'none',
                 borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer', textAlign: 'left',
               }}>
-              <Avatar name={p.full_name} size="sm" position={p.position} />
+              <Avatar name={p.full_name} size="sm" position={p.position} playerId={p.player_id} />
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{p.full_name}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
@@ -246,7 +246,7 @@ function SimulatorContent() {
         <>
           {/* Player chip */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <Avatar name={player.full_name} size="md" position={player.position} />
+            <Avatar name={player.full_name} size="md" position={player.position} playerId={player.player_id} />
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 16, fontWeight: 600, fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>
                 {player.full_name}
