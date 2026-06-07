@@ -31,9 +31,16 @@ from scoutiq.model.dataset import build_dataset  # noqa: E402
 from scoutiq.model.features import FEATURE_COLS, TARGET  # noqa: E402
 
 ART = Path(__file__).parent / "artifacts"
-TRAIN_MAX_TARGET = "2022-23"          # train where next_season <= this (lexicographic works for YYYY-YY)
-TEST_SEASONS = ["2023-24", "2024-25"]
+TRAIN_MAX_TARGET = "2023-24"          # train where next_season <= this (lexicographic works for YYYY-YY)
+TEST_SEASONS = ["2024-25", "2025-26"]  # 2025-26 targets are bridged contract cap hits (test-only, never trained)
 MODEL_VERSION = "v0-gbm-conformal"
+
+
+def _test_range_label() -> str:
+    """e.g. ['2024-25','2025-26'] -> '2024-26' for report/plot titles."""
+    start = TEST_SEASONS[0].split("-")[0]
+    end = TEST_SEASONS[-1].split("-")[1]
+    return f"{start}-{end}"
 PRIMARY_ALPHA = 0.20                  # -> 80% prediction interval
 CAL_LEVELS = [0.50, 0.60, 0.70, 0.80, 0.90, 0.95]
 SEED = 42
@@ -160,7 +167,7 @@ def _plots(yte, pred, lo, hi, cap_te, calib) -> None:
     ax.plot([0, lim], [0, lim], "r--", lw=1)
     ax.set_xlabel("Actual salary (% of cap)")
     ax.set_ylabel("Predicted (% of cap)")
-    ax.set_title("Predicted vs Actual — test (2023-25)")
+    ax.set_title(f"Predicted vs Actual — test ({_test_range_label()})")
     fig.tight_layout()
     fig.savefig(ART / "pred_vs_actual.png", dpi=120)
     plt.close(fig)
@@ -203,7 +210,11 @@ def _write_report(metrics: dict, importance: pd.DataFrame, underpaid: pd.DataFra
         f"{m['n_calibration']} held out for conformal calibration); test {m['test_seasons']} "
         f"({m['n_test']} rows).",
         "",
-        "## Headline metrics (test 2023-25)",
+        "_Note: the newest test season's actual pay is the per-season contract cap hit (Spotrac-sourced), "
+        "since realized box-score salary tables lag a year. This is the same pay figure the live product "
+        "compares against, and it is used for evaluation only — never as a training target._",
+        "",
+        f"## Headline metrics (test {_test_range_label()})",
         "| Metric | Value |",
         "|---|---|",
         f"| MAE | **{m['mae_pct_of_cap']}% of cap** (~${m['mae_usd']:,}) |",
