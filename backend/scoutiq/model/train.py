@@ -94,6 +94,10 @@ def main() -> None:
     val["actual_pct"] = (yte * 100).round(2)
     val["value_pct"] = (pred * 100).round(2)
     val["gap_pct"] = ((pred - yte) * 100).round(2)
+    # production-season volume — lets the UI gate leaderboards to qualified players
+    # (MPG/GP floors) so small-sample flukes don't top the bargain/overpay tables.
+    val["gp"] = test["gp"].to_numpy().astype(int)
+    val["min_per_g"] = (test["minutes"].to_numpy() / test["gp"].replace(0, np.nan).to_numpy()).round(1)
     val.sort_values("gap_pct", ascending=False).to_csv(ART / "valuations_test.csv", index=False)
     underpaid = val.sort_values("gap_pct", ascending=False).head(8)
     overpaid = val.sort_values("gap_pct").head(8)
