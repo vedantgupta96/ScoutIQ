@@ -67,7 +67,7 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
       style={{
         userSelect: 'none',
         paddingTop: overlap ? 42 : 30,
-        paddingBottom: 26,
+        paddingBottom: 34,
       }}
     >
       <div
@@ -94,8 +94,9 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
           }}
         />
 
-        {/* Verdict gap connector — a colored bar from value to pay encodes
-            bargain (green, value above pay) vs overpay (red, pay above value). */}
+        {/* Verdict gap connector — sits in its own lane just below the track so
+            it never obscures the confidence band. Its length encodes the gap:
+            green when value is above pay (bargain), red when pay leads (overpay). */}
         {actualPct != null && actualPosition != null && (
           <div
             aria-hidden="true"
@@ -103,9 +104,8 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
               position: 'absolute',
               left: `${Math.min(valuePosition, actualPosition).toFixed(3)}%`,
               width: `${Math.abs(valuePosition - actualPosition).toFixed(3)}%`,
-              top: '50%',
-              height: 5,
-              transform: 'translateY(-50%)',
+              top: 'calc(100% + 5px)',
+              height: 4,
               borderRadius: 'var(--radius-pill)',
               background: valuePct >= actualPct ? 'var(--grad-positive)' : 'var(--grad-negative)',
               opacity: 0.92,
@@ -206,7 +206,7 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
           aria-hidden="true"
           style={{
             position: 'absolute',
-            top: 'calc(100% + 8px)',
+            top: 'calc(100% + 16px)',
             left: 0,
             right: 0,
             height: 18,
