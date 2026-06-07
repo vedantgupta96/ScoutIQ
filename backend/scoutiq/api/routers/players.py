@@ -11,7 +11,7 @@ from sqlalchemy import and_, desc, select
 from scoutiq.api.deps import DB
 from scoutiq.llm.player_ratings import PlayerScoutRatings, aggregate_player_scout_ratings, load_player_reports
 from scoutiq.model.predict import build_features_from_season, predict_for_player, predict_many_from_features
-from scoutiq.models import CapConstants, Player, PlayerSalary, PlayerSeason, Team
+from scoutiq.models import CapConstants, Contract, ContractYear, Player, PlayerSalary, PlayerSeason, Team
 
 router = APIRouter(prefix="/players", tags=["players"])
 
@@ -66,10 +66,51 @@ class PlayerWatchlistResponse(BaseModel):
     caveat: str
 
 
+class PlayerContractYear(BaseModel):
+    season: str
+    cap_hit_usd: int | None
+    cap_hit_pct: float | None
+    salary_cap: int | None
+    is_guaranteed: bool
+    is_player_option: bool
+    is_team_option: bool
+    value_pct: float | None
+    value_gap_pct: float | None
+
+
+class PlayerContractResponse(BaseModel):
+    player_id: int
+    player_name: str
+    contract_id: int
+    season_start: str
+    years: int
+    total_value: int | None
+    source: str
+    scraped_at: str | None
+    extension_start_season: str | None
+    years_detail: list[PlayerContractYear]
+    caveat: str
+
+
 def _team_summary(team: Team | None) -> TeamSummary | None:
     if team is None:
         return None
     return TeamSummary(team_id=team.team_id, abbreviation=team.abbreviation, name=team.name)
+
+
+def _next_season(season: str) -> str | None:
+    if not re.match(r"^\d{4}-\d{2}$", season):
+        return None
+    y1, y2 = int(season[:4]), int(season[5:])
+    return f"{y1 + 1}-{str(y2 + 1).zfill(2)}"
+
+
+def _pct_from_contract_year(year: ContractYear, cap_row: CapConstants | None) -> float | None:
+    if year.aav and cap_row and cap_row.salary_cap:
+        return round(year.aav / cap_row.salary_cap * 100, 2)
+    if year.cap_pct is not None:
+        return round(float(year.cap_pct) * 100, 2)
+    return None
 
 
 def _latest_stats_row(player_id: int, db: DB):
@@ -428,6 +469,75 @@ def get_player(player_id: int, db: DB = None):
         raise HTTPException(status_code=404, detail=f"Player {player_id} not found.")
 
     return _player_summary(player, db)
+
+
+@router.get("/{player_id}/contract", response_model=PlayerContractResponse)
+def get_player_contract(player_id: int, db: DB = None):
+    """Return the player's current Spotrac contract timeline."""
+    player = db.get(Player, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail=f"Player {player_id} not found.")
+
+    contract = db.scalars(
+        select(Contract)
+        .where(Contract.player_id == player_id)
+        .order_by(desc(Contract.season_start), desc(Contract.scraped_at))
+        .limit(1)
+    ).first()
+    if contract is None:
+        raise HTTPException(status_code=404, detail=f"No contract found for player_id={player_id}.")
+
+    year_rows = db.scalars(
+        select(ContractYear)
+        .where(ContractYear.contract_id == contract.id)
+        .order_by(ContractYear.season)
+    ).all()
+    seasons = [row.season for row in year_rows]
+    cap_rows = db.scalars(select(CapConstants).where(CapConstants.season.in_(seasons))).all() if seasons else []
+    cap_by_season = {row.season: row for row in cap_rows}
+
+    years_detail: list[PlayerContractYear] = []
+    for row in year_rows:
+        cap_row = cap_by_season.get(row.season)
+        cap_hit_pct = _pct_from_contract_year(row, cap_row)
+        value_pct = None
+        value_gap_pct = None
+        try:
+            prediction = predict_for_player(player_id, row.season, db)
+            value_pct = prediction["value_pct"]
+            value_gap_pct = round(value_pct - cap_hit_pct, 2) if cap_hit_pct is not None else None
+        except (LookupError, FileNotFoundError):
+            pass
+
+        years_detail.append(PlayerContractYear(
+            season=row.season,
+            cap_hit_usd=row.aav,
+            cap_hit_pct=cap_hit_pct,
+            salary_cap=cap_row.salary_cap if cap_row else None,
+            is_guaranteed=row.is_guaranteed,
+            is_player_option=row.is_player_option,
+            is_team_option=row.is_team_option,
+            value_pct=value_pct,
+            value_gap_pct=value_gap_pct,
+        ))
+
+    extension_start = _next_season(max(seasons)) if seasons else None
+    return PlayerContractResponse(
+        player_id=player_id,
+        player_name=player.full_name,
+        contract_id=contract.id,
+        season_start=contract.season_start,
+        years=contract.years,
+        total_value=contract.total_value,
+        source=contract.source,
+        scraped_at=contract.scraped_at.isoformat() if contract.scraped_at else None,
+        extension_start_season=extension_start,
+        years_detail=years_detail,
+        caveat=(
+            "Spotrac forward contract structure. Value gaps are shown only for seasons with loaded "
+            "stats/model coverage; future seasons remain contract-only until new stats arrive."
+        ),
+    )
 
 
 @router.get("/{player_id}/valuation")

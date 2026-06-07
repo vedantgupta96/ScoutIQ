@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 
 import scoutiq.api.routers.headshots as headshots_router
@@ -5,7 +7,7 @@ import scoutiq.api.routers.simulator as simulator_router
 import scoutiq.api.routers.players as players_router
 from scoutiq.api.deps import get_db
 from scoutiq.api.main import app
-from scoutiq.models import CapConstants, Player, PlayerSalary, PlayerSeason, Team
+from scoutiq.models import CapConstants, Contract, ContractYear, Player, PlayerSalary, PlayerSeason, Team
 
 
 class FakeScalarResult:
@@ -46,6 +48,36 @@ class FakeDB:
             salary=28_000_000,
             source="bbref",
         )
+        self.contract = Contract(
+            id=42,
+            player_id=1630217,
+            team_id=1610612753,
+            season_start="2024-25",
+            years=2,
+            total_value=60_000_000,
+            source="spotrac",
+            scraped_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+        self.contract_years = [
+            ContractYear(
+                contract_id=42,
+                season="2024-25",
+                aav=28_000_000,
+                cap_pct=0.1992,
+                is_guaranteed=True,
+                is_player_option=False,
+                is_team_option=False,
+            ),
+            ContractYear(
+                contract_id=42,
+                season="2025-26",
+                aav=32_000_000,
+                cap_pct=0.2069,
+                is_guaranteed=False,
+                is_player_option=True,
+                is_team_option=False,
+            ),
+        ]
         self.cap_rows = [
             CapConstants(
                 season="2024-25",
@@ -53,7 +85,7 @@ class FakeDB:
                 tax_line=170_814_000,
                 first_apron=178_132_000,
                 second_apron=188_931_000,
-            )
+            ),
         ]
 
     def get(self, model, key):
@@ -75,6 +107,10 @@ class FakeDB:
 
     def scalars(self, stmt):
         sql = str(stmt)
+        if "FROM contracts" in sql:
+            return FakeScalarResult([self.contract] if self.player else [])
+        if "FROM contract_years" in sql:
+            return FakeScalarResult(self.contract_years if self.player else [])
         if "FROM teams" in sql:
             return FakeScalarResult([self.memphis, self.orlando])
         if "cap_constants" in sql:
@@ -308,6 +344,37 @@ def test_valuation_without_season_uses_latest_available_player_season(monkeypatc
     assert response.status_code == 200
     assert response.json()["season"] == "2024-25"
     assert captured["season"] == "2024-25"
+
+
+def test_player_contract_returns_current_contract_timeline(monkeypatch):
+    def fake_predict(player_id, season, db):
+        if season != "2024-25":
+            raise LookupError("future season not loaded")
+        return {
+            "value_pct": 23.5,
+            "lo_pct": 18.1,
+            "hi_pct": 28.9,
+            "model_version": "v0-gbm-conformal",
+        }
+
+    monkeypatch.setattr(players_router, "predict_for_player", fake_predict)
+    client = _client(FakeDB())
+
+    response = client.get("/players/1630217/contract")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["player_name"] == "Desmond Bane"
+    assert body["season_start"] == "2024-25"
+    assert body["years"] == 2
+    assert body["total_value"] == 60_000_000
+    assert body["extension_start_season"] == "2026-27"
+    assert body["years_detail"][0]["season"] == "2024-25"
+    assert body["years_detail"][0]["cap_hit_pct"] == 19.92
+    assert body["years_detail"][0]["value_pct"] == 23.5
+    assert body["years_detail"][0]["value_gap_pct"] == 3.58
+    assert body["years_detail"][1]["is_player_option"] is True
+    assert body["years_detail"][1]["value_pct"] is None
 
 
 def test_backtest_returns_committed_metrics():
