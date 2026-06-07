@@ -32,7 +32,7 @@ from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from scoutiq.config import settings
@@ -316,7 +316,19 @@ def upsert_contract(player_id: int, summary: dict, year_rows: list[dict], sessio
     season_start = _start_season(summary.get("start", ""), year_rows)
     years = len(year_rows) or summary.get("years", 1)
 
-    stmt = (
+    # Clean-replace this player's contract. The dedup key is (player_id, season_start),
+    # but a re-scrape can change season_start when the parser improves (e.g. the first
+    # cap-hit table shifts), which would upsert into a *new* row and leave the old one
+    # as a stale duplicate. Delete any existing contract(s) for the player first so a
+    # re-scrape always yields exactly one current contract.
+    existing_ids = session.execute(
+        select(Contract.id).where(Contract.player_id == player_id)
+    ).scalars().all()
+    if existing_ids:
+        session.execute(delete(ContractYear).where(ContractYear.contract_id.in_(existing_ids)))
+        session.execute(delete(Contract).where(Contract.id.in_(existing_ids)))
+
+    contract_id = session.execute(
         pg_insert(Contract)
         .values(
             player_id=player_id,
@@ -326,17 +338,8 @@ def upsert_contract(player_id: int, summary: dict, year_rows: list[dict], sessio
             source="spotrac",
             scraped_at=now,
         )
-        .on_conflict_do_update(
-            constraint="uq_contract_player_start",
-            set_={
-                "years": years,
-                "total_value": summary.get("total_value"),
-                "scraped_at": now,
-            },
-        )
         .returning(Contract.id)
-    )
-    contract_id = session.execute(stmt).scalar_one()
+    ).scalar_one()
 
     for yr in year_rows:
         yr_stmt = (
