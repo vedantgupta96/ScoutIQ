@@ -169,18 +169,29 @@ function PlayerSearch({ onPick }: { onPick: (p: PlayerSummary) => void }) {
   );
 }
 
+function numParam(value: string | null, fallback: number, min: number, max: number): number {
+  if (value == null) return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
 // ---- Main page ----------------------------------------------------
 function SimulatorContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const initialPlayerId = searchParams.get('player') ? Number(searchParams.get('player')) : null;
+  const initialAav = numParam(searchParams.get('aav'), 15, 1, 35);
+  const initialYears = Math.round(numParam(searchParams.get('years'), 4, 1, 5));
+  const initialStartSeason = searchParams.get('start') ?? '2025-26';
 
   const [player, setPlayer] = useState<PlayerSummary | null>(null);
-  const [aav, setAav] = useState(15);
-  const [years, setYears] = useState(4);
-  const [guaranteed, setGuaranteed] = useState(3);
+  const [aav, setAav] = useState(initialAav);
+  const [years, setYears] = useState(initialYears);
+  const [guaranteed, setGuaranteed] = useState(Math.min(3, initialYears));
   const [playerOpts, setPlayerOpts] = useState(0);
   const [teamOpts, setTeamOpts] = useState(0);
+  const [startSeason, setStartSeason] = useState(initialStartSeason);
   const [result, setResult] = useState<SimulatorResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -213,7 +224,7 @@ function SimulatorContent() {
           guaranteed_years: effectiveGuaranteed,
           player_option_years: playerOpts,
           team_option_years: teamOpts,
-          start_season: '2025-26',
+          start_season: startSeason,
         }, controller.signal);
         if (seq === requestSeq.current) setResult(res);
       } catch (e: unknown) {
@@ -228,7 +239,7 @@ function SimulatorContent() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [player, aav, years, effectiveGuaranteed, playerOpts, teamOpts]);
+  }, [player, aav, years, effectiveGuaranteed, playerOpts, teamOpts, startSeason]);
 
   const taxYears = result?.years.filter((y) => y.cap_hit_usd >= y.tax_line).length ?? 0;
   const apronYears = result?.years.filter((y) => y.cap_hit_usd >= y.first_apron).length ?? 0;
@@ -252,7 +263,7 @@ function SimulatorContent() {
                 {player.full_name}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                {player.position} · {player.current_team?.abbreviation ?? '—'} · proposed deal from 2025-26
+                {player.position} · {player.current_team?.abbreviation ?? '—'} · proposed deal from {startSeason}
               </div>
             </div>
             <div style={{ flex: 1 }} />
@@ -284,6 +295,29 @@ function SimulatorContent() {
                   min={1} max={35} step={0.5}
                   format={(v) => `${v}% of cap`}
                 />
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>Start season</span>
+                    <span className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
+                      {startSeason}
+                    </span>
+                  </div>
+                  <input
+                    value={startSeason}
+                    onChange={(e) => setStartSeason(e.target.value)}
+                    maxLength={7}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'var(--bg-panel)',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 13,
+                    }}
+                  />
+                </div>
                 <DSSlider
                   label="Length"
                   value={years} onChange={(v) => { setYears(v); setGuaranteed(Math.min(guaranteed, v)); }}

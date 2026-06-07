@@ -72,6 +72,32 @@ export interface PlayerCardResponse extends PlayerSummary {
   valuation: PlayerCardValuation | null;
 }
 
+export interface PlayerContractYear {
+  season: string;
+  cap_hit_usd: number | null;
+  cap_hit_pct: number | null;
+  salary_cap: number | null;
+  is_guaranteed: boolean;
+  is_player_option: boolean;
+  is_team_option: boolean;
+  value_pct: number | null;
+  value_gap_pct: number | null;
+}
+
+export interface PlayerContractResponse {
+  player_id: number;
+  player_name: string;
+  contract_id: number;
+  season_start: string;
+  years: number;
+  total_value: number | null;
+  source: string;
+  scraped_at: string | null;
+  extension_start_season: string | null;
+  years_detail: PlayerContractYear[];
+  caveat: string;
+}
+
 export type WatchlistBucket = 'all' | 'underpaid' | 'overpaid';
 export type WatchlistSort = 'mismatch' | 'gap' | 'value' | 'pay' | 'name';
 
@@ -305,6 +331,10 @@ export function getPlayer(id: number, signal?: AbortSignal): Promise<PlayerSumma
 export function getValuation(id: number, season?: string, signal?: AbortSignal): Promise<ValuationResponse> {
   const params = season ? `?season=${season}` : '';
   return apiFetch<ValuationResponse>(`/players/${id}/valuation${params}`, { signal });
+}
+
+export function getPlayerContract(id: number, signal?: AbortSignal): Promise<PlayerContractResponse> {
+  return apiFetch<PlayerContractResponse>(`/players/${id}/contract`, { signal });
 }
 
 export function simulateContract(req: SimulatorRequest, signal?: AbortSignal): Promise<SimulatorResponse> {

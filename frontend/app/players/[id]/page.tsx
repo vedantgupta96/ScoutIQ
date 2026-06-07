@@ -3,8 +3,17 @@
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Scale, Activity, BarChart3, SlidersHorizontal, Info, ClipboardCheck } from 'lucide-react';
-import { getPlayerScoutRatings, getValuation, PlayerScoutRatingsResponse, PlayerScoutTraitRating, ValuationResponse } from '@/lib/api';
+import { ArrowLeft, Scale, Activity, BarChart3, SlidersHorizontal, Info, ClipboardCheck, FileText } from 'lucide-react';
+import {
+  getPlayerContract,
+  getPlayerScoutRatings,
+  getValuation,
+  PlayerContractResponse,
+  PlayerContractYear,
+  PlayerScoutRatingsResponse,
+  PlayerScoutTraitRating,
+  ValuationResponse,
+} from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { StatTile } from '@/components/ui/StatTile';
@@ -149,12 +158,112 @@ function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsRespo
   );
 }
 
+function ContractYearRow({ year }: { year: PlayerContractYear }) {
+  const optionLabel = year.is_player_option ? 'Player opt.' : year.is_team_option ? 'Team opt.' : null;
+  const gap = year.value_gap_pct;
+  const gapColor = gap == null
+    ? 'var(--text-muted)'
+    : gap >= 0 ? 'var(--positive-text)' : 'var(--negative-text)';
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '76px minmax(0, 1fr) auto',
+      gap: 10,
+      alignItems: 'center',
+      padding: '10px 0',
+      borderBottom: '1px solid var(--border-subtle)',
+    }}>
+      <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+        {year.season}
+      </span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+          <span className="ds-tnum" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {year.cap_hit_usd != null ? fmtM(year.cap_hit_usd) : '—'}
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            {year.cap_hit_pct != null ? fmtPct(year.cap_hit_pct) + ' of cap' : 'cap % unavailable'}
+          </span>
+          {optionLabel && <Badge tone="warning" variant="outline" size="sm">{optionLabel}</Badge>}
+          {!year.is_guaranteed && !optionLabel && <Badge tone="neutral" variant="outline" size="sm">Non-gtd</Badge>}
+        </div>
+        {year.value_pct != null && (
+          <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>
+            Model value {fmtPct(year.value_pct)} of cap
+          </div>
+        )}
+      </div>
+      <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: gapColor, textAlign: 'right' }}>
+        {gap != null ? `${signed(gap)}%` : '—'}
+      </span>
+    </div>
+  );
+}
+
+function ContractCard({
+  contract,
+  error,
+  onSimulateExtension,
+}: {
+  contract: PlayerContractResponse | null;
+  error: string | null;
+  onSimulateExtension: () => void;
+}) {
+  if (error) {
+    return null;
+  }
+
+  return (
+    <Card
+      eyebrow="Current contract"
+      icon={<FileText size={15} />}
+      action={contract ? <Badge tone="neutral" variant="outline" size="sm">{contract.source}</Badge> : undefined}
+    >
+      {contract == null ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading contract…</p>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 6 }}>
+            <StatTile
+              label="Total value"
+              value={contract.total_value != null ? fmtM(contract.total_value) : '—'}
+              sub={`${contract.years} year${contract.years === 1 ? '' : 's'} from ${contract.season_start}`}
+              size="sm"
+            />
+            <StatTile
+              label="Next extension"
+              value={contract.extension_start_season ?? '—'}
+              sub="First season after listed deal"
+              size="sm"
+            />
+          </div>
+          <div>
+            {contract.years_detail.map((year) => <ContractYearRow key={year.season} year={year} />)}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+            <button onClick={onSimulateExtension} className="siq-primary-button" disabled={!contract.extension_start_season}>
+              <SlidersHorizontal size={15} />
+              Simulate extension
+            </button>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5, flex: '1 1 220px' }}>
+              {contract.caveat}
+            </p>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
 export default function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const playerId = Number(id);
   const router = useRouter();
 
   const [val, setVal] = useState<ValuationResponse | null>(null);
+  const [contract, setContract] = useState<PlayerContractResponse | null>(null);
+  const [contractError, setContractError] = useState<string | null>(null);
   const [scoutRatings, setScoutRatings] = useState<PlayerScoutRatingsResponse | null>(null);
   const [scoutError, setScoutError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -166,6 +275,12 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
       .then(setVal)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load valuation.'))
       .finally(() => setLoading(false));
+
+    setContract(null);
+    setContractError(null);
+    getPlayerContract(playerId)
+      .then(setContract)
+      .catch((e: unknown) => setContractError(e instanceof Error ? e.message : 'Failed to load contract.'));
 
     setScoutRatings(null);
     setScoutError(null);
@@ -199,6 +314,10 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   const featureEntries = val.features
     ? Object.entries(val.features).slice(0, 8)
     : [];
+  const extensionAav = Math.max(1, Math.min(35, Number(val.value_pct.toFixed(1))));
+  const extensionHref = contract?.extension_start_season
+    ? `/simulator?player=${playerId}&start=${encodeURIComponent(contract.extension_start_season)}&aav=${extensionAav}&years=4`
+    : `/simulator?player=${playerId}&aav=${extensionAav}`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
@@ -235,7 +354,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
           </div>
           <VerdictPill gapPct={val.gap_pct} size="lg" />
           <button
-            onClick={() => router.push(`/simulator?player=${playerId}`)}
+            onClick={() => router.push(extensionHref)}
             className="siq-primary-button"
           >
             <SlidersHorizontal size={15} />
@@ -247,6 +366,12 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
       <div className="siq-profile-grid">
         {/* Left column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
+          <ContractCard
+            contract={contract}
+            error={contractError}
+            onSimulateExtension={() => router.push(extensionHref)}
+          />
+
           {/* Valuation card */}
           <Card
             eyebrow="Production-implied value"
