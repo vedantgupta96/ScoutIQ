@@ -50,7 +50,8 @@ uvicorn scoutiq.api.main:app --reload             # serve API at http://127.0.0.
 Do not run networked ETL (`load_stats`, `load_bbref`, `load_contracts`, `load_current_rosters`) as part of ordinary API testing.
 The tests below use fake sessions/dependency overrides and do not require a live database.
 Run `check_contract_coverage` after contract loads/bridges so high-usage current-season players do not silently
-show incomplete value-vs-pay data.
+show incomplete value-vs-pay data. The audit classifies gaps as unmatched contracts, missing season AAV rows,
+below-floor contracts intentionally skipped by the salary bridge, or bridge misses.
 
 ## API
 ```bash
