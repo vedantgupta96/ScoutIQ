@@ -514,14 +514,16 @@ function DecisionHero({
 
       <div className="siq-decision-actions">
         <VerdictPill gapPct={val.gap_pct} size="lg" />
-        <button onClick={onSimulate} className="siq-primary-button">
-          <SlidersHorizontal size={15} />
-          Run simulation
-        </button>
-        <Link href={extensionHref} className="siq-secondary-button" style={{ textDecoration: 'none' }}>
-          <DollarSign size={15} />
-          Price deal
-        </Link>
+        <div className="siq-decision-command-stack">
+          <button onClick={onSimulate} className="siq-primary-button">
+            <SlidersHorizontal size={15} />
+            Run simulation
+          </button>
+          <Link href={extensionHref} className="siq-secondary-button" style={{ textDecoration: 'none' }}>
+            <DollarSign size={15} />
+            Price deal
+          </Link>
+        </div>
       </div>
     </section>
   );

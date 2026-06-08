@@ -333,8 +333,8 @@ a { color: inherit; }
 
 .siq-decision-hero {
   display: grid;
-  grid-template-columns: minmax(380px, 1fr) minmax(420px, 0.9fr) minmax(220px, auto);
-  gap: 20px;
+  grid-template-columns: minmax(360px, 1fr) minmax(360px, 0.78fr) minmax(286px, 0.46fr);
+  gap: 18px;
   align-items: center;
   padding: 18px;
   border: 1px solid var(--border-subtle);
@@ -351,10 +351,10 @@ a { color: inherit; }
 .siq-decision-hero::before {
   content: '';
   position: absolute;
-  top: 14px;
-  right: 380px;
-  width: 150px;
-  height: 64px;
+  top: 16px;
+  right: 278px;
+  width: 136px;
+  height: 58px;
   border: 1px solid color-mix(in srgb, var(--team-primary) 28%, transparent);
   border-radius: var(--radius-sm);
   transform: skewX(-12deg);
@@ -429,27 +429,66 @@ a { color: inherit; }
 .siq-decision-snapshot {
   display: grid;
   grid-template-columns: repeat(3, minmax(112px, 1fr));
-  gap: 18px;
-  min-width: 420px;
-  padding: 12px 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  gap: 16px;
+  min-width: 360px;
+  max-width: 520px;
+  padding: 13px 18px 13px 20px;
+  border: 1px solid color-mix(in srgb, var(--team-primary) 20%, var(--border-subtle));
+  border-radius: var(--radius-sm);
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--team-primary) 8%, transparent), transparent 46%),
     var(--bg-inset);
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--team-primary) 42%, transparent);
   position: relative;
   z-index: 2;
+  clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 0 100%);
+}
+
+.siq-decision-snapshot::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 13px;
+  height: 13px;
+  border-left: 1px solid color-mix(in srgb, var(--team-primary) 24%, var(--border-subtle));
+  border-bottom: 1px solid color-mix(in srgb, var(--team-primary) 24%, var(--border-subtle));
+  background: color-mix(in srgb, var(--team-primary) 8%, var(--bg-panel));
 }
 
 .siq-decision-actions {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-end;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
   position: relative;
   z-index: 2;
+  justify-self: stretch;
+  min-width: 0;
+}
+
+.siq-decision-actions > * {
+  align-self: flex-end;
+}
+
+.siq-decision-command-stack {
+  display: grid;
+  grid-template-columns: minmax(158px, 1fr) minmax(108px, auto);
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  max-width: 300px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--team-wash) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--team-primary) 12%, var(--border-subtle));
+  backdrop-filter: blur(8px);
+}
+
+.siq-decision-command-stack .siq-primary-button,
+.siq-decision-command-stack .siq-secondary-button {
+  white-space: nowrap;
 }
 
 .siq-player-cutout {
@@ -461,11 +500,11 @@ a { color: inherit; }
 
 .siq-player-cutout-hero {
   position: absolute;
-  right: 332px;
-  bottom: -22px;
-  width: 168px;
-  height: 172px;
-  opacity: 0.18;
+  right: 236px;
+  bottom: -30px;
+  width: 190px;
+  height: 194px;
+  opacity: 0.14;
   filter: grayscale(1) contrast(1.12) saturate(0.7);
   mix-blend-mode: multiply;
   mask-image: linear-gradient(180deg, #000 0%, #000 62%, transparent 100%);
@@ -766,13 +805,19 @@ a { color: inherit; }
 
   .siq-decision-actions {
     justify-content: flex-start;
+    align-items: flex-start;
   }
 
   .siq-player-cutout-hero {
-    right: 18px;
+    right: 22px;
     width: 148px;
     height: 150px;
-    opacity: 0.13;
+    opacity: 0.11;
+  }
+
+  .siq-decision-command-stack {
+    width: auto;
+    max-width: none;
   }
 
   .siq-action-rail {
@@ -880,6 +925,16 @@ a { color: inherit; }
   .siq-decision-snapshot {
     grid-template-columns: minmax(0, 1fr);
     min-width: 0;
+    max-width: none;
+  }
+
+  .siq-decision-actions > * {
+    align-self: flex-start;
+  }
+
+  .siq-decision-command-stack {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
   }
 
   .siq-read-grid,
@@ -905,6 +960,10 @@ a { color: inherit; }
   }
 
   .siq-primary-button {
+    width: 100%;
+  }
+
+  .siq-decision-command-stack .siq-secondary-button {
     width: 100%;
   }
 }
