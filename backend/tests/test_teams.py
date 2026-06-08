@@ -58,6 +58,11 @@ class FakeDB:
         sql = str(stmt)
         if "contract_years" in sql:
             return FakeScalarResult([(self.contract_year, 100)])
+        if "player_seasons.player_id IN" in sql and "teams" in sql:  # _batched_summaries
+            team_by_id = {t.team_id: t for t in (self.atl, self.bos) if t}
+            return FakeScalarResult([
+                (s.player_id, s.season, team_by_id.get(s.team_id)) for s in self.seasons
+            ])
         if "player_seasons" in sql and "teams" in sql:  # _latest_stats_row
             return FakeScalarResult([("2025-26", self.atl)])
         return FakeScalarResult([])
