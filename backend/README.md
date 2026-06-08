@@ -41,6 +41,7 @@ python -m scoutiq.etl.repair_team_history         # cache-only: fix historical t
 python -m scoutiq.etl.load_current_rosters        # current roster team -> players.current_team_*
 python -m scoutiq.etl.load_contracts              # Spotrac forward contract structure (networked)
 python -m scoutiq.etl.bridge_contract_salaries    # bridge 2025-26 cap hits into player_salaries
+python -m scoutiq.etl.check_contract_coverage     # audit players with stats but missing pay/contract rows
 python -m scoutiq.etl.check_coverage              # data-quality gate -> trainable row count
 python -m scoutiq.model.train                     # regenerate model.joblib + backtest artifacts
 uvicorn scoutiq.api.main:app --reload             # serve API at http://127.0.0.1:8000
@@ -48,6 +49,8 @@ uvicorn scoutiq.api.main:app --reload             # serve API at http://127.0.0.
 
 Do not run networked ETL (`load_stats`, `load_bbref`, `load_contracts`, `load_current_rosters`) as part of ordinary API testing.
 The tests below use fake sessions/dependency overrides and do not require a live database.
+Run `check_contract_coverage` after contract loads/bridges so high-usage current-season players do not silently
+show incomplete value-vs-pay data.
 
 ## API
 ```bash
