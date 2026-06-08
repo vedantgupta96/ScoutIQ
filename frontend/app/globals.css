@@ -786,6 +786,10 @@ a { color: inherit; }
   z-index: 2;
 }
 
+.siq-surface__body--flush {
+  padding: 0;
+}
+
 /* ---- Instrument panel: the Decision Brief reads like a console readout ---- */
 .siq-surface--instrument {
   background:
