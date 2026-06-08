@@ -54,6 +54,10 @@ class PlayerCardValuation(BaseModel):
     gap_pct: float | None
     salary_cap: int | None
     model_version: str
+    verdict_label: str
+    verdict_tone: Literal["positive", "negative", "neutral", "warning"]
+    caution_flags: list[str]
+    caveat: str | None
 
 
 class PlayerCard(PlayerSummary):
@@ -140,6 +144,75 @@ def _pct_from_contract_year(year: ContractYear, cap_row: CapConstants | None) ->
     if year.cap_pct is not None:
         return round(float(year.cap_pct) * 100, 2)
     return None
+
+
+def _num(value) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _valuation_verdict(
+    *,
+    gap_pct: float | None,
+    actual_pct: float | None,
+    features: dict,
+) -> tuple[str, Literal["positive", "negative", "neutral", "warning"], list[str], str | None]:
+    """Translate raw value-pay gap into a trust-aware display verdict.
+
+    The raw model output stays untouched. This layer prevents cheap, high-usage
+    players with weak impact indicators from reading as clean bargains.
+    """
+    if gap_pct is None:
+        return "No data", "neutral", [], None
+
+    flags: list[str] = []
+    age = _num(features.get("age"))
+    bpm = _num(features.get("BPM"))
+    ws48 = _num(features.get("WS48"))
+    net_rating = _num(features.get("NET_RATING"))
+    ts_pct = _num(features.get("TS_PCT"))
+    usg_pct = _num(features.get("USG_PCT"))
+
+    if age is not None and age >= 35:
+        flags.append("Age 35+")
+    if actual_pct is not None and actual_pct < 3 and gap_pct >= 8:
+        flags.append("Minimum-salary gap")
+    if bpm is not None and bpm < 0:
+        flags.append("Negative BPM")
+    if ws48 is not None and ws48 < 0.05:
+        flags.append("Low WS/48")
+    if net_rating is not None and net_rating <= -5:
+        flags.append("Poor on-court net")
+    if ts_pct is not None and usg_pct is not None and ts_pct < 0.54 and usg_pct >= 0.22:
+        flags.append("High-use efficiency risk")
+
+    if gap_pct >= 3:
+        if flags:
+            return (
+                "Salary bargain",
+                "warning",
+                flags,
+                "Large positive gap is driven by pay versus box production; impact indicators are mixed.",
+            )
+        return "Significant bargain", "positive", [], None
+    if gap_pct >= 1:
+        if flags:
+            return (
+                "Bargain, monitor impact",
+                "warning",
+                flags,
+                "Positive gap has production support, but impact indicators need review.",
+            )
+        return "Bargain", "positive", [], None
+    if gap_pct > -1:
+        return "Fair value", "neutral", flags, None
+    if gap_pct > -3:
+        return "Slight overpay", "negative", flags, None
+    return "Overpaid", "negative", flags, None
 
 
 def _latest_stats_row(player_id: int, db: DB):
@@ -360,6 +433,7 @@ def _card_valuations(
         feature_keys.append((player_id, target_season))
 
     predictions = predict_many_from_features(feature_rows)
+    features_by_key = dict(zip(feature_keys, feature_rows))
     valuations: dict[int, PlayerCardValuation] = {}
     for (player_id, season), prediction in zip(feature_keys, predictions):
         salary_row = salary_by_key.get((player_id, season))
@@ -368,6 +442,12 @@ def _card_valuations(
         actual_usd = salary_row.salary if salary_row else None
         actual_pct = round(actual_usd / salary_cap * 100, 2) if (actual_usd and salary_cap) else None
         value_pct = prediction["value_pct"]
+        gap_pct = round(value_pct - actual_pct, 2) if actual_pct is not None else None
+        verdict_label, verdict_tone, caution_flags, caveat = _valuation_verdict(
+            gap_pct=gap_pct,
+            actual_pct=actual_pct,
+            features=features_by_key[(player_id, season)],
+        )
         valuations[player_id] = PlayerCardValuation(
             season=season,
             value_pct=value_pct,
@@ -375,9 +455,13 @@ def _card_valuations(
             hi_pct=prediction["hi_pct"],
             actual_pct=actual_pct,
             actual_usd=actual_usd,
-            gap_pct=round(value_pct - actual_pct, 2) if actual_pct is not None else None,
+            gap_pct=gap_pct,
             salary_cap=salary_cap,
             model_version=prediction["model_version"],
+            verdict_label=verdict_label,
+            verdict_tone=verdict_tone,
+            caution_flags=caution_flags,
+            caveat=caveat,
         )
     return valuations
 
@@ -766,6 +850,11 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
     actual_pct = round(actual_usd / salary_cap * 100, 2) if (actual_usd and salary_cap) else None
     value_pct = prediction["value_pct"]
     gap_pct = round(value_pct - actual_pct, 2) if actual_pct is not None else None
+    verdict_label, verdict_tone, caution_flags, caveat = _valuation_verdict(
+        gap_pct=gap_pct,
+        actual_pct=actual_pct,
+        features=features,
+    )
 
     return {
         "player_id": player_id,
@@ -783,6 +872,10 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
         "value_usd": int(value_pct / 100 * salary_cap) if salary_cap else None,
         "model_version": prediction["model_version"],
         "features": {k: (None if v != v else v) for k, v in features.items()},
+        "verdict_label": verdict_label,
+        "verdict_tone": verdict_tone,
+        "caution_flags": caution_flags,
+        "caveat": caveat,
     }
 
 

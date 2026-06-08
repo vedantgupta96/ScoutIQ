@@ -554,7 +554,7 @@ function DecisionHero({
       </div>
 
       <div className="siq-decision-actions">
-        <VerdictPill gapPct={val.gap_pct} size="lg" />
+        <VerdictPill gapPct={val.gap_pct} label={val.verdict_label} tone={val.verdict_tone} size="lg" />
         <button onClick={onSimulate} className="siq-primary-button">
           <SlidersHorizontal size={15} />
           Run simulation
@@ -631,6 +631,11 @@ function FrontOfficeRead({
             The current case reads as <strong>{val.gap_pct != null ? `${signed(val.gap_pct)}% of cap` : 'incomplete'}</strong>
             {topMatch ? <> with <strong>{topMatch.player.full_name}</strong> as the closest visible market comp.</> : <> while the market set loads.</>}
           </p>
+          {val.caveat && (
+            <p>
+              <strong>{val.verdict_label}:</strong> {val.caveat}
+            </p>
+          )}
         </div>
         <div className="siq-gauge-well">
           <div className="siq-gauge-well__caption">
@@ -919,18 +924,30 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
         <StatRow label="Season" value={val.season} />
         <StatRow label="Value" value={`${fmtPct(val.value_pct)} of cap`} />
         <StatRow label="80% interval" value={`${fmtPct(val.lo_pct)} – ${fmtPct(val.hi_pct)}`} />
+        <StatRow label="Verdict" value={val.verdict_label} warn={val.verdict_tone === 'warning'} />
         {val.gap_pct != null && (
           <StatRow
             label="Gap to pay"
             value={`${signed(val.gap_pct)}%`}
           />
         )}
+        {val.caution_flags.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingTop: 10 }}>
+            {val.caution_flags.slice(0, 4).map((flag) => (
+              <Badge key={flag} tone="warning" variant="outline" size="sm">{flag}</Badge>
+            ))}
+          </div>
+        )}
       </Surface>
 
-      <AssumptionFlag tone="confidence" title="Calibrated honesty" icon={<Info size={16} />}>
-        This is a production-implied valuation, not a market-value estimate. It does not account for
-        injury risk, defensive impact beyond box-score proxies, or gravity effects. Check the Model &amp;
-        backtest view for full performance metrics.
+      <AssumptionFlag
+        tone={val.verdict_tone === 'warning' ? 'warning' : 'confidence'}
+        title={val.verdict_tone === 'warning' ? 'Model caution' : 'Calibrated honesty'}
+        icon={<Info size={16} />}
+      >
+        {val.caveat ?? (
+          'This is a production-implied valuation, not a market-value estimate. It does not account for injury risk, defensive impact beyond box-score proxies, or gravity effects. Check the Model & backtest view for full performance metrics.'
+        )}
       </AssumptionFlag>
     </div>
   );
