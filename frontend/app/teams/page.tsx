@@ -12,6 +12,7 @@ import {
   TeamCapSheetPlayer,
 } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
+import { Surface } from '@/components/ui/Surface';
 import { Badge } from '@/components/ui/Badge';
 import { StatTile } from '@/components/ui/StatTile';
 import { Avatar } from '@/components/ui/Avatar';
@@ -146,7 +147,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
       } as CSSProperties}
     >
       {/* Payroll hero */}
-      <Card eyebrow="Team payroll vs cap" icon={<Shield size={15} />}
+      <Surface variant="instrument" teamAccent eyebrow="Team payroll vs cap" icon={<Shield size={15} />}
         action={<Badge tone="confidence" variant="outline" size="sm">{sheet.season}</Badge>}>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
@@ -195,7 +196,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
             Cap thresholds unavailable for {sheet.season}.
           </p>
         )}
-      </Card>
+      </Surface>
 
       {/* Summary tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--panel-gap)' }}>
