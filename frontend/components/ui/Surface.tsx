@@ -10,6 +10,8 @@ interface SurfaceProps {
   action?: ReactNode;
   /** Tint the surface's court accents with the active team color instead of the brand accent. */
   teamAccent?: boolean;
+  /** Remove body padding so child rows can run edge-to-edge (mirrors Card's flushBody). */
+  flush?: boolean;
   className?: string;
   style?: CSSProperties;
 }
@@ -28,6 +30,7 @@ export function Surface({
   icon,
   action,
   teamAccent = false,
+  flush = false,
   className = '',
   style,
 }: SurfaceProps) {
@@ -49,7 +52,7 @@ export function Surface({
           {action && <div>{action}</div>}
         </div>
       )}
-      <div className="siq-surface__body">{children}</div>
+      <div className={`siq-surface__body${flush ? ' siq-surface__body--flush' : ''}`}>{children}</div>
     </div>
   );
 }

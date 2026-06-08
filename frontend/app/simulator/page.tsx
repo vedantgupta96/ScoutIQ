@@ -9,6 +9,7 @@ import {
   PlayerSummary, SimulatorResponse, ContractYearResponse,
 } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
+import { Surface } from '@/components/ui/Surface';
 import { Badge } from '@/components/ui/Badge';
 import { StatTile } from '@/components/ui/StatTile';
 import { VerdictPill } from '@/components/ui/VerdictPill';
@@ -17,6 +18,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
 import { CapBar as SharedCapBar, CAP_TIER_LABEL, capTierBadgeTone } from '@/components/cap/CapBar';
 import { capTier, fmtM, fmtPct, signed } from '@/lib/utils';
+import { teamVisual } from '@/lib/teamVisuals';
 
 // ---- Slider -------------------------------------------------------
 function DSSlider({
@@ -214,14 +216,24 @@ function SimulatorContent() {
 
   const taxYears = result?.years.filter((y) => y.cap_hit_usd >= y.tax_line).length ?? 0;
   const apronYears = result?.years.filter((y) => y.cap_hit_usd >= y.first_apron).length ?? 0;
+  const visual = teamVisual(player?.current_team?.abbreviation ?? null);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--panel-gap)',
+        '--team-primary': visual.primary,
+        '--team-secondary': visual.secondary,
+        '--team-wash': visual.wash,
+      } as CSSProperties}
+    >
       {/* Player select */}
       {!player && (
-        <Card eyebrow="Select a player" icon={<SlidersHorizontal size={15} />}>
+        <Surface variant="instrument" eyebrow="Select a player" icon={<SlidersHorizontal size={15} />}>
           <PlayerSearch onPick={(p) => { setPlayer(p); router.push(`/simulator?player=${p.player_id}`); }} />
-        </Card>
+        </Surface>
       )}
 
       {player && (
@@ -258,7 +270,7 @@ function SimulatorContent() {
 
           <div className="siq-simulator-grid">
             {/* Controls */}
-            <Card eyebrow="Contract terms" icon={<SlidersHorizontal size={15} />}>
+            <Surface variant="instrument" teamAccent eyebrow="Contract terms" icon={<SlidersHorizontal size={15} />}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
                 <DSSlider
                   label="AAV"
@@ -317,7 +329,7 @@ function SimulatorContent() {
                   format={(v) => `${v} yr${v !== 1 ? 's' : ''}`}
                 />
               </div>
-            </Card>
+            </Surface>
 
             {/* Results */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
@@ -338,7 +350,7 @@ function SimulatorContent() {
               {result && (
                 <>
                   {/* Summary card */}
-                  <Card padded>
+                  <Surface variant="board" teamAccent eyebrow="Proposed deal" icon={<SlidersHorizontal size={15} />}>
                     <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                       <StatTile
                         label="Contract AAV"
@@ -373,10 +385,12 @@ function SimulatorContent() {
                         <MiniValuePayGauge valuePct={result.value_pct} payPct={result.proposed_aav_pct} />
                       </div>
                     )}
-                  </Card>
+                  </Surface>
 
                   {/* Year-by-year */}
-                  <Card
+                  <Surface
+                    variant="board"
+                    teamAccent
                     eyebrow="Year-by-year cap hits"
                     icon={<SlidersHorizontal size={15} />}
                     action={
@@ -406,7 +420,7 @@ function SimulatorContent() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                       {result.years.map((yr) => <CapBar key={yr.season} yr={yr} />)}
                     </div>
-                  </Card>
+                  </Surface>
 
                   <AssumptionFlag tone="warning" title="Simplified CBA model" icon={<TriangleAlert size={16} />}>
                     {result.disclaimer} Caps project at {(result.assumptions.cap_projection_rate * 100).toFixed(1)}%/yr.

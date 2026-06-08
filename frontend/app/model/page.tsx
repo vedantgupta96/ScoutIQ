@@ -15,6 +15,7 @@ import {
   ScoutRatingRow,
 } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
+import { Surface } from '@/components/ui/Surface';
 import { Badge } from '@/components/ui/Badge';
 import { StatTile } from '@/components/ui/StatTile';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
@@ -133,7 +134,8 @@ function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | nu
   ];
 
   return (
-    <Card
+    <Surface
+      variant="dossier"
       eyebrow="AI extraction eval"
       icon={<ClipboardCheck size={15} />}
       action={<Badge tone="confidence" size="sm" dot>{scoutEval?.mode.replace('_', ' ') ?? 'loading'}</Badge>}
@@ -209,7 +211,7 @@ function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | nu
           {scoutEval ? ` CLI artifact target: ${scoutEval.artifact_path}.` : ''}
         </p>
       </div>
-    </Card>
+    </Surface>
   );
 }
 
@@ -450,7 +452,7 @@ export default function ModelPage() {
 
       <div className="siq-model-grid">
         {/* Scatter */}
-        <Card eyebrow="Predicted vs. actual" icon={<Target size={15} />}
+        <Surface variant="instrument" eyebrow="Predicted vs. actual" icon={<Target size={15} />}
               action={scatterPoints.length > 0
                 ? <Badge tone="accent" size="sm" dot>{scatterPoints.length} test-set rows</Badge>
                 : <Badge tone="accent" size="sm" dot>loading…</Badge>}>
@@ -458,10 +460,10 @@ export default function ModelPage() {
             ? <div style={{ height: 240, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
             : <ScatterPlot points={scatterPoints} highlight={highlightNames} />
           }
-        </Card>
+        </Surface>
 
         {/* Calibration table */}
-        <Card eyebrow="Interval calibration" icon={<Target size={15} />}
+        <Surface variant="board" eyebrow="Interval calibration" icon={<Target size={15} />}
               action={<Badge tone="confidence" variant="outline" size="sm">calibrated</Badge>}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -497,7 +499,7 @@ export default function ModelPage() {
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '12px 0 0', lineHeight: 1.5 }}>
             Conformal intervals are well-calibrated when empirical ≈ nominal. Coverage tracks the diagonal across all levels.
           </p>
-        </Card>
+        </Surface>
       </div>
 
       {scoutEvalError && (
@@ -524,7 +526,7 @@ export default function ModelPage() {
 
       {/* Leaderboards */}
       <div className="siq-leader-grid">
-        <Card eyebrow="Most underpaid" icon={<TrendingUp size={15} />} flushBody
+        <Surface variant="board" eyebrow="Most underpaid" icon={<TrendingUp size={15} />} flush
               action={<Badge tone="positive" size="sm">test-set bargains</Badge>}>
           {loading
             ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
@@ -538,9 +540,9 @@ export default function ModelPage() {
                 );
               })
           }
-        </Card>
+        </Surface>
 
-        <Card eyebrow="Most overpaid" icon={<TrendingDown size={15} />} flushBody
+        <Surface variant="board" eyebrow="Most overpaid" icon={<TrendingDown size={15} />} flush
               action={<Badge tone="negative" size="sm">test-set overpays</Badge>}>
           {loading
             ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
@@ -554,7 +556,7 @@ export default function ModelPage() {
                 );
               })
           }
-        </Card>
+        </Surface>
       </div>
 
       <AssumptionFlag tone="warning" title="Honest caveat — salary stickiness" icon={<TriangleAlert size={16} />}>
