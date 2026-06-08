@@ -37,6 +37,7 @@ import { StatTile } from '@/components/ui/StatTile';
 import { VerdictPill } from '@/components/ui/VerdictPill';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
+import { TeamLogo } from '@/components/ui/TeamLogo';
 import { ValueGauge } from '@/components/players/ValueGauge';
 import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
 import { PlayerCutout } from '@/components/players/PlayerCutout';
@@ -478,6 +479,14 @@ function DecisionHero({
         <div style={{ minWidth: 0 }}>
           <div className="siq-decision-kicker">
             <Badge tone="neutral" size="sm">{val.season}</Badge>
+            {val.current_team && (
+              <TeamLogo
+                teamId={val.current_team.team_id}
+                abbreviation={val.current_team.abbreviation}
+                name={val.current_team.name}
+                size="sm"
+              />
+            )}
             <span>{val.current_team?.name ?? 'Team unavailable'}</span>
           </div>
           <h1>{val.player_name}</h1>

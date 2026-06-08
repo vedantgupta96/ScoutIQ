@@ -480,3 +480,7 @@ export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
 export function headshotUrl(playerId: number): string {
   return `${BASE}/players/${playerId}/headshot`;
 }
+
+export function teamLogoUrl(teamId: number): string {
+  return `${BASE}/teams/${teamId}/logo`;
+}

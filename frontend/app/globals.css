@@ -340,7 +340,8 @@ a { color: inherit; }
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background:
-    linear-gradient(110deg, var(--team-wash), transparent 42%),
+    linear-gradient(105deg, color-mix(in srgb, var(--team-primary) 16%, transparent), transparent 48%),
+    linear-gradient(90deg, var(--team-wash), transparent 64%),
     linear-gradient(180deg, var(--bg-panel), var(--bg-panel));
   box-shadow: var(--shadow-card);
   overflow: hidden;
