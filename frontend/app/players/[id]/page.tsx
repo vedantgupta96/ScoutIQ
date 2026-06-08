@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use, type ReactNode } from 'react';
+import { useEffect, useState, use, type CSSProperties, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -37,9 +37,12 @@ import { StatTile } from '@/components/ui/StatTile';
 import { VerdictPill } from '@/components/ui/VerdictPill';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
+import { TeamLogo } from '@/components/ui/TeamLogo';
 import { ValueGauge } from '@/components/players/ValueGauge';
 import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
+import { PlayerCutout } from '@/components/players/PlayerCutout';
 import { fmtM, fmtPct, signed } from '@/lib/utils';
+import { teamVisual } from '@/lib/teamVisuals';
 
 function StatRow({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
@@ -311,14 +314,8 @@ function SimilarPlayerRow({ result }: { result: SimilarPlayerResult }) {
   const simHref = `/simulator?player=${result.player.player_id}&aav=${Math.max(1, Math.min(35, result.value_pct ?? 15))}`;
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'minmax(0, 1fr) auto',
-      gap: 12,
-      padding: '12px 0',
-      borderBottom: '1px solid var(--border-subtle)',
-      alignItems: 'start',
-    }}>
+    <div className="siq-similar-dossier-row">
+      <PlayerCutout playerId={result.player.player_id} name={result.player.full_name} variant="card" />
       <Link href={`/players/${result.player.player_id}`} style={{ textDecoration: 'none', minWidth: 0 }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
           <Avatar name={result.player.full_name} size="md" position={result.player.position} playerId={result.player.player_id} />
@@ -482,6 +479,14 @@ function DecisionHero({
         <div style={{ minWidth: 0 }}>
           <div className="siq-decision-kicker">
             <Badge tone="neutral" size="sm">{val.season}</Badge>
+            {val.current_team && (
+              <TeamLogo
+                teamId={val.current_team.team_id}
+                abbreviation={val.current_team.abbreviation}
+                name={val.current_team.name}
+                size="sm"
+              />
+            )}
             <span>{val.current_team?.name ?? 'Team unavailable'}</span>
           </div>
           <h1>{val.player_name}</h1>
@@ -789,6 +794,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   const extensionHref = contract?.extension_start_season
     ? `/simulator?player=${playerId}&start=${encodeURIComponent(contract.extension_start_season)}&aav=${extensionAav}&years=4`
     : `/simulator?player=${playerId}&aav=${extensionAav}`;
+  const visual = teamVisual(val.current_team?.abbreviation);
 
   const modelInputs = (
     <div className="siq-read-grid">
@@ -865,7 +871,14 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   );
 
   return (
-    <div className="siq-decision-page">
+    <div
+      className="siq-decision-page"
+      style={{
+        '--team-primary': visual.primary,
+        '--team-secondary': visual.secondary,
+        '--team-wash': visual.wash,
+      } as CSSProperties}
+    >
       <Link href="/players" className="siq-back-link">
         <ArrowLeft size={15} /> All players
       </Link>

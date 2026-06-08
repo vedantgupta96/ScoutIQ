@@ -339,8 +339,26 @@ a { color: inherit; }
   padding: 18px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--bg-panel);
+  background:
+    linear-gradient(105deg, color-mix(in srgb, var(--team-primary) 16%, transparent), transparent 48%),
+    linear-gradient(90deg, var(--team-wash), transparent 64%),
+    linear-gradient(180deg, var(--bg-panel), var(--bg-panel));
   box-shadow: var(--shadow-card);
+  overflow: hidden;
+  position: relative;
+  isolation: isolate;
+}
+
+.siq-decision-hero::after {
+  content: '';
+  position: absolute;
+  left: 18px;
+  bottom: 0;
+  width: 168px;
+  height: 5px;
+  background: linear-gradient(90deg, var(--team-primary), var(--team-secondary));
+  border-radius: var(--radius-pill) var(--radius-pill) 0 0;
+  pointer-events: none;
 }
 
 .siq-decision-identity {
@@ -348,6 +366,8 @@ a { color: inherit; }
   align-items: center;
   gap: 16px;
   min-width: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .siq-decision-kicker {
@@ -392,9 +412,14 @@ a { color: inherit; }
   gap: 18px;
   min-width: 420px;
   padding: 12px 16px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid color-mix(in srgb, var(--team-primary) 14%, var(--border-subtle));
   border-radius: var(--radius-md);
-  background: var(--bg-inset);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--team-primary) 8%, transparent), transparent 46%),
+    var(--bg-inset);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--team-primary) 42%, transparent);
+  position: relative;
+  z-index: 2;
 }
 
 .siq-decision-actions {
@@ -403,6 +428,15 @@ a { color: inherit; }
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+  position: relative;
+  z-index: 2;
+}
+
+.siq-player-cutout {
+  object-fit: cover;
+  object-position: center top;
+  pointer-events: none;
+  user-select: none;
 }
 
 .siq-workspace-layout {
@@ -517,6 +551,56 @@ a { color: inherit; }
 .siq-market-signal {
   display: grid;
   gap: 10px;
+}
+
+.siq-similar-dossier-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  align-items: start;
+  position: relative;
+  overflow: hidden;
+}
+
+.siq-similar-dossier-row::before {
+  content: '';
+  position: absolute;
+  inset: 7px 0 7px auto;
+  width: 96px;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  background: linear-gradient(90deg, transparent, var(--team-wash));
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-out);
+  pointer-events: none;
+}
+
+.siq-similar-dossier-row:hover::before {
+  opacity: 1;
+}
+
+.siq-player-cutout-card {
+  position: absolute;
+  right: 74px;
+  bottom: -18px;
+  width: 92px;
+  height: 104px;
+  opacity: 0;
+  filter: grayscale(1) contrast(1.15);
+  mix-blend-mode: multiply;
+  transform: translateX(8px);
+  transition: opacity var(--duration-base) var(--ease-out), transform var(--duration-base) var(--ease-out);
+  mask-image: linear-gradient(180deg, #000 0%, #000 62%, transparent 100%);
+}
+
+.siq-similar-dossier-row:hover .siq-player-cutout-card {
+  opacity: 0.12;
+  transform: translateX(0);
+}
+
+[data-theme="dark"] .siq-player-cutout-card {
+  mix-blend-mode: screen;
 }
 
 .siq-market-chip-row {
@@ -644,6 +728,7 @@ a { color: inherit; }
 
   .siq-decision-actions {
     justify-content: flex-start;
+    align-items: flex-start;
   }
 
   .siq-action-rail {
@@ -724,6 +809,13 @@ a { color: inherit; }
     padding: 16px;
   }
 
+  .siq-decision-hero::before {
+    right: 16px;
+    top: 14px;
+    width: 108px;
+    height: 52px;
+  }
+
   .siq-decision-identity {
     align-items: flex-start;
   }
@@ -735,6 +827,7 @@ a { color: inherit; }
   .siq-decision-snapshot {
     grid-template-columns: minmax(0, 1fr);
     min-width: 0;
+    max-width: none;
   }
 
   .siq-read-grid,
@@ -762,6 +855,7 @@ a { color: inherit; }
   .siq-primary-button {
     width: 100%;
   }
+
 }
 
 @media (max-width: 460px) {

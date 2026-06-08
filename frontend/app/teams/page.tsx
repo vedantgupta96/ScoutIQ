@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, Suspense } from 'react';
+import { useEffect, useMemo, useState, Suspense, type CSSProperties } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Shield, SlidersHorizontal, Users, TriangleAlert } from 'lucide-react';
@@ -15,10 +15,12 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { StatTile } from '@/components/ui/StatTile';
 import { Avatar } from '@/components/ui/Avatar';
+import { TeamLogo } from '@/components/ui/TeamLogo';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
 import { CapBar, CAP_TIER_LABEL, capTierBadgeTone, CapTierKey } from '@/components/cap/CapBar';
 import { fmtM, fmtPct, signed } from '@/lib/utils';
+import { teamVisual } from '@/lib/teamVisuals';
 
 type RosterSort = 'cap' | 'gap' | 'value' | 'name';
 const SORTS: Array<{ value: RosterSort; label: string }> = [
@@ -110,6 +112,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
   const ctx = sheet.cap_context;
   const totals = sheet.totals;
   const tier = ctx.tier as CapTierKey;
+  const visual = teamVisual(sheet.team.abbreviation);
 
   const players = useMemo(() => {
     const rows = [...sheet.players];
@@ -132,16 +135,33 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
   const thresholdsReady = ctx.tax_line != null && ctx.first_apron != null && ctx.second_apron != null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--panel-gap)',
+        '--team-primary': visual.primary,
+        '--team-secondary': visual.secondary,
+        '--team-wash': visual.wash,
+      } as CSSProperties}
+    >
       {/* Payroll hero */}
       <Card eyebrow="Team payroll vs cap" icon={<Shield size={15} />}
         action={<Badge tone="confidence" variant="outline" size="sm">{sheet.season}</Badge>}>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {sheet.team.name ?? sheet.team.abbreviation ?? 'Team'}
-            </h1>
-            <Badge tone={capTierBadgeTone(tier)} size="md">{CAP_TIER_LABEL[tier]}</Badge>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <TeamLogo
+              teamId={sheet.team.team_id}
+              abbreviation={sheet.team.abbreviation}
+              name={sheet.team.name}
+              size="lg"
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', minWidth: 0 }}>
+              <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {sheet.team.name ?? sheet.team.abbreviation ?? 'Team'}
+              </h1>
+              <Badge tone={capTierBadgeTone(tier)} size="md">{CAP_TIER_LABEL[tier]}</Badge>
+            </div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div className="ds-tnum" style={{ fontSize: 28, fontWeight: 700, fontFamily: 'var(--font-display)', color: 'var(--text-primary)', lineHeight: 1 }}>

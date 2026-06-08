@@ -7,7 +7,9 @@ thresholds actually bind (a lone contract never reaches them).
 """
 from __future__ import annotations
 
+import requests
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -20,6 +22,7 @@ from scoutiq.api.routers.players import (
     _team_summary,
 )
 from scoutiq.model.predict import build_features_from_season, predict_many_from_features
+from scoutiq.config import settings
 from scoutiq.models import (
     CapConstants,
     Contract,
@@ -32,6 +35,11 @@ from scoutiq.models import (
 
 router = APIRouter(prefix="/teams", tags=["teams"])
 
+LOGO_CACHE_DIR = settings.RAW_DIR / "team_logos"
+LOGO_CDN_URL = "https://cdn.nba.com/logos/nba/{team_id}/primary/L/logo.svg"
+LOGO_HEADERS = {"User-Agent": "ScoutIQ/0.1 (personal portfolio research; contact via github)"}
+LOGO_CACHE_SECONDS = 604_800  # 7 days
+
 CAVEAT = (
     "Roster is derived from each player's current-team flag and may be incomplete or lag "
     "mid-season trades. Cap hit is the contract year where available, else realized salary "
@@ -39,6 +47,36 @@ CAVEAT = (
     "two-way/Exhibit-10 deals, trade exceptions, Bird rights, luxury tax owed, and the "
     "repeater tax."
 )
+
+
+@router.get("/{team_id}/logo")
+def team_logo(team_id: int) -> FileResponse:
+    """Return an NBA team logo through the API so browsers avoid CDN flakiness."""
+    LOGO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    logo_path = LOGO_CACHE_DIR / f"{team_id}.svg"
+
+    if logo_path.exists():
+        return FileResponse(
+            logo_path,
+            media_type="image/svg+xml",
+            headers={"Cache-Control": f"public, max-age={LOGO_CACHE_SECONDS}"},
+        )
+
+    try:
+        resp = requests.get(LOGO_CDN_URL.format(team_id=team_id), headers=LOGO_HEADERS, timeout=8)
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail="team logo fetch failed") from e
+
+    content_type = resp.headers.get("content-type", "").lower()
+    if resp.status_code != 200 or not resp.content or "svg" not in content_type:
+        raise HTTPException(status_code=404, detail="team logo unavailable")
+
+    logo_path.write_bytes(resp.content)
+    return FileResponse(
+        logo_path,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": f"public, max-age={LOGO_CACHE_SECONDS}"},
+    )
 
 
 class TeamListItem(BaseModel):
