@@ -157,6 +157,14 @@ export interface PlayerWatchlistParams {
   offset?: number;
 }
 
+export interface PlayerValuationCautionsResponse {
+  items: PlayerCardResponse[];
+  total: number;
+  limit: number;
+  season: string;
+  caveat: string;
+}
+
 export interface SimulatorRequest {
   player_id: number;
   aav_pct: number;
@@ -422,6 +430,18 @@ export function getPlayerWatchlist(params: PlayerWatchlistParams = {}, signal?: 
   if (params.position) qs.set('position', params.position);
   if (params.team) qs.set('team', params.team);
   return apiFetch<PlayerWatchlistResponse>(`/players/watchlist?${qs}`, { signal });
+}
+
+export function getPlayerValuationCautions(
+  params: { season?: string; qualifiedOnly?: boolean; limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<PlayerValuationCautionsResponse> {
+  const qs = new URLSearchParams({
+    limit: String(params.limit ?? 12),
+    qualified_only: String(params.qualifiedOnly ?? true),
+  });
+  if (params.season) qs.set('season', params.season);
+  return apiFetch<PlayerValuationCautionsResponse>(`/players/valuation-cautions?${qs}`, { signal });
 }
 
 export function getPlayer(id: number, signal?: AbortSignal): Promise<PlayerSummary> {
