@@ -48,7 +48,7 @@ function RoomLine({ label, room }: { label: string; room: number | null }) {
   );
 }
 
-function RosterRow({ player }: { player: TeamCapSheetPlayer }) {
+function RosterRow({ player, gaugeDomainMaxPct }: { player: TeamCapSheetPlayer; gaugeDomainMaxPct: number }) {
   const team = player.current_team ?? player.latest_stats_team;
   return (
     <div style={{
@@ -87,7 +87,12 @@ function RosterRow({ player }: { player: TeamCapSheetPlayer }) {
 
       <div>
         {player.valuation_status === 'ready' ? (
-          <MiniValuePayGauge valuePct={player.value_pct} payPct={player.salary_pct} showLabels />
+          <MiniValuePayGauge
+            valuePct={player.value_pct}
+            payPct={player.salary_pct}
+            showLabels
+            domainMaxPct={gaugeDomainMaxPct}
+          />
         ) : (
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No model value</span>
         )}
@@ -116,6 +121,13 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
     });
     return rows;
   }, [sheet.players, sort]);
+
+  const gaugeDomainMaxPct = useMemo(() => {
+    const maxPct = sheet.players.reduce((max, player) => {
+      return Math.max(max, player.value_pct ?? 0, player.salary_pct ?? 0);
+    }, 0);
+    return Math.max(10, Math.ceil((maxPct * 1.15) / 5) * 5);
+  }, [sheet.players]);
 
   const thresholdsReady = ctx.tax_line != null && ctx.first_apron != null && ctx.second_apron != null;
 
@@ -212,7 +224,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
           <span className="ds-eyebrow">Value vs pay</span>
           <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Gap</span>
         </div>
-        {players.map((p) => <RosterRow key={p.player_id} player={p} />)}
+        {players.map((p) => <RosterRow key={p.player_id} player={p} gaugeDomainMaxPct={gaugeDomainMaxPct} />)}
       </Card>
 
       <AssumptionFlag tone="warning" title="Simplified roster cap model" icon={<TriangleAlert size={16} />}>

@@ -7,18 +7,19 @@ interface MiniValuePayGaugeProps {
   valuePct: number | null;
   payPct: number | null;
   showLabels?: boolean;
+  domainMaxPct?: number;
 }
 
 // Compact value-vs-pay read for dense rows/cards (no confidence interval).
 // Teal value marker, tone pay marker, and a verdict-colored connector whose
 // length is the gap — green when value sits above pay, red when pay leads.
-export function MiniValuePayGauge({ valuePct, payPct, showLabels = false }: MiniValuePayGaugeProps) {
+export function MiniValuePayGauge({ valuePct, payPct, showLabels = false, domainMaxPct }: MiniValuePayGaugeProps) {
   const [hover, setHover] = useState<{ label: string; value: number; pct: number } | null>(null);
   if (valuePct == null && payPct == null) return null;
 
   const value = valuePct ?? 0;
   const pay = payPct;
-  const domainMax = Math.max(value, pay ?? 0) * 1.2 || 6;
+  const domainMax = domainMaxPct ?? (Math.max(value, pay ?? 0) * 1.2 || 6);
   const pos = (x: number) => Math.max(0, Math.min(100, (x / domainMax) * 100));
   const valuePos = pos(value);
   const payPos = pay != null ? pos(pay) : null;
@@ -27,6 +28,7 @@ export function MiniValuePayGauge({ valuePct, payPct, showLabels = false }: Mini
     ? 'var(--border-strong)'
     : underpaid ? 'var(--grad-positive)' : 'var(--grad-negative)';
   const payColor = underpaid ? 'var(--positive)' : 'var(--negative)';
+  const ticks = [10, 20, 30].filter((tick) => tick < domainMax);
 
   return (
     <div style={{ position: 'relative' }} onMouseLeave={() => setHover(null)}>
@@ -38,6 +40,22 @@ export function MiniValuePayGauge({ valuePct, payPct, showLabels = false }: Mini
         border: '1px solid var(--border-subtle)',
         overflow: 'visible',
       }}>
+        {ticks.map((tick) => (
+          <div
+            key={tick}
+            title={`${tick}% of cap`}
+            style={{
+              position: 'absolute',
+              top: 2,
+              bottom: 2,
+              left: `${pos(tick).toFixed(2)}%`,
+              width: 1,
+              transform: 'translateX(-50%)',
+              background: 'var(--border-strong)',
+              opacity: 0.45,
+            }}
+          />
+        ))}
         {payPos != null && (
           <div style={{
             position: 'absolute',

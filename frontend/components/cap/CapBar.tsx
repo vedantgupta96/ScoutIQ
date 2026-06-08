@@ -19,7 +19,7 @@ export function capTierBadgeTone(tier: CapTierKey): 'positive' | 'warning' | 'ne
 // Vivid fill + danger glow that intensifies as the figure climbs through the
 // tax line and the two aprons. Chrome stays quiet; the bar carries the alarm.
 const TIER_FILL: Record<CapTierKey, { fill: string; glow: string }> = {
-  'below-tax':    { fill: 'var(--grad-positive)',                                       glow: 'none' },
+  'below-tax':    { fill: 'linear-gradient(90deg, var(--teal-500), var(--green-500))',   glow: '0 0 7px rgba(31,190,116,0.28)' },
   'taxpayer':     { fill: 'linear-gradient(90deg, var(--amber-500), var(--amber-600))',  glow: '0 0 8px rgba(236,178,46,0.40)' },
   'first-apron':  { fill: 'linear-gradient(90deg, var(--amber-500), var(--orange-500))', glow: '0 0 9px rgba(244,98,31,0.42)' },
   'second-apron': { fill: 'var(--grad-negative)',                                       glow: '0 0 11px rgba(238,71,71,0.50)' },
