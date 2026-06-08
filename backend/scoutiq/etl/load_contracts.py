@@ -158,11 +158,16 @@ def scrape_team(team_slug: str) -> list[dict]:
         spotrac_id = m.group(1)
         name_slug = m.group(2)
 
-        # full_name: cell text has "{LastName}{Full Name}" — take the suffix after first word
-        raw = cells[0].get_text(strip=True)
-        # typical: "JokicNikola Jokic" — the full name contains a space
-        full_name_m = re.search(r"([A-Z][a-zéàâêîôùûäëïöüñ]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-zéàâêîôùûäëïöüñ]+.*)", raw)
-        full_name = full_name_m.group(1).strip() if full_name_m else raw
+        # Spotrac table cells include a duplicated sort key, e.g.
+        # "Anunoby OG Anunoby"; the player link text is the canonical name.
+        full_name = link_tag.get_text(" ", strip=True)
+        if not full_name:
+            raw = cells[0].get_text(strip=True)
+            full_name_m = re.search(
+                r"([A-Z][a-zéàâêîôùûäëïöüñ]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-zéàâêîôùûäëïöüñ]+.*)",
+                raw,
+            )
+            full_name = full_name_m.group(1).strip() if full_name_m else raw
 
         years_txt = cells[7].get_text(strip=True) if len(cells) > 7 else ""
         years = int(years_txt) if years_txt.isdigit() else None
