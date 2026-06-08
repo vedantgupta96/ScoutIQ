@@ -16,8 +16,14 @@ def _make_engine():
             "DATABASE_URL is empty. Copy backend/.env.example to backend/.env and paste your "
             "Neon connection string (with the postgresql+psycopg:// prefix and ?sslmode=require)."
         )
-    # pool_pre_ping avoids stale-connection errors against Neon's autosuspend.
-    return create_engine(settings.DATABASE_URL, pool_pre_ping=True, future=True)
+    # pool_pre_ping avoids stale-connection errors against Neon's autosuspend;
+    # pool_recycle proactively retires connections before Neon would drop them.
+    return create_engine(
+        settings.DATABASE_URL,
+        pool_pre_ping=True,
+        pool_recycle=1800,
+        future=True,
+    )
 
 
 engine = _make_engine() if settings.DATABASE_URL else None

@@ -203,7 +203,7 @@ class FakeDB:
 
     def execute(self, stmt):
         sql = str(stmt)
-        if "SELECT player_seasons.player_id" in sql and "player_seasons.season" in sql and "teams" in sql:
+        if "player_seasons.player_id IN" in sql and "player_seasons.season" in sql and "teams" in sql:
             team_by_id = {
                 self.memphis.team_id: self.memphis,
                 self.orlando.team_id: self.orlando,
@@ -464,17 +464,18 @@ def test_valuation_without_season_uses_latest_available_player_season(monkeypatc
 
 
 def test_player_contract_returns_current_contract_timeline(monkeypatch):
-    def fake_predict(player_id, season, db):
-        if season != "2024-25":
-            raise LookupError("future season not loaded")
-        return {
-            "value_pct": 23.5,
-            "lo_pct": 18.1,
-            "hi_pct": 28.9,
-            "model_version": "v0-gbm-conformal",
-        }
-
-    monkeypatch.setattr(players_router, "predict_for_player", fake_predict)
+    # The contract endpoint batches valuation across the seasons that have stats
+    # (only 2024-25 in the fake), so patch the batched scorer rather than the
+    # per-player one. The fake returns just the 2024-25 season row, so 2025-26
+    # gets no value.
+    monkeypatch.setattr(
+        players_router,
+        "predict_many_from_features",
+        lambda rows: [
+            {"value_pct": 23.5, "lo_pct": 18.1, "hi_pct": 28.9, "model_version": "v0-gbm-conformal"}
+            for _ in rows
+        ],
+    )
     client = _client(FakeDB())
 
     response = client.get("/players/1630217/contract")

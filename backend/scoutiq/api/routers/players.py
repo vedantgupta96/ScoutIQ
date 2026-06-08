@@ -258,15 +258,19 @@ def _batched_summaries(players: list[Player], db: DB) -> dict[int, PlayerSummary
         return {}
 
     player_ids = [player.player_id for player in players]
-    latest_by_player: dict[int, tuple[str, Team | None]] = {}
-    for player_id, season, team in db.execute(
-        select(PlayerSeason.player_id, PlayerSeason.season, Team)
-        .outerjoin(Team, Team.team_id == PlayerSeason.team_id)
-        .where(PlayerSeason.player_id.in_(player_ids))
-        .order_by(PlayerSeason.player_id, desc(PlayerSeason.season))
-    ).all():
-        if player_id not in latest_by_player:
-            latest_by_player[player_id] = (season, team)
+    # DISTINCT ON (player_id) returns one row per player — their latest season —
+    # straight from Postgres, instead of pulling every season row and reducing in
+    # Python (which fetched thousands of rows for the 800-candidate watchlist).
+    latest_by_player: dict[int, tuple[str, Team | None]] = {
+        player_id: (season, team)
+        for player_id, season, team in db.execute(
+            select(PlayerSeason.player_id, PlayerSeason.season, Team)
+            .outerjoin(Team, Team.team_id == PlayerSeason.team_id)
+            .where(PlayerSeason.player_id.in_(player_ids))
+            .distinct(PlayerSeason.player_id)
+            .order_by(PlayerSeason.player_id, desc(PlayerSeason.season))
+        ).all()
+    }
 
     current_team_ids = {player.current_team_id for player in players if player.current_team_id}
     current_teams = {
@@ -647,18 +651,39 @@ def get_player_contract(player_id: int, db: DB = None):
     cap_rows = db.scalars(select(CapConstants).where(CapConstants.season.in_(seasons))).all() if seasons else []
     cap_by_season = {row.season: row for row in cap_rows}
 
+    # Model value per contract season, batched: fetch the seasons that actually
+    # have stats in one query and score them together, instead of one prediction
+    # (and one DB round-trip) per contract year — most future years have no stats.
+    value_by_season: dict[str, float] = {}
+    if seasons:
+        try:
+            stat_rows = db.scalars(
+                select(PlayerSeason).where(
+                    PlayerSeason.player_id == player_id,
+                    PlayerSeason.season.in_(seasons),
+                )
+            ).all()
+            if stat_rows:
+                predictions = predict_many_from_features(
+                    [build_features_from_season(row, player) for row in stat_rows]
+                )
+                value_by_season = {
+                    row.season: prediction["value_pct"]
+                    for row, prediction in zip(stat_rows, predictions)
+                }
+        except FileNotFoundError:
+            value_by_season = {}
+
     years_detail: list[PlayerContractYear] = []
     for row in year_rows:
         cap_row = cap_by_season.get(row.season)
         cap_hit_pct = _pct_from_contract_year(row, cap_row)
-        value_pct = None
-        value_gap_pct = None
-        try:
-            prediction = predict_for_player(player_id, row.season, db)
-            value_pct = prediction["value_pct"]
-            value_gap_pct = round(value_pct - cap_hit_pct, 2) if cap_hit_pct is not None else None
-        except (LookupError, FileNotFoundError):
-            pass
+        value_pct = value_by_season.get(row.season)
+        value_gap_pct = (
+            round(value_pct - cap_hit_pct, 2)
+            if (value_pct is not None and cap_hit_pct is not None)
+            else None
+        )
 
         years_detail.append(PlayerContractYear(
             season=row.season,

@@ -18,7 +18,7 @@ from scoutiq.api.routers.players import (
     LATEST_SEASON,
     PlayerSummary,
     TeamSummary,
-    _player_summary,
+    _batched_summaries,
     _team_summary,
 )
 from scoutiq.model.predict import build_features_from_season, predict_many_from_features
@@ -181,6 +181,9 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     roster = db.scalars(select(Player).where(Player.current_team_id == team_id)).all()
     player_ids = [p.player_id for p in roster]
     player_by_id = {p.player_id: p for p in roster}
+    # Batch every player's summary (latest season + team) in two queries instead
+    # of one latest-season lookup per rostered player inside the loop below.
+    summaries = _batched_summaries(roster, db)
 
     cap_row = db.scalars(select(CapConstants).where(CapConstants.season == target)).first()
     salary_cap = cap_row.salary_cap if cap_row else None
@@ -248,7 +251,7 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     overpays = 0
 
     for p in roster:
-        summary = _player_summary(p, db)
+        summary = summaries[p.player_id]
         cap_hit = cap_hit_by_player.get(p.player_id)
         pay_source = pay_source_by_player.get(p.player_id)
         salary_pct = round(cap_hit / salary_cap * 100, 2) if (cap_hit and salary_cap) else None
