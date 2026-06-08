@@ -522,7 +522,6 @@ a { color: inherit; }
   line-height: 1.55;
 }
 
-.siq-brief-strip,
 .siq-confidence-stack {
   display: grid;
   gap: 2px;
@@ -719,6 +718,221 @@ a { color: inherit; }
   box-shadow: 0 1px 4px rgba(16,24,40,0.18);
 }
 
+/* ============================================================
+   Basketball intelligence console — court field + surface system
+   ============================================================ */
+:root {
+  --court-line:        rgba(16,24,40,0.055);
+  --court-line-strong: rgba(16,24,40,0.085);
+  --court-felt:        rgba(16,24,40,0.022);
+}
+
+[data-theme="dark"] {
+  --court-line:        rgba(255,255,255,0.05);
+  --court-line-strong: rgba(255,255,255,0.08);
+  --court-felt:        rgba(255,255,255,0.018);
+}
+
+/* Whisper-quiet tip-off circle behind the scroll content. The two concentric
+   rings read as a center circle + restraining ring — basketball-native texture,
+   not a decorative blob or grid. Fixed in the scroll box so it stays put. */
+.siq-main {
+  background-color: var(--bg-app);
+  background-image:
+    radial-gradient(120% 70% at 50% -10%, var(--court-felt), transparent 62%),
+    radial-gradient(circle 268px at 50% -130px,
+      transparent 261px, var(--court-line-strong) 262px 263px, transparent 264px),
+    radial-gradient(circle 150px at 50% -130px,
+      transparent 116px, var(--court-line) 117px 118px, transparent 119px);
+  background-repeat: no-repeat;
+}
+
+/* ---- Surface base ---- */
+.siq-surface {
+  position: relative;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.siq-surface__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px 0;
+  position: relative;
+  z-index: 2;
+}
+
+.siq-surface__head-l {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.siq-surface__icon {
+  display: flex;
+  color: var(--surface-accent, var(--text-muted));
+}
+
+.siq-surface__body {
+  padding: 12px 16px 16px;
+  position: relative;
+  z-index: 2;
+}
+
+/* ---- Instrument panel: the Decision Brief reads like a console readout ---- */
+.siq-surface--instrument {
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--surface-accent, var(--accent)) 6%, transparent),
+      transparent 140px),
+    var(--bg-panel);
+}
+
+/* Baseline tick strip along the bottom edge — the panel's "instrument" footer */
+.siq-surface--instrument::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg,
+    transparent 0,
+    color-mix(in srgb, var(--surface-accent, var(--accent)) 55%, transparent) 18%,
+    color-mix(in srgb, var(--surface-accent, var(--accent)) 55%, transparent) 82%,
+    transparent 100%);
+  opacity: 0.7;
+  z-index: 1;
+}
+
+.siq-gauge-well {
+  position: relative;
+  margin: 6px 0 16px;
+  padding: 16px 18px 6px;
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(130% 150% at 50% 0%,
+      color-mix(in srgb, var(--surface-accent, var(--accent)) 7%, transparent),
+      transparent 72%),
+    var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  box-shadow: inset 0 1px 3px rgba(16,24,40,0.07);
+}
+
+.siq-gauge-well__caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.siq-metric-plates {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.siq-metric-plate {
+  position: relative;
+  padding: 11px 12px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+/* Notch tab — the threshold marker motif, tinted per metric tone */
+.siq-metric-plate::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 0;
+  width: 20px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: var(--plate-accent, var(--surface-accent, var(--accent)));
+}
+
+.siq-metric-plate__label {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.siq-metric-plate__value {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: -0.015em;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--plate-accent, var(--text-primary));
+}
+
+.siq-metric-plate__sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+/* ---- Board: the Market Signal comp board, with a team-tinted left rail ---- */
+.siq-surface--board {
+  border-left: 3px solid color-mix(in srgb, var(--surface-accent, var(--accent)) 60%, var(--border-strong));
+}
+
+.siq-surface--board::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 64px;
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--surface-accent, var(--accent)) 7%, transparent),
+    transparent);
+  z-index: 1;
+}
+
+/* ---- Dossier: Confidence Notes, framed like a clipped case file ---- */
+.siq-surface--dossier::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 22px 22px 0 0;
+  border-color: color-mix(in srgb, var(--surface-accent, var(--confidence)) 26%, var(--bg-inset)) transparent transparent transparent;
+  z-index: 1;
+}
+
+/* Bracket-framed confidence lines — the "[ ]" confidence motif */
+.siq-confidence-bracket {
+  position: relative;
+  padding-left: 12px;
+}
+
+.siq-confidence-bracket::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 7px;
+  border: 1.5px solid color-mix(in srgb, var(--surface-accent, var(--confidence)) 45%, var(--border-strong));
+  border-right: none;
+  border-radius: 3px 0 0 3px;
+}
+
 @media (max-width: 1180px) {
   .siq-model-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .siq-decision-hero,
@@ -837,6 +1051,10 @@ a { color: inherit; }
 
   .siq-read-grid > *:first-child {
     grid-column: auto;
+  }
+
+  .siq-metric-plates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .siq-workspace-tabs {
