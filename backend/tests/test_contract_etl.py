@@ -23,3 +23,28 @@ def test_spotrac_team_parser_uses_clean_link_text(monkeypatch):
         ("Karl-Anthony Towns", "17829"),
         ("OG Anunoby", "23618"),
     ]
+
+
+def test_contract_table_uses_cash_fallback_when_cap_hit_blank():
+    html = """
+    <table>
+      <tr>
+        <th>Year</th><th></th><th>Age</th><th>Status</th>
+        <th>Cap Hit Annual</th><th>Cap % League Cap</th>
+        <th>Apron Salary</th><th>Luxury Tax</th><th>Tax % League Tax</th>
+        <th>Cash Annual</th><th>Cash Guaranteed</th><th>Cash Cumulative</th>
+      </tr>
+      <tr>
+        <td>2025-26</td><td></td><td>24</td><td></td>
+        <td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>
+        <td>$85,300</td><td>$85,300</td><td>$85,300</td>
+      </tr>
+    </table>
+    """
+    soup = load_contracts.BeautifulSoup(html, "html5lib")
+
+    rows = load_contracts._parse_contract_table(soup.find("table"))
+
+    assert rows[0]["season"] == "2025-26"
+    assert rows[0]["aav"] == 85_300
+    assert rows[0]["cap_pct"] is None

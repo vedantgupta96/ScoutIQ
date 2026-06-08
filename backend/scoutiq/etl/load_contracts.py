@@ -209,13 +209,15 @@ def _parse_contract_table(table) -> list[dict]:
     header_row = table.find("tr")
     if header_row is None:
         return []
-    headers = [c.get_text(strip=True).lower() for c in header_row.find_all(["td", "th"])]
+    headers = [c.get_text(" ", strip=True).lower() for c in header_row.find_all(["td", "th"])]
 
     def _col(prefix: str) -> int | None:
         return next((i for i, h in enumerate(headers) if h.startswith(prefix)), None)
 
     cap_hit_idx = _col("cap hit")
     cap_pct_idx = _col("cap %")
+    cash_annual_idx = _col("cash annual")
+    cash_guaranteed_idx = _col("cash guaranteed")
     status_idx = _col("status")
     if cap_hit_idx is None or cap_pct_idx is None:
         return []  # not a cap-hit table (base-salary / cash tables share the page)
@@ -238,9 +240,19 @@ def _parse_contract_table(table) -> list[dict]:
 
         is_player_option = "player" in status
         is_team_option = "team" in status
+        cap_hit = _parse_dollars(cells[cap_hit_idx].get_text(strip=True))
+        if cap_hit is None:
+            # Two-way / exhibit-style rows often have no cap hit but do expose
+            # cash columns. Keep that amount so coverage audits classify them
+            # as below-floor contracts instead of unexplained parser misses.
+            for fallback_idx in (cash_annual_idx, cash_guaranteed_idx):
+                if fallback_idx is not None and len(cells) > fallback_idx:
+                    cap_hit = _parse_dollars(cells[fallback_idx].get_text(strip=True))
+                    if cap_hit is not None:
+                        break
         rows.append({
             "season": season,
-            "aav": _parse_dollars(cells[cap_hit_idx].get_text(strip=True)),
+            "aav": cap_hit,
             "cap_pct": _parse_pct(cells[cap_pct_idx].get_text(strip=True)),
             "is_guaranteed": not is_player_option and not is_team_option,
             "is_player_option": is_player_option,
