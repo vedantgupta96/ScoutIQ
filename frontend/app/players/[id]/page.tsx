@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use, type ReactNode } from 'react';
+import { useEffect, useState, use, type CSSProperties, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -39,7 +39,9 @@ import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
 import { ValueGauge } from '@/components/players/ValueGauge';
 import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
+import { PlayerCutout } from '@/components/players/PlayerCutout';
 import { fmtM, fmtPct, signed } from '@/lib/utils';
+import { teamVisual } from '@/lib/teamVisuals';
 
 function StatRow({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
@@ -311,14 +313,8 @@ function SimilarPlayerRow({ result }: { result: SimilarPlayerResult }) {
   const simHref = `/simulator?player=${result.player.player_id}&aav=${Math.max(1, Math.min(35, result.value_pct ?? 15))}`;
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'minmax(0, 1fr) auto',
-      gap: 12,
-      padding: '12px 0',
-      borderBottom: '1px solid var(--border-subtle)',
-      alignItems: 'start',
-    }}>
+    <div className="siq-similar-dossier-row">
+      <PlayerCutout playerId={result.player.player_id} name={result.player.full_name} variant="card" />
       <Link href={`/players/${result.player.player_id}`} style={{ textDecoration: 'none', minWidth: 0 }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
           <Avatar name={result.player.full_name} size="md" position={result.player.position} playerId={result.player.player_id} />
@@ -477,6 +473,7 @@ function DecisionHero({
 }) {
   return (
     <section className="siq-decision-hero">
+      <PlayerCutout playerId={val.player_id} name={val.player_name} />
       <div className="siq-decision-identity">
         <Avatar name={val.player_name} size="xl" position={val.position} playerId={val.player_id} />
         <div style={{ minWidth: 0 }}>
@@ -789,6 +786,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   const extensionHref = contract?.extension_start_season
     ? `/simulator?player=${playerId}&start=${encodeURIComponent(contract.extension_start_season)}&aav=${extensionAav}&years=4`
     : `/simulator?player=${playerId}&aav=${extensionAav}`;
+  const visual = teamVisual(val.current_team?.abbreviation);
 
   const modelInputs = (
     <div className="siq-read-grid">
@@ -865,7 +863,14 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   );
 
   return (
-    <div className="siq-decision-page">
+    <div
+      className="siq-decision-page"
+      style={{
+        '--team-primary': visual.primary,
+        '--team-secondary': visual.secondary,
+        '--team-wash': visual.wash,
+      } as CSSProperties}
+    >
       <Link href="/players" className="siq-back-link">
         <ArrowLeft size={15} /> All players
       </Link>
