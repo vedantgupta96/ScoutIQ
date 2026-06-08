@@ -3,18 +3,20 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Users, SlidersHorizontal, Target, Moon, Sun, Bell, Search } from 'lucide-react';
+import { Users, SlidersHorizontal, Target, Shield, Moon, Sun, Bell, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { getHealth } from '@/lib/api';
 
 const NAV = [
   { id: 'players',   href: '/players',   label: 'Players',      Icon: Users },
+  { id: 'teams',     href: '/teams',     label: 'Team war room', Icon: Shield },
   { id: 'simulator', href: '/simulator', label: 'Cap simulator', Icon: SlidersHorizontal },
   { id: 'model',     href: '/model',     label: 'Model & backtest', Icon: Target },
 ];
 
 const TITLES: Record<string, string> = {
   '/players':   'Players',
+  '/teams':     'Team war room',
   '/simulator': 'Cap simulator',
   '/model':     'Model & backtest',
 };

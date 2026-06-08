@@ -571,6 +571,15 @@ function FrontOfficeRead({
   const topMatch = similarMarket?.results[0];
   const gapTone = val.gap_pct == null ? 'neutral' : val.gap_pct >= 0 ? 'positive' : 'negative';
   const scoutTop = scoutRatings?.traits[0];
+  const marketGaugeDomainMaxPct = Math.max(
+    10,
+    Math.ceil((Math.max(
+      val.value_pct ?? 0,
+      val.actual_pct ?? 0,
+      topMatch?.value_pct ?? 0,
+      topMatch?.salary_pct ?? 0,
+    ) * 1.15) / 5) * 5,
+  );
 
   return (
     <div className="siq-read-grid">
@@ -620,7 +629,12 @@ function FrontOfficeRead({
                 <Badge key={tag} tone="neutral" variant="outline" size="sm">{tag}</Badge>
               ))}
             </div>
-            <MiniValuePayGauge valuePct={topMatch.value_pct} payPct={topMatch.salary_pct} />
+            <MiniValuePayGauge
+              valuePct={topMatch.value_pct}
+              payPct={topMatch.salary_pct}
+              showLabels
+              domainMaxPct={marketGaugeDomainMaxPct}
+            />
             <RiskLine label="Comp value" value={topMatch.value_pct != null ? fmtPct(topMatch.value_pct) : '—'} />
             <RiskLine label="Comp pay" value={topMatch.salary_pct != null ? fmtPct(topMatch.salary_pct) : '—'} />
             <RiskLine label="Comp gap" value={topMatch.gap_pct != null ? `${signed(topMatch.gap_pct)}%` : '—'} tone={topMatch.gap_pct != null && topMatch.gap_pct >= 0 ? 'positive' : 'negative'} />

@@ -14,6 +14,8 @@ import { StatTile } from '@/components/ui/StatTile';
 import { VerdictPill } from '@/components/ui/VerdictPill';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
+import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
+import { CapBar as SharedCapBar, CAP_TIER_LABEL, capTierBadgeTone } from '@/components/cap/CapBar';
 import { capTier, fmtM, fmtPct, signed } from '@/lib/utils';
 
 // ---- Slider -------------------------------------------------------
@@ -43,24 +45,9 @@ function DSSlider({
   );
 }
 
-// ---- CapBar -------------------------------------------------------
-const TIER_COLORS = {
-  'below-tax':   { fill: 'var(--positive)',  label: 'Under tax' },
-  'taxpayer':    { fill: 'var(--warning)',    label: 'Over tax' },
-  'first-apron': { fill: 'var(--warning)',    label: 'First apron' },
-  'second-apron':{ fill: 'var(--negative)',   label: 'Second apron' },
-};
-
+// ---- CapBar (per contract year) -----------------------------------
 function CapBar({ yr }: { yr: ContractYearResponse }) {
-  const MAX_USD = yr.second_apron * 1.05;
-  const pctOfMax = Math.min(yr.cap_hit_usd / MAX_USD, 1) * 100;
-  const taxPct  = (yr.tax_line / MAX_USD) * 100;
-  const ap1Pct  = (yr.first_apron / MAX_USD) * 100;
-  const ap2Pct  = (yr.second_apron / MAX_USD) * 100;
-
   const tier = capTier(yr.cap_hit_usd, yr.tax_line, yr.first_apron, yr.second_apron);
-  const { fill, label } = TIER_COLORS[tier];
-
   const optionLabel = yr.is_player_option ? 'Player opt.' : yr.is_team_option ? 'Team opt.' : null;
 
   return (
@@ -77,35 +64,19 @@ function CapBar({ yr }: { yr: ContractYearResponse }) {
           {yr.is_projected_cap && <Badge tone="neutral" variant="outline" size="sm">Projected cap</Badge>}
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Badge tone={tier === 'below-tax' ? 'positive' : tier === 'taxpayer' ? 'warning' : 'negative'} size="sm">
-            {label}
-          </Badge>
+          <Badge tone={capTierBadgeTone(tier)} size="sm">{CAP_TIER_LABEL[tier]}</Badge>
           <span className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
             {fmtM(yr.cap_hit_usd)} · {fmtPct(yr.cap_hit_pct)}
           </span>
         </div>
       </div>
 
-      {/* Bar */}
-      <div style={{
-        height: 12, background: 'var(--bg-inset)', borderRadius: 'var(--radius-pill)',
-        position: 'relative', overflow: 'visible',
-      }}>
-        <div style={{
-          width: `${pctOfMax}%`, height: '100%',
-          background: fill, borderRadius: 'var(--radius-pill)',
-          opacity: 0.85,
-        }} />
-        {/* Threshold markers */}
-        {[taxPct, ap1Pct, ap2Pct].map((pct, i) => (
-          <div key={i} style={{
-            position: 'absolute', left: `${pct}%`, top: -3, bottom: -3,
-            width: 1.5,
-            background: i === 0 ? 'var(--amber-300)' : i === 1 ? 'var(--warning)' : 'var(--negative)',
-            opacity: 0.6,
-          }} />
-        ))}
-      </div>
+      <SharedCapBar
+        value={yr.cap_hit_usd}
+        taxLine={yr.tax_line}
+        firstApron={yr.first_apron}
+        secondApron={yr.second_apron}
+      />
     </div>
   );
 }
@@ -393,6 +364,15 @@ function SimulatorContent() {
                         <VerdictPill gapPct={result.value_gap_pct} size="md" />
                       </div>
                     </div>
+                    {result.value_pct != null && (
+                      <div style={{ marginTop: 16 }}>
+                        <div className="ds-eyebrow" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ color: 'var(--confidence-text)' }}>model value {fmtPct(result.value_pct)}</span>
+                          <span>proposed AAV {fmtPct(result.proposed_aav_pct)}</span>
+                        </div>
+                        <MiniValuePayGauge valuePct={result.value_pct} payPct={result.proposed_aav_pct} />
+                      </div>
+                    )}
                   </Card>
 
                   {/* Year-by-year */}
@@ -407,9 +387,22 @@ function SimulatorContent() {
                       </div>
                     }
                   >
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 16px', lineHeight: 1.5 }}>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.5 }}>
                       Cap hit for this contract each season. Markers show tax line and apron thresholds.
                     </p>
+                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16, fontSize: 11, color: 'var(--text-muted)' }}>
+                      {[
+                        { c: 'var(--grad-positive)', t: 'Under tax' },
+                        { c: 'rgba(236,178,46,0.5)', t: 'Tax → apron' },
+                        { c: 'rgba(244,98,31,0.6)', t: 'First apron' },
+                        { c: 'rgba(238,71,71,0.6)', t: 'Second apron' },
+                      ].map((z) => (
+                        <span key={z.t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ width: 14, height: 8, borderRadius: 3, background: z.c }} />
+                          {z.t}
+                        </span>
+                      ))}
+                    </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                       {result.years.map((yr) => <CapBar key={yr.season} yr={yr} />)}
                     </div>

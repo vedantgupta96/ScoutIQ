@@ -319,7 +319,75 @@ export interface PlayerScoutRatingsResponse {
   caveat: string;
 }
 
+// ---- Team war room -------------------------------------------
+
+export interface TeamListItem {
+  team_id: number;
+  abbreviation: string | null;
+  name: string | null;
+  conference: string | null;
+  division: string | null;
+}
+
+export type CapTier = 'below-tax' | 'taxpayer' | 'first-apron' | 'second-apron';
+
+export interface TeamCapContext {
+  season: string;
+  salary_cap: number | null;
+  tax_line: number | null;
+  first_apron: number | null;
+  second_apron: number | null;
+  tier: CapTier;
+  room_to_tax: number | null;
+  room_to_first_apron: number | null;
+  room_to_second_apron: number | null;
+}
+
+export interface TeamCapTotals {
+  total_payroll_usd: number;
+  payroll_pct: number | null;
+  total_value_usd: number;
+  surplus_usd: number;
+  surplus_pct: number | null;
+  roster_size: number;
+  payroll_player_count: number;
+  valued_player_count: number;
+  bargain_count: number;
+  overpay_count: number;
+}
+
+export interface TeamCapSheetPlayer extends PlayerSummary {
+  age: number | null;
+  cap_hit_usd: number | null;
+  salary_pct: number | null;
+  value_pct: number | null;
+  value_usd: number | null;
+  gap_pct: number | null;
+  valuation_status: ValuationStatus;
+  pay_source: 'contract' | 'salary' | null;
+}
+
+export interface TeamCapSheetResponse {
+  team: TeamSummary;
+  season: string;
+  cap_context: TeamCapContext;
+  totals: TeamCapTotals;
+  players: TeamCapSheetPlayer[];
+  top_bargain: TeamCapSheetPlayer | null;
+  top_overpay: TeamCapSheetPlayer | null;
+  caveat: string;
+}
+
 // ---- API functions -------------------------------------------
+
+export function getTeams(signal?: AbortSignal): Promise<TeamListItem[]> {
+  return apiFetch<TeamListItem[]>('/teams', { signal });
+}
+
+export function getTeamCapSheet(teamId: number, season?: string, signal?: AbortSignal): Promise<TeamCapSheetResponse> {
+  const params = season ? `?season=${encodeURIComponent(season)}` : '';
+  return apiFetch<TeamCapSheetResponse>(`/teams/${teamId}/cap-sheet${params}`, { signal });
+}
 
 export function searchPlayers(query?: string, limit = 20, signal?: AbortSignal): Promise<PlayerSummary[]> {
   const params = new URLSearchParams({ limit: String(limit) });
