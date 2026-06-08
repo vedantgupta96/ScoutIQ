@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ClipboardCheck, Target, TrendingUp, TrendingDown, TriangleAlert } from 'lucide-react';
 import {
   searchPlayers,
+  getPlayerValuationCautions,
+  PlayerCardResponse,
   PlayerSummary,
   getBacktest,
   BacktestResponse,
@@ -259,6 +261,40 @@ function LeaderRow({ row, summary, onPick }: {
   );
 }
 
+function CautionRow({ player, onPick }: { player: PlayerCardResponse; onPick: () => void }) {
+  const valuation = player.valuation;
+  const team = player.current_team?.abbreviation ?? player.latest_stats_team?.abbreviation;
+  return (
+    <button
+      onClick={onPick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+        width: '100%', textAlign: 'left', background: 'transparent',
+        border: 'none', borderBottom: '1px solid var(--border-subtle)',
+        cursor: 'pointer', transition: 'background var(--duration-fast) var(--ease-out)',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      <Avatar name={player.full_name} size="sm" position={player.position} playerId={player.player_id} />
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {player.full_name}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {team ? `${team} · ` : ''}{valuation?.caution_flags.slice(0, 2).join(' · ') || 'Model caution'}
+        </div>
+      </div>
+      <div className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
+        {valuation ? `${fmtPct(valuation.value_pct)} vs ${valuation.actual_pct != null ? fmtPct(valuation.actual_pct) : '—'}` : '—'}
+      </div>
+      <span className="ds-tnum" style={{ fontSize: 14, fontWeight: 700, width: 64, textAlign: 'right', color: 'var(--warning-text)' }}>
+        {valuation?.gap_pct != null ? `${signed(valuation.gap_pct)}%` : '—'}
+      </span>
+    </button>
+  );
+}
+
 type ScatterPoint = { name: string; actual: number; value: number };
 
 // SVG scatter plot: predicted vs actual.
@@ -353,6 +389,8 @@ export default function ModelPage() {
   const [valRows, setValRows] = useState<BacktestValuationRow[]>([]);
   const [scoutEval, setScoutEval] = useState<ScoutRatingEvalResponse | null>(null);
   const [scoutEvalError, setScoutEvalError] = useState<string | null>(null);
+  const [cautionRows, setCautionRows] = useState<PlayerCardResponse[]>([]);
+  const [cautionError, setCautionError] = useState<string | null>(null);
   const [lookup, setLookup] = useState<Record<string, PlayerSummary | null>>({});
   const [minMpg, setMinMpg] = useState(MIN_MPG);
   const [minGp, setMinGp] = useState(MIN_GP);
@@ -369,6 +407,10 @@ export default function ModelPage() {
     getScoutRatingEval()
       .then(setScoutEval)
       .catch((e: unknown) => setScoutEvalError(e instanceof Error ? e.message : 'Scout-rating eval unavailable.'));
+
+    getPlayerValuationCautions({ limit: 8 })
+      .then((res) => setCautionRows(res.items))
+      .catch((e: unknown) => setCautionError(e instanceof Error ? e.message : 'Valuation caution board unavailable.'));
   }, []);
 
   // Single source of truth: the committed held-out backtest rows drive both the
@@ -509,6 +551,31 @@ export default function ModelPage() {
       )}
 
       <ScoutEvalPanel scoutEval={scoutEval} />
+
+      {cautionError && (
+        <AssumptionFlag tone="warning" title="Caution board unavailable" icon={<TriangleAlert size={16} />}>
+          {cautionError}
+        </AssumptionFlag>
+      )}
+
+      <Surface
+        variant="dossier"
+        eyebrow="Live caution cases"
+        icon={<TriangleAlert size={15} />}
+        flush
+        action={<Badge tone="warning" size="sm">{cautionRows.length || '—'} flagged</Badge>}
+      >
+        {cautionRows.length === 0
+          ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>Loading caution board…</div>
+          : cautionRows.map((player) => (
+            <CautionRow
+              key={player.player_id}
+              player={player}
+              onPick={() => router.push(`/players/${player.player_id}`)}
+            />
+          ))
+        }
+      </Surface>
 
       {/* Leaderboard qualification controls */}
       <Card padded>

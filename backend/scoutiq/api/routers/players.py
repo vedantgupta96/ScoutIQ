@@ -77,6 +77,14 @@ class PlayerWatchlistResponse(BaseModel):
     caveat: str
 
 
+class PlayerValuationCautionsResponse(BaseModel):
+    items: list[PlayerCard]
+    total: int
+    limit: int
+    season: str
+    caveat: str
+
+
 class PlayerContractYear(BaseModel):
     season: str
     cap_hit_usd: int | None
@@ -574,6 +582,52 @@ def get_player_watchlist(
         caveat=(
             "Default watchlist ranks qualified players from the latest loaded season by absolute value/pay gap. "
             "Historical players remain searchable by name."
+        ),
+    )
+
+
+@router.get("/valuation-cautions", response_model=PlayerValuationCautionsResponse)
+def get_player_valuation_cautions(
+    season: str | None = Query(None, description="Stats/pay season to audit; defaults to latest."),
+    qualified_only: bool = Query(True),
+    limit: int = Query(12, ge=1, le=50),
+    db: DB = None,
+):
+    """Return live valuation rows where the raw value gap needs extra scrutiny."""
+    target_season = season or LATEST_SEASON
+    players = _watchlist_candidate_rows(
+        query=None,
+        season=target_season,
+        position=None,
+        team=None,
+        qualified_only=qualified_only,
+        candidate_limit=900,
+        db=db,
+    )
+    summaries = _batched_summaries(players, db)
+    try:
+        valuations = _card_valuations(players, summaries, db, season=target_season)
+    except FileNotFoundError:
+        valuations = {}
+
+    cards = [
+        card
+        for card in _player_cards_from_parts(players, summaries, valuations)
+        if card.valuation and card.valuation.verdict_tone == "warning"
+    ]
+    cards.sort(
+        key=lambda card: abs(card.valuation.gap_pct or 0) if card.valuation else 0,
+        reverse=True,
+    )
+
+    return PlayerValuationCautionsResponse(
+        items=cards[:limit],
+        total=len(cards),
+        limit=limit,
+        season=target_season,
+        caveat=(
+            "Live caution board: rows where production-implied value and pay diverge, but age, minimum "
+            "salary, or impact indicators make the raw gap less trustworthy as a clean bargain signal."
         ),
     )
 

@@ -443,6 +443,42 @@ def test_player_watchlist_defaults_to_ranked_recent_mismatches(monkeypatch):
     assert body["items"][0]["valuation"]["gap_pct"] == 3.58
 
 
+def test_valuation_cautions_returns_warning_verdicts(monkeypatch):
+    monkeypatch.setattr(
+        players_router,
+        "predict_many_from_features",
+        lambda rows: [
+            {
+                "value_pct": 35.0,
+                "lo_pct": 30.0,
+                "hi_pct": 40.0,
+                "model_version": "v0-gbm-conformal",
+            }
+            for _ in rows
+        ],
+    )
+    fake = FakeDB()
+    fake.player_season.age = 37
+    fake.player_season.advanced = {
+        **fake.player_season.advanced,
+        "BPM": -0.4,
+        "WS48": 0.009,
+        "NET_RATING": -12.1,
+        "TS_PCT": 0.528,
+        "USG_PCT": 0.252,
+    }
+    client = _client(fake)
+
+    response = client.get("/players/valuation-cautions?season=2024-25&limit=5")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["full_name"] == "Desmond Bane"
+    assert body["items"][0]["valuation"]["verdict_label"] == "Salary bargain"
+    assert body["items"][0]["valuation"]["verdict_tone"] == "warning"
+
+
 def test_valuation_without_season_uses_latest_available_player_season(monkeypatch):
     captured = {}
 
