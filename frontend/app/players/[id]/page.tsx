@@ -154,7 +154,9 @@ function ScoutTraitRow({ trait }: { trait: PlayerScoutTraitRating }) {
 
 function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsResponse | null; error: string | null }) {
   return (
-    <Card
+    <Surface
+      variant="dossier"
+      teamAccent
       eyebrow="Scout ratings"
       icon={<ClipboardCheck size={15} />}
       action={<Badge tone="warning" variant="outline" size="sm">synthetic fixture</Badge>}
@@ -185,7 +187,7 @@ function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsRespo
           </p>
         </>
       )}
-    </Card>
+    </Surface>
   );
 }
 
@@ -260,7 +262,9 @@ function ContractCard({
   }
 
   return (
-    <Card
+    <Surface
+      variant="board"
+      teamAccent
       eyebrow="Current contract"
       icon={<FileText size={15} />}
       action={contract ? <Badge tone="neutral" variant="outline" size="sm">{contract.source}</Badge> : undefined}
@@ -297,7 +301,7 @@ function ContractCard({
           </div>
         </>
       )}
-    </Card>
+    </Surface>
   );
 }
 
@@ -389,7 +393,9 @@ function SimilarPlayersCard({
   onModeChange: (mode: SimilarPlayersMode) => void;
 }) {
   return (
-    <Card
+    <Surface
+      variant="board"
+      teamAccent
       eyebrow="Similar player market"
       icon={<Users size={15} />}
       action={market ? <Badge tone="confidence" variant="outline" size="sm">{market.season}</Badge> : undefined}
@@ -432,7 +438,7 @@ function SimilarPlayersCard({
           </p>
         </>
       )}
-    </Card>
+    </Surface>
   );
 }
 
@@ -753,12 +759,12 @@ function ActionRail({
         </div>
       </Card>
 
-      <Card eyebrow="Case file" icon={<FileText size={15} />}>
+      <Surface variant="dossier" teamAccent eyebrow="Case file" icon={<FileText size={15} />}>
         <RiskLine label="Active view" value={WORKSPACE_TABS.find((tab) => tab.key === activeTab)?.label ?? '—'} />
         <RiskLine label="Value gap" value={val.gap_pct != null ? `${signed(val.gap_pct)}%` : '—'} tone={val.gap_pct != null && val.gap_pct >= 0 ? 'positive' : 'negative'} />
         <RiskLine label="Top comp" value={topMatch?.player.full_name ?? 'Loading'} />
         <RiskLine label="Extension window" value={contract?.extension_start_season ?? '—'} />
-      </Card>
+      </Surface>
     </aside>
   );
 }
@@ -847,12 +853,14 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
 
   const modelInputs = (
     <div className="siq-read-grid">
-      <Card
+      <Surface
+        variant="instrument"
+        teamAccent
         eyebrow="Production-implied value"
         icon={<Scale size={15} />}
         action={<Badge tone="confidence" variant="outline" size="sm">80% interval</Badge>}
       >
-        <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 16 }}>
           <StatTile
             label="Model value"
             value={fmtM(valueUsd)}
@@ -872,15 +880,23 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
             />
           )}
         </div>
-        <ValueGauge
-          valuePct={val.value_pct}
-          loPct={val.lo_pct}
-          hiPct={val.hi_pct}
-          actualPct={val.actual_pct}
-        />
-      </Card>
+        <div className="siq-gauge-well">
+          <div className="siq-gauge-well__caption">
+            <span className="ds-eyebrow">Value vs pay on the cap</span>
+            <Badge tone="confidence" variant="outline" size="sm">
+              80% range {fmtPct(val.lo_pct)}–{fmtPct(val.hi_pct)}
+            </Badge>
+          </div>
+          <ValueGauge
+            valuePct={val.value_pct}
+            loPct={val.lo_pct}
+            hiPct={val.hi_pct}
+            actualPct={val.actual_pct}
+          />
+        </div>
+      </Surface>
 
-      <Card eyebrow="Model inputs" icon={<Activity size={15} />}>
+      <Surface variant="board" teamAccent eyebrow="Model inputs" icon={<Activity size={15} />}>
         {featureEntries.length > 0 ? (
           <>
             {featureEntries.map(([key, value]) => {
@@ -896,9 +912,9 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
             Feature data not available for this player-season.
           </p>
         )}
-      </Card>
+      </Surface>
 
-      <Card eyebrow="Model info" icon={<BarChart3 size={15} />}>
+      <Surface variant="dossier" teamAccent eyebrow="Model info" icon={<BarChart3 size={15} />}>
         <StatRow label="Model version" value={val.model_version ?? '—'} />
         <StatRow label="Season" value={val.season} />
         <StatRow label="Value" value={`${fmtPct(val.value_pct)} of cap`} />
@@ -909,7 +925,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
             value={`${signed(val.gap_pct)}%`}
           />
         )}
-      </Card>
+      </Surface>
 
       <AssumptionFlag tone="confidence" title="Calibrated honesty" icon={<Info size={16} />}>
         This is a production-implied valuation, not a market-value estimate. It does not account for
