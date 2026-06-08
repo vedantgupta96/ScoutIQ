@@ -10,7 +10,7 @@ from sqlalchemy import and_, desc, select
 
 from scoutiq.api.deps import DB
 from scoutiq.llm.player_ratings import PlayerScoutRatings, aggregate_player_scout_ratings, load_player_reports
-from scoutiq.model.predict import build_features_from_season, predict_for_player, predict_many_from_features
+from scoutiq.model.predict import build_features_from_season, predict_from_features, predict_many_from_features
 from scoutiq.model.similarity import (
     SIMILARITY_BASIS,
     SimilarityMode,
@@ -733,13 +733,21 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
     latest = _latest_stats_row(player_id, db)
     target_season = season or (latest[0] if latest else LATEST_SEASON)
 
-    try:
-        prediction = predict_for_player(player_id, target_season, db)
-    except LookupError:
+    season_row = db.scalars(
+        select(PlayerSeason).where(
+            PlayerSeason.player_id == player_id,
+            PlayerSeason.season == target_season,
+        )
+    ).first()
+    if season_row is None:
         raise HTTPException(
             status_code=404,
             detail=f"No stats for player_id={player_id} in season {target_season}.",
         )
+
+    features = build_features_from_season(season_row, player)
+    try:
+        prediction = predict_from_features(features)
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
@@ -774,7 +782,7 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
         "salary_cap": salary_cap,
         "value_usd": int(value_pct / 100 * salary_cap) if salary_cap else None,
         "model_version": prediction["model_version"],
-        "features": prediction.get("features"),
+        "features": {k: (None if v != v else v) for k, v in features.items()},
     }
 
 

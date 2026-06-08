@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -39,7 +39,7 @@ class Player(Base):
     player_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)  # nba_api PLAYER_ID
     full_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     position: Mapped[str | None] = mapped_column(String(16))  # filled from BBRef advanced table
-    current_team_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("teams.team_id"))
+    current_team_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("teams.team_id"), index=True)
     current_team_source: Mapped[str | None] = mapped_column(String(64))
     current_team_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -63,7 +63,10 @@ class PlayerXref(Base):
 
 class PlayerSeason(Base):
     __tablename__ = "player_seasons"
-    __table_args__ = (UniqueConstraint("player_id", "season", name="uq_player_season"),)
+    __table_args__ = (
+        UniqueConstraint("player_id", "season", name="uq_player_season"),
+        Index("ix_player_seasons_season_minutes", "season", "minutes"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.player_id"), index=True)
@@ -105,7 +108,10 @@ class CapConstants(Base):
 class Contract(Base):
     """Forward contract structure from Spotrac — what the player is OWED, not what they earned."""
     __tablename__ = "contracts"
-    __table_args__ = (UniqueConstraint("player_id", "season_start", name="uq_contract_player_start"),)
+    __table_args__ = (
+        UniqueConstraint("player_id", "season_start", name="uq_contract_player_start"),
+        Index("ix_contracts_player_latest", "player_id", "season_start", "scraped_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.player_id"), index=True)
@@ -124,7 +130,10 @@ class Contract(Base):
 class ContractYear(Base):
     """One season of a Contract — the year-by-year cap hit used by the cap simulator."""
     __tablename__ = "contract_years"
-    __table_args__ = (UniqueConstraint("contract_id", "season", name="uq_contract_year"),)
+    __table_args__ = (
+        UniqueConstraint("contract_id", "season", name="uq_contract_year"),
+        Index("ix_contract_years_season_contract_id", "season", "contract_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     contract_id: Mapped[int] = mapped_column(Integer, ForeignKey("contracts.id"), index=True)
