@@ -16,17 +16,19 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { fmtM, fmtPct, gapLabel, gapTone, signed } from '@/lib/utils';
 
-type GapTone = 'positive' | 'negative' | 'neutral';
+type GapTone = 'positive' | 'negative' | 'neutral' | 'warning';
 
 const TONE_COLOR: Record<GapTone, string> = {
   positive: 'var(--positive)',
   negative: 'var(--negative)',
   neutral: 'var(--text-secondary)',
+  warning: 'var(--warning)',
 };
 const TONE_TEXT: Record<GapTone, string> = {
   positive: 'var(--positive-text)',
   negative: 'var(--negative-text)',
   neutral: 'var(--text-secondary)',
+  warning: 'var(--warning-text)',
 };
 
 // Count a numeric label up from its previous value on mount / change. Calm,
@@ -143,7 +145,7 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
   const team = player.current_team ?? player.latest_stats_team;
   const valuation = player.valuation_status === 'ready' ? player.valuation : undefined;
   const gap = valuation?.gap_pct ?? null;
-  const tone: GapTone = gapTone(gap);
+  const tone: GapTone = valuation?.verdict_tone ?? gapTone(gap);
   const accent = gap == null ? 'var(--border-strong)' : TONE_COLOR[tone];
   const valueUsd = valuation?.salary_cap != null
     ? (valuation.value_pct / 100) * valuation.salary_cap
@@ -195,7 +197,7 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
               gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-subtle)',
             }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: TONE_TEXT[tone] }}>
-                {gapLabel(gap)}
+                {valuation.verdict_label ?? gapLabel(gap)}
               </span>
               {gap != null && (
                 <CountUpPct

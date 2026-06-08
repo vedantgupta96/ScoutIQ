@@ -255,8 +255,8 @@ def teardown_function():
 def test_simulate_contract_happy_path(monkeypatch):
     monkeypatch.setattr(
         simulator_router,
-        "predict_for_player",
-        lambda player_id, season, db: {
+        "predict_from_features",
+        lambda features: {
             "value_pct": 23.5,
             "lo_pct": 18.1,
             "hi_pct": 28.9,
@@ -290,8 +290,8 @@ def test_simulate_contract_happy_path(monkeypatch):
 def test_deprecated_simulator_alias_still_works(monkeypatch):
     monkeypatch.setattr(
         simulator_router,
-        "predict_for_player",
-        lambda player_id, season, db: {
+        "predict_from_features",
+        lambda features: {
             "value_pct": 20.0,
             "lo_pct": 15.0,
             "hi_pct": 25.0,
@@ -408,6 +408,9 @@ def test_player_cards_returns_batched_valuation_snippets(monkeypatch):
     assert body[0]["valuation"]["value_pct"] == 23.5
     assert body[0]["valuation"]["actual_pct"] == 19.92
     assert body[0]["valuation"]["gap_pct"] == 3.58
+    assert body[0]["valuation"]["verdict_label"] == "Significant bargain"
+    assert body[0]["valuation"]["verdict_tone"] == "positive"
+    assert body[0]["valuation"]["caution_flags"] == []
 
 
 def test_player_watchlist_defaults_to_ranked_recent_mismatches(monkeypatch):
@@ -443,24 +446,45 @@ def test_player_watchlist_defaults_to_ranked_recent_mismatches(monkeypatch):
 def test_valuation_without_season_uses_latest_available_player_season(monkeypatch):
     captured = {}
 
-    def fake_predict(player_id, season, db):
-        captured["season"] = season
+    def fake_predict(features):
+        captured["gp"] = features["gp"]
         return {
             "value_pct": 23.5,
             "lo_pct": 18.1,
             "hi_pct": 28.9,
             "model_version": "v0-gbm-conformal",
-            "features": {"gp": 70},
         }
 
-    monkeypatch.setattr(players_router, "predict_for_player", fake_predict)
+    monkeypatch.setattr(players_router, "predict_from_features", fake_predict)
     client = _client(FakeDB())
 
     response = client.get("/players/1630217/valuation")
 
     assert response.status_code == 200
     assert response.json()["season"] == "2024-25"
-    assert captured["season"] == "2024-25"
+    assert captured["gp"] == 70
+
+
+def test_valuation_verdict_cautions_minimum_veteran_impact_gap():
+    label, tone, flags, caveat = players_router._valuation_verdict(
+        gap_pct=15.76,
+        actual_pct=1.48,
+        features={
+            "age": 37,
+            "BPM": "-0.4",
+            "WS48": ".009",
+            "NET_RATING": -12.1,
+            "TS_PCT": 0.528,
+            "USG_PCT": 0.252,
+        },
+    )
+
+    assert label == "Salary bargain"
+    assert tone == "warning"
+    assert "Age 35+" in flags
+    assert "Minimum-salary gap" in flags
+    assert "Negative BPM" in flags
+    assert caveat
 
 
 def test_player_contract_returns_current_contract_timeline(monkeypatch):

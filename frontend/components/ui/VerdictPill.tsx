@@ -3,6 +3,8 @@ import { gapLabel, gapTone, signed } from '@/lib/utils';
 interface VerdictPillProps {
   gapPct: number | null;
   size?: 'sm' | 'md' | 'lg';
+  label?: string;
+  tone?: 'positive' | 'negative' | 'neutral' | 'warning';
 }
 
 const SIZE = {
@@ -11,15 +13,16 @@ const SIZE = {
   lg: { label: 12, value: 16, pad: '6px 14px', gap: 7 },
 };
 
-export function VerdictPill({ gapPct, size = 'md' }: VerdictPillProps) {
-  const tone = gapTone(gapPct);
-  const label = gapLabel(gapPct);
+export function VerdictPill({ gapPct, size = 'md', label, tone: toneOverride }: VerdictPillProps) {
+  const tone = toneOverride ?? gapTone(gapPct);
+  const displayLabel = label ?? gapLabel(gapPct);
   const s = SIZE[size];
 
   const colors = {
     positive: { bg: 'var(--positive-soft)', text: 'var(--positive-text)' },
     negative: { bg: 'var(--negative-soft)', text: 'var(--negative-text)' },
     neutral:  { bg: 'var(--bg-inset)',       text: 'var(--text-secondary)' },
+    warning:  { bg: 'var(--warning-soft)',   text: 'var(--warning-text)' },
   }[tone];
 
   return (
@@ -30,7 +33,7 @@ export function VerdictPill({ gapPct, size = 'md' }: VerdictPillProps) {
       background: colors.bg,
       gap: 1,
     }}>
-      <span style={{ fontSize: s.label, fontWeight: 600, color: colors.text, lineHeight: 1 }}>{label}</span>
+      <span style={{ fontSize: s.label, fontWeight: 600, color: colors.text, lineHeight: 1 }}>{displayLabel}</span>
       {gapPct != null && (
         <span className="ds-tnum" style={{ fontSize: s.value, fontWeight: 700, color: colors.text, lineHeight: 1.2 }}>
           {signed(gapPct)}%

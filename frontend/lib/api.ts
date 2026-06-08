@@ -51,6 +51,10 @@ export interface ValuationResponse {
   value_usd: number | null;
   model_version: string;
   features: Record<string, number> | null;
+  verdict_label: string;
+  verdict_tone: 'positive' | 'negative' | 'neutral' | 'warning';
+  caution_flags: string[];
+  caveat: string | null;
 }
 
 export type ValuationStatus = 'ready' | 'unavailable';
@@ -65,6 +69,10 @@ export interface PlayerCardValuation {
   gap_pct: number | null;
   salary_cap: number | null;
   model_version: string;
+  verdict_label: string;
+  verdict_tone: 'positive' | 'negative' | 'neutral' | 'warning';
+  caution_flags: string[];
+  caveat: string | null;
 }
 
 export interface PlayerCardResponse extends PlayerSummary {

@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from scoutiq.api.cap_simulator import SeasonCapData, simulate
 from scoutiq.api.deps import DB
-from scoutiq.model.predict import predict_for_player
+from scoutiq.model.predict import build_features_from_season, predict_from_features
 from scoutiq.models import CapConstants, Player, PlayerSeason
 
 router = APIRouter(tags=["simulator"])
@@ -125,7 +125,7 @@ def _simulate_cap(req: SimulatorRequest, db: DB = None) -> dict:
 
     if ps_check is not None:
         try:
-            valuation = predict_for_player(req.player_id, val_season, db)
+            valuation = predict_from_features(build_features_from_season(ps_check, player))
         except (LookupError, FileNotFoundError):
             valuation = None
 
