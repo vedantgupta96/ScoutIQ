@@ -48,3 +48,21 @@ def test_contract_table_uses_cash_fallback_when_cap_hit_blank():
     assert rows[0]["season"] == "2025-26"
     assert rows[0]["aav"] == 85_300
     assert rows[0]["cap_pct"] is None
+
+
+def test_player_matcher_handles_known_source_aliases():
+    index = {
+        load_contracts._normalize("Bones Hyland"): 1,
+        load_contracts._normalize("Cam Thomas"): 2,
+        load_contracts._normalize("Herbert Jones"): 3,
+        load_contracts._normalize("Nic Claxton"): 4,
+        load_contracts._normalize("Ronald Holland II"): 5,
+        load_contracts._normalize("Svi Mykhailiuk"): 6,
+    }
+
+    assert load_contracts._match_player("Nah'Shon Hyland", index) == 1
+    assert load_contracts._match_player("Cameron Thomas", index) == 2
+    assert load_contracts._match_player("Herb Jones", index) == 3
+    assert load_contracts._match_player("Nicolas Claxton", index) == 4
+    assert load_contracts._match_player("Ron Holland II", index) == 5
+    assert load_contracts._match_player("Sviatoslav Mykhailiuk", index) == 6

@@ -53,6 +53,15 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
+FIRST_NAME_ALIASES = {
+    "bones": "nahshon",
+    "cam": "cameron",
+    "herb": "herbert",
+    "nic": "nicolas",
+    "ron": "ronald",
+    "svi": "sviatoslav",
+}
+
 NBA_TEAM_SLUGS = [
     "atlanta-hawks", "boston-celtics", "brooklyn-nets", "charlotte-hornets",
     "chicago-bulls", "cleveland-cavaliers", "dallas-mavericks", "denver-nuggets",
@@ -120,7 +129,11 @@ def _normalize(name: str) -> str:
     n = n.lower()
     n = re.sub(r"\s+(jr\.?|sr\.?|ii|iii|iv)$", "", n)
     n = re.sub(r"[^a-z\s]", "", n)
-    return re.sub(r"\s+", " ", n).strip()
+    n = re.sub(r"\s+", " ", n).strip()
+    parts = n.split()
+    if parts and parts[0] in FIRST_NAME_ALIASES:
+        parts[0] = FIRST_NAME_ALIASES[parts[0]]
+    return " ".join(parts)
 
 
 # ---------------------------------------------------------------------------
