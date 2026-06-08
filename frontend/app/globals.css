@@ -333,8 +333,8 @@ a { color: inherit; }
 
 .siq-decision-hero {
   display: grid;
-  grid-template-columns: minmax(360px, 1fr) minmax(360px, 0.78fr) minmax(286px, 0.46fr);
-  gap: 18px;
+  grid-template-columns: minmax(380px, 1fr) minmax(420px, 0.9fr) minmax(220px, auto);
+  gap: 20px;
   align-items: center;
   padding: 18px;
   border: 1px solid var(--border-subtle);
@@ -351,10 +351,10 @@ a { color: inherit; }
 .siq-decision-hero::before {
   content: '';
   position: absolute;
-  top: 16px;
-  right: 278px;
-  width: 136px;
-  height: 58px;
+  top: 14px;
+  right: 390px;
+  width: 150px;
+  height: 64px;
   border: 1px solid color-mix(in srgb, var(--team-primary) 28%, transparent);
   border-radius: var(--radius-sm);
   transform: skewX(-12deg);
@@ -429,66 +429,27 @@ a { color: inherit; }
 .siq-decision-snapshot {
   display: grid;
   grid-template-columns: repeat(3, minmax(112px, 1fr));
-  gap: 16px;
-  min-width: 360px;
-  max-width: 520px;
-  padding: 13px 18px 13px 20px;
-  border: 1px solid color-mix(in srgb, var(--team-primary) 20%, var(--border-subtle));
-  border-radius: var(--radius-sm);
+  gap: 18px;
+  min-width: 420px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--team-primary) 14%, var(--border-subtle));
+  border-radius: var(--radius-md);
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--team-primary) 8%, transparent), transparent 46%),
     var(--bg-inset);
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--team-primary) 42%, transparent);
   position: relative;
   z-index: 2;
-  clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 0 100%);
-}
-
-.siq-decision-snapshot::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 13px;
-  height: 13px;
-  border-left: 1px solid color-mix(in srgb, var(--team-primary) 24%, var(--border-subtle));
-  border-bottom: 1px solid color-mix(in srgb, var(--team-primary) 24%, var(--border-subtle));
-  background: color-mix(in srgb, var(--team-primary) 8%, var(--bg-panel));
 }
 
 .siq-decision-actions {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  flex-direction: column;
+  flex-wrap: wrap;
   position: relative;
   z-index: 2;
-  justify-self: stretch;
-  min-width: 0;
-}
-
-.siq-decision-actions > * {
-  align-self: flex-end;
-}
-
-.siq-decision-command-stack {
-  display: grid;
-  grid-template-columns: minmax(158px, 1fr) minmax(108px, auto);
-  gap: 8px;
-  align-items: center;
-  width: 100%;
-  max-width: 300px;
-  padding: 8px;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--team-wash) 55%, transparent);
-  border: 1px solid color-mix(in srgb, var(--team-primary) 12%, var(--border-subtle));
-  backdrop-filter: blur(8px);
-}
-
-.siq-decision-command-stack .siq-primary-button,
-.siq-decision-command-stack .siq-secondary-button {
-  white-space: nowrap;
 }
 
 .siq-player-cutout {
@@ -496,24 +457,6 @@ a { color: inherit; }
   object-position: center top;
   pointer-events: none;
   user-select: none;
-}
-
-.siq-player-cutout-hero {
-  position: absolute;
-  right: 236px;
-  bottom: -30px;
-  width: 190px;
-  height: 194px;
-  opacity: 0.14;
-  filter: grayscale(1) contrast(1.12) saturate(0.7);
-  mix-blend-mode: multiply;
-  mask-image: linear-gradient(180deg, #000 0%, #000 62%, transparent 100%);
-  z-index: 1;
-}
-
-[data-theme="dark"] .siq-player-cutout-hero {
-  opacity: 0.24;
-  mix-blend-mode: screen;
 }
 
 .siq-workspace-layout {
@@ -808,18 +751,6 @@ a { color: inherit; }
     align-items: flex-start;
   }
 
-  .siq-player-cutout-hero {
-    right: 22px;
-    width: 148px;
-    height: 150px;
-    opacity: 0.11;
-  }
-
-  .siq-decision-command-stack {
-    width: auto;
-    max-width: none;
-  }
-
   .siq-action-rail {
     position: static;
     display: grid;
@@ -905,15 +836,6 @@ a { color: inherit; }
     height: 52px;
   }
 
-  .siq-player-cutout-hero {
-    right: 10px;
-    bottom: auto;
-    top: 62px;
-    width: 126px;
-    height: 130px;
-    opacity: 0.11;
-  }
-
   .siq-decision-identity {
     align-items: flex-start;
   }
@@ -926,15 +848,6 @@ a { color: inherit; }
     grid-template-columns: minmax(0, 1fr);
     min-width: 0;
     max-width: none;
-  }
-
-  .siq-decision-actions > * {
-    align-self: flex-start;
-  }
-
-  .siq-decision-command-stack {
-    grid-template-columns: minmax(0, 1fr);
-    width: 100%;
   }
 
   .siq-read-grid,
@@ -963,9 +876,6 @@ a { color: inherit; }
     width: 100%;
   }
 
-  .siq-decision-command-stack .siq-secondary-button {
-    width: 100%;
-  }
 }
 
 @media (max-width: 460px) {
@@ -979,12 +889,6 @@ a { color: inherit; }
 
   .siq-decision-hero {
     padding: 14px;
-  }
-
-  .siq-player-cutout-hero {
-    width: 108px;
-    height: 112px;
-    opacity: 0.09;
   }
 
   .siq-decision-identity {

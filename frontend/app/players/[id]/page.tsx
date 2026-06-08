@@ -473,7 +473,6 @@ function DecisionHero({
 }) {
   return (
     <section className="siq-decision-hero">
-      <PlayerCutout playerId={val.player_id} name={val.player_name} />
       <div className="siq-decision-identity">
         <Avatar name={val.player_name} size="xl" position={val.position} playerId={val.player_id} />
         <div style={{ minWidth: 0 }}>
@@ -514,16 +513,14 @@ function DecisionHero({
 
       <div className="siq-decision-actions">
         <VerdictPill gapPct={val.gap_pct} size="lg" />
-        <div className="siq-decision-command-stack">
-          <button onClick={onSimulate} className="siq-primary-button">
-            <SlidersHorizontal size={15} />
-            Run simulation
-          </button>
-          <Link href={extensionHref} className="siq-secondary-button" style={{ textDecoration: 'none' }}>
-            <DollarSign size={15} />
-            Price deal
-          </Link>
-        </div>
+        <button onClick={onSimulate} className="siq-primary-button">
+          <SlidersHorizontal size={15} />
+          Run simulation
+        </button>
+        <Link href={extensionHref} className="siq-secondary-button" style={{ textDecoration: 'none' }}>
+          <DollarSign size={15} />
+          Price deal
+        </Link>
       </div>
     </section>
   );
