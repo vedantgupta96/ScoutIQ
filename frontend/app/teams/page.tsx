@@ -87,12 +87,7 @@ function RosterRow({ player }: { player: TeamCapSheetPlayer }) {
 
       <div>
         {player.valuation_status === 'ready' ? (
-          <>
-            <MiniValuePayGauge valuePct={player.value_pct} payPct={player.salary_pct} />
-            <div className="ds-tnum" style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-              value {player.value_pct != null ? fmtPct(player.value_pct) : '—'}
-            </div>
-          </>
+          <MiniValuePayGauge valuePct={player.value_pct} payPct={player.salary_pct} showLabels />
         ) : (
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No model value</span>
         )}
@@ -154,6 +149,8 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
               firstApron={ctx.first_apron!}
               secondApron={ctx.second_apron!}
               height={16}
+              showLabels
+              valueLabel="Payroll"
             />
             <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 14 }}>
               <RoomLine label="To tax" room={ctx.room_to_tax} />
