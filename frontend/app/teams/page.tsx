@@ -20,7 +20,7 @@ import { TeamLogo } from '@/components/ui/TeamLogo';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
 import { CapBar, CAP_TIER_LABEL, capTierBadgeTone, CapTierKey } from '@/components/cap/CapBar';
-import { fmtM, fmtPct, signed } from '@/lib/utils';
+import { fmtM, fmtPct, roundedDomainMax, signed } from '@/lib/utils';
 import { teamVisual } from '@/lib/teamVisuals';
 
 type RosterSort = 'cap' | 'gap' | 'value' | 'name';
@@ -127,13 +127,35 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
   }, [sheet.players, sort]);
 
   const gaugeDomainMaxPct = useMemo(() => {
-    const maxPct = sheet.players.reduce((max, player) => {
-      return Math.max(max, player.value_pct ?? 0, player.salary_pct ?? 0);
-    }, 0);
-    return Math.max(10, Math.ceil((maxPct * 1.15) / 5) * 5);
+    return roundedDomainMax(sheet.players.flatMap((player) => [player.value_pct, player.salary_pct]));
   }, [sheet.players]);
 
   const thresholdsReady = ctx.tax_line != null && ctx.first_apron != null && ctx.second_apron != null;
+  const surplusPositive = totals.surplus_usd >= 0;
+  const surplusDeltaDir: 'up' | 'down' = surplusPositive ? 'up' : 'down';
+  const summaryTiles = [
+    {
+      label: 'Total payroll',
+      value: fmtM(totals.total_payroll_usd),
+      unit: totals.payroll_pct != null ? `· ${fmtPct(totals.payroll_pct)}` : undefined,
+      sub: `${totals.payroll_player_count} of ${totals.roster_size} on the books`,
+    },
+    {
+      label: 'Model value',
+      value: fmtM(totals.total_value_usd),
+      sub: `${totals.valued_player_count} valued`,
+    },
+    {
+      label: 'Surplus value',
+      value: `${surplusPositive ? '+' : '−'}${fmtM(Math.abs(totals.surplus_usd))}`,
+      unit: totals.surplus_pct != null ? `· ${signed(totals.surplus_pct)}%` : undefined,
+      delta: surplusPositive ? 'value over pay' : 'pay over value',
+      deltaDir: surplusDeltaDir,
+      sub: 'model value − payroll',
+    },
+    { label: 'Bargains', value: totals.bargain_count, sub: 'value ≥ pay +1%' },
+    { label: 'Overpays', value: totals.overpay_count, sub: 'pay ≥ value +1%' },
+  ];
 
   return (
     <div
@@ -200,11 +222,11 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
 
       {/* Summary tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--panel-gap)' }}>
-        <Card padded><StatTile label="Total payroll" value={fmtM(totals.total_payroll_usd)} unit={totals.payroll_pct != null ? `· ${fmtPct(totals.payroll_pct)}` : undefined} sub={`${totals.payroll_player_count} of ${totals.roster_size} on the books`} size="sm" /></Card>
-        <Card padded><StatTile label="Model value" value={fmtM(totals.total_value_usd)} sub={`${totals.valued_player_count} valued`} size="sm" /></Card>
-        <Card padded><StatTile label="Surplus value" value={`${totals.surplus_usd >= 0 ? '+' : '−'}${fmtM(Math.abs(totals.surplus_usd))}`} unit={totals.surplus_pct != null ? `· ${signed(totals.surplus_pct)}%` : undefined} delta={totals.surplus_usd >= 0 ? 'value over pay' : 'pay over value'} deltaDir={totals.surplus_usd >= 0 ? 'up' : 'down'} sub="model value − payroll" size="sm" /></Card>
-        <Card padded><StatTile label="Bargains" value={totals.bargain_count} sub="value ≥ pay +1%" size="sm" /></Card>
-        <Card padded><StatTile label="Overpays" value={totals.overpay_count} sub="pay ≥ value +1%" size="sm" /></Card>
+        {summaryTiles.map((tile) => (
+          <Card key={tile.label} padded>
+            <StatTile {...tile} size="sm" />
+          </Card>
+        ))}
       </div>
 
       {/* Roster board */}

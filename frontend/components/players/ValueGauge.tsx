@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
+import { fmtPct, pctPosition } from '@/lib/utils';
 
 interface ValueGaugeProps {
   valuePct: number;
@@ -15,18 +16,10 @@ function computeMax(hiPct: number, valuePct: number, actualPct: number | null): 
   return Math.ceil(Math.max(40, top + 6) / 10) * 10;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function formatPct(value: number): string {
-  return `${value.toFixed(1)}%`;
-}
-
 export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProps) {
   const [hover, setHover] = useState<{ label: string; value: number; position: number } | null>(null);
   const MAX = computeMax(hiPct, valuePct, actualPct);
-  const toPosition = (v: number) => clamp((v / MAX) * 100, 0, 100);
+  const toPosition = (v: number) => pctPosition(v, MAX);
   const toPct = (v: number) => `${toPosition(v).toFixed(3)}%`;
   const labelPlacement = (position: number, shift: 'left' | 'center' | 'right' = 'center'): CSSProperties => {
     let transform = 'translateX(-50%)';
@@ -62,8 +55,8 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
   const bandEnd = toPosition(Math.max(loPct, hiPct));
   const overlap = actualPosition != null && Math.abs(valuePosition - actualPosition) < 14;
   const ariaLabel = actualPct == null
-    ? `Estimated value ${formatPct(valuePct)}, confidence interval ${formatPct(loPct)} to ${formatPct(hiPct)}.`
-    : `Estimated value ${formatPct(valuePct)}, actual pay ${formatPct(actualPct)}, confidence interval ${formatPct(loPct)} to ${formatPct(hiPct)}.`;
+    ? `Estimated value ${fmtPct(valuePct)}, confidence interval ${fmtPct(loPct)} to ${fmtPct(hiPct)}.`
+    : `Estimated value ${fmtPct(valuePct)}, actual pay ${fmtPct(actualPct)}, confidence interval ${fmtPct(loPct)} to ${fmtPct(hiPct)}.`;
 
   return (
     <div
@@ -153,7 +146,7 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
             />
             <span
               aria-hidden="true"
-              title={`Pay: ${formatPct(actualPct)}`}
+              title={`Pay: ${fmtPct(actualPct)}`}
               onMouseEnter={() => setHover({ label: 'Pay', value: actualPct, position: actualPosition ?? 0 })}
               style={{
                 position: 'absolute',
@@ -187,7 +180,7 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
                   ...labelPlacement(actualPosition ?? 0),
                 }}
               >
-                pay {formatPct(actualPct)}
+                pay {fmtPct(actualPct)}
               </span>
             )}
           </>
@@ -195,7 +188,7 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
 
         <span
           aria-hidden="true"
-          title={`Value: ${formatPct(valuePct)}`}
+          title={`Value: ${fmtPct(valuePct)}`}
           onMouseEnter={() => setHover({ label: 'Value', value: valuePct, position: valuePosition })}
           style={{
             position: 'absolute',
@@ -229,8 +222,8 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
           }}
         >
           {overlap && actualPct != null
-            ? `value ${formatPct(valuePct)} / pay ${formatPct(actualPct)}`
-            : `value ${formatPct(valuePct)}`}
+            ? `value ${fmtPct(valuePct)} / pay ${fmtPct(actualPct)}`
+            : `value ${fmtPct(valuePct)}`}
         </span>
 
         <div
@@ -281,7 +274,7 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
               pointerEvents: 'none',
             }}
           >
-            {hover.label}: {formatPct(hover.value)}
+            {hover.label}: {fmtPct(hover.value)}
           </div>
         )}
       </div>

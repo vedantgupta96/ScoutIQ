@@ -42,7 +42,7 @@ import { TeamLogo } from '@/components/ui/TeamLogo';
 import { ValueGauge } from '@/components/players/ValueGauge';
 import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
 import { PlayerCutout } from '@/components/players/PlayerCutout';
-import { fmtM, fmtPct, signed } from '@/lib/utils';
+import { clamp, fmtM, fmtPct, pctPosition, roundedDomainMax, signed } from '@/lib/utils';
 import { teamVisual } from '@/lib/teamVisuals';
 
 function StatRow({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
@@ -235,7 +235,7 @@ function ContractYearRow({ year }: { year: PlayerContractYear }) {
             background: 'var(--bg-inset)', overflow: 'hidden',
           }}>
             <div style={{
-              width: `${Math.min(100, Math.max(0, year.cap_hit_pct / 35 * 100))}%`,
+              width: `${pctPosition(year.cap_hit_pct, 35)}%`,
               height: '100%', background: barFill,
             }} />
           </div>
@@ -316,7 +316,7 @@ function SimilarPlayerRow({ result }: { result: SimilarPlayerResult }) {
   const gapColor = gap == null
     ? 'var(--text-muted)'
     : gap >= 0 ? 'var(--positive-text)' : 'var(--negative-text)';
-  const simHref = `/simulator?player=${result.player.player_id}&aav=${Math.max(1, Math.min(35, result.value_pct ?? 15))}`;
+  const simHref = `/simulator?player=${result.player.player_id}&aav=${clamp(result.value_pct ?? 15, 1, 35)}`;
 
   return (
     <div className="siq-similar-dossier-row">
@@ -356,7 +356,7 @@ function SimilarPlayerRow({ result }: { result: SimilarPlayerResult }) {
         <span className="ds-eyebrow">match strength</span>
         <div style={{ width: 124, height: 6, borderRadius: 'var(--radius-pill)', background: 'var(--bg-inset)', overflow: 'hidden' }}>
           <div style={{
-            width: `${Math.min(100, Math.max(0, result.similarity_score)).toFixed(1)}%`,
+            width: `${clamp(result.similarity_score, 0, 100).toFixed(1)}%`,
             height: '100%', background: 'var(--grad-confidence)', boxShadow: 'var(--glow-confidence)',
           }} />
         </div>
@@ -609,15 +609,12 @@ function FrontOfficeRead({
   const topMatch = similarMarket?.results[0];
   const gapTone = val.gap_pct == null ? 'neutral' : val.gap_pct >= 0 ? 'positive' : 'negative';
   const scoutTop = scoutRatings?.traits[0];
-  const marketGaugeDomainMaxPct = Math.max(
-    10,
-    Math.ceil((Math.max(
+  const marketGaugeDomainMaxPct = roundedDomainMax([
       val.value_pct ?? 0,
       val.actual_pct ?? 0,
       topMatch?.value_pct ?? 0,
       topMatch?.salary_pct ?? 0,
-    ) * 1.15) / 5) * 5,
-  );
+  ]);
 
   return (
     <div className="siq-read-grid">
@@ -850,7 +847,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   const featureEntries = val.features
     ? Object.entries(val.features).slice(0, 8)
     : [];
-  const extensionAav = Math.max(1, Math.min(35, Number(val.value_pct.toFixed(1))));
+  const extensionAav = clamp(Number(val.value_pct.toFixed(1)), 1, 35);
   const extensionHref = contract?.extension_start_season
     ? `/simulator?player=${playerId}&start=${encodeURIComponent(contract.extension_start_season)}&aav=${extensionAav}&years=4`
     : `/simulator?player=${playerId}&aav=${extensionAav}`;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { fmtPct } from '@/lib/utils';
+import { fmtPct, pctPosition } from '@/lib/utils';
 
 interface MiniValuePayGaugeProps {
   valuePct: number | null;
@@ -20,7 +20,7 @@ export function MiniValuePayGauge({ valuePct, payPct, showLabels = false, domain
   const value = valuePct ?? 0;
   const pay = payPct;
   const domainMax = domainMaxPct ?? (Math.max(value, pay ?? 0) * 1.2 || 6);
-  const pos = (x: number) => Math.max(0, Math.min(100, (x / domainMax) * 100));
+  const pos = (x: number) => pctPosition(x, domainMax);
   const valuePos = pos(value);
   const payPos = pay != null ? pos(pay) : null;
   const underpaid = pay == null || value >= pay;
