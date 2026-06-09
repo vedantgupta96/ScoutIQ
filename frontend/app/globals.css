@@ -412,10 +412,10 @@ a { color: inherit; }
 
 .siq-decision-logo-bg {
   position: absolute;
-  left: -34px;
-  top: -24px;
-  width: 238px;
-  height: 178px;
+  left: -92px;
+  top: -52px;
+  width: 282px;
+  height: 230px;
   background:
     linear-gradient(112deg, color-mix(in srgb, var(--team-primary) 24%, var(--bg-panel)) 0 58%, transparent 58%),
     linear-gradient(112deg, transparent 0 64%, rgba(255,255,255,0.36) 64% 72%, transparent 72%);
@@ -430,12 +430,12 @@ a { color: inherit; }
 
 .siq-decision-logo-bg img {
   position: absolute;
-  left: 38px;
-  top: 14px;
-  width: 138px;
-  height: 138px;
+  left: -6px;
+  top: 16px;
+  width: 228px;
+  height: 228px;
   object-fit: contain;
-  opacity: 0.34;
+  opacity: 0.25;
   transform: rotate(18deg);
   filter: saturate(0.8);
 }
@@ -1119,17 +1119,17 @@ a { color: inherit; }
   }
 
   .siq-decision-logo-bg {
-    left: -24px;
-    top: -22px;
-    width: 190px;
-    height: 132px;
+    left: -74px;
+    top: -42px;
+    width: 230px;
+    height: 178px;
   }
 
   .siq-decision-logo-bg img {
-    left: 30px;
-    top: 10px;
-    width: 104px;
-    height: 104px;
+    left: -2px;
+    top: 14px;
+    width: 174px;
+    height: 174px;
   }
 
   .siq-decision-identity {
@@ -1200,15 +1200,17 @@ a { color: inherit; }
   }
 
   .siq-decision-logo-bg {
-    width: 160px;
-    height: 118px;
+    left: -62px;
+    top: -34px;
+    width: 200px;
+    height: 154px;
   }
 
   .siq-decision-logo-bg img {
-    left: 26px;
-    top: 9px;
-    width: 92px;
-    height: 92px;
+    left: -2px;
+    top: 12px;
+    width: 152px;
+    height: 152px;
   }
 
   .siq-workspace-tabs button {
