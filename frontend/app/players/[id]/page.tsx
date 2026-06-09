@@ -30,7 +30,6 @@ import {
   SimilarPlayersMode,
   SimilarPlayersResponse,
   ValuationResponse,
-  headshotUrl,
 } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Surface } from '@/components/ui/Surface';
@@ -506,49 +505,28 @@ function DecisionHero({
   extensionHref: string;
   onSimulate: () => void;
 }) {
-  const nameParts = val.player_name.trim().split(/\s+/);
-  const lastName = nameParts.pop() ?? val.player_name;
-  const firstName = nameParts.join(' ');
-  const meta = [
-    val.current_team?.name ?? 'Team unavailable',
-    val.position ?? 'Position unavailable',
-    val.season,
-  ];
-
   return (
-    <section className="siq-decision-hero">
-      <div className="siq-decision-portrait" aria-hidden="true">
-        <div className="siq-decision-team-mark">
-          {val.current_team?.abbreviation ?? 'SIQ'}
-        </div>
-        <img
-          src={headshotUrl(val.player_id)}
-          alt=""
-          className="siq-decision-headshot"
-          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-        />
-      </div>
-
+    <section className="siq-decision-hero" data-team-mark={val.current_team?.abbreviation ?? 'SIQ'}>
       <div className="siq-decision-identity">
-        <div className="siq-decision-kicker">
-          {val.current_team && (
-            <TeamLogo
-              teamId={val.current_team.team_id}
-              abbreviation={val.current_team.abbreviation}
-              name={val.current_team.name}
-              size="sm"
-            />
-          )}
-          {meta.map((item, index) => (
-            <span key={`${item}-${index}`}>{item}</span>
-          ))}
-        </div>
-        <h1>
-          {firstName && <span>{firstName}</span>}
-          <strong>{lastName}</strong>
-        </h1>
-        <div className="siq-decision-subline">
-          <span>Value case workspace</span>
+        <Avatar name={val.player_name} size="xl" position={val.position} playerId={val.player_id} />
+        <div style={{ minWidth: 0 }}>
+          <div className="siq-decision-kicker">
+            <Badge tone="neutral" size="sm">{val.season}</Badge>
+            {val.current_team && (
+              <TeamLogo
+                teamId={val.current_team.team_id}
+                abbreviation={val.current_team.abbreviation}
+                name={val.current_team.name}
+                size="sm"
+              />
+            )}
+            <span>{val.current_team?.name ?? 'Team unavailable'}</span>
+          </div>
+          <h1>{val.player_name}</h1>
+          <div className="siq-decision-subline">
+            <span>{val.position ?? 'Position unavailable'}</span>
+            <span>Value case workspace</span>
+          </div>
         </div>
       </div>
 
