@@ -14,7 +14,6 @@ function initials(name: string): string {
 interface AvatarProps {
   name: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
-  tone?: string;
   position?: string | null;
   playerId?: number | null;
 }

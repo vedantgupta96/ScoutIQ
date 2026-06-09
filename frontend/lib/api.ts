@@ -16,6 +16,18 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+type QueryValue = string | number | boolean | null | undefined;
+
+function queryString(params: Record<string, QueryValue>): string {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null || value === '') continue;
+    qs.set(key, String(value));
+  }
+  const query = qs.toString();
+  return query ? `?${query}` : '';
+}
+
 // ---- Types (mirroring FastAPI response shapes) ----------------
 
 export interface TeamSummary {
@@ -401,47 +413,36 @@ export function getTeams(signal?: AbortSignal): Promise<TeamListItem[]> {
 }
 
 export function getTeamCapSheet(teamId: number, season?: string, signal?: AbortSignal): Promise<TeamCapSheetResponse> {
-  const params = season ? `?season=${encodeURIComponent(season)}` : '';
-  return apiFetch<TeamCapSheetResponse>(`/teams/${teamId}/cap-sheet${params}`, { signal });
+  return apiFetch<TeamCapSheetResponse>(`/teams/${teamId}/cap-sheet${queryString({ season })}`, { signal });
 }
 
 export function searchPlayers(query?: string, limit = 20, signal?: AbortSignal): Promise<PlayerSummary[]> {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (query) params.set('query', query);
-  return apiFetch<PlayerSummary[]>(`/players?${params}`, { signal });
-}
-
-export function getPlayerCards(query?: string, limit = 40, signal?: AbortSignal): Promise<PlayerCardResponse[]> {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (query) params.set('query', query);
-  return apiFetch<PlayerCardResponse[]>(`/players/cards?${params}`, { signal });
+  return apiFetch<PlayerSummary[]>(`/players${queryString({ limit, query })}`, { signal });
 }
 
 export function getPlayerWatchlist(params: PlayerWatchlistParams = {}, signal?: AbortSignal): Promise<PlayerWatchlistResponse> {
-  const qs = new URLSearchParams({
-    limit: String(params.limit ?? 24),
-    offset: String(params.offset ?? 0),
+  return apiFetch<PlayerWatchlistResponse>(`/players/watchlist${queryString({
+    limit: params.limit ?? 24,
+    offset: params.offset ?? 0,
     bucket: params.bucket ?? 'all',
     sort: params.sort ?? 'mismatch',
-    qualified_only: String(params.qualifiedOnly ?? true),
-  });
-  if (params.query) qs.set('query', params.query);
-  if (params.season) qs.set('season', params.season);
-  if (params.position) qs.set('position', params.position);
-  if (params.team) qs.set('team', params.team);
-  return apiFetch<PlayerWatchlistResponse>(`/players/watchlist?${qs}`, { signal });
+    qualified_only: params.qualifiedOnly ?? true,
+    query: params.query,
+    season: params.season,
+    position: params.position,
+    team: params.team,
+  })}`, { signal });
 }
 
 export function getPlayerValuationCautions(
   params: { season?: string; qualifiedOnly?: boolean; limit?: number } = {},
   signal?: AbortSignal,
 ): Promise<PlayerValuationCautionsResponse> {
-  const qs = new URLSearchParams({
-    limit: String(params.limit ?? 12),
-    qualified_only: String(params.qualifiedOnly ?? true),
-  });
-  if (params.season) qs.set('season', params.season);
-  return apiFetch<PlayerValuationCautionsResponse>(`/players/valuation-cautions?${qs}`, { signal });
+  return apiFetch<PlayerValuationCautionsResponse>(`/players/valuation-cautions${queryString({
+    limit: params.limit ?? 12,
+    qualified_only: params.qualifiedOnly ?? true,
+    season: params.season,
+  })}`, { signal });
 }
 
 export function getPlayer(id: number, signal?: AbortSignal): Promise<PlayerSummary> {
@@ -449,8 +450,7 @@ export function getPlayer(id: number, signal?: AbortSignal): Promise<PlayerSumma
 }
 
 export function getValuation(id: number, season?: string, signal?: AbortSignal): Promise<ValuationResponse> {
-  const params = season ? `?season=${season}` : '';
-  return apiFetch<ValuationResponse>(`/players/${id}/valuation${params}`, { signal });
+  return apiFetch<ValuationResponse>(`/players/${id}/valuation${queryString({ season })}`, { signal });
 }
 
 export function getPlayerContract(id: number, signal?: AbortSignal): Promise<PlayerContractResponse> {
@@ -462,12 +462,11 @@ export function getSimilarPlayers(
   params: { mode?: SimilarPlayersMode; season?: string; limit?: number } = {},
   signal?: AbortSignal,
 ): Promise<SimilarPlayersResponse> {
-  const qs = new URLSearchParams({
+  return apiFetch<SimilarPlayersResponse>(`/players/${id}/similar${queryString({
     mode: params.mode ?? 'twins',
-    limit: String(params.limit ?? 8),
-  });
-  if (params.season) qs.set('season', params.season);
-  return apiFetch<SimilarPlayersResponse>(`/players/${id}/similar?${qs}`, { signal });
+    limit: params.limit ?? 8,
+    season: params.season,
+  })}`, { signal });
 }
 
 export function simulateContract(req: SimulatorRequest, signal?: AbortSignal): Promise<SimulatorResponse> {
