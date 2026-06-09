@@ -30,6 +30,7 @@ import {
   SimilarPlayersMode,
   SimilarPlayersResponse,
   ValuationResponse,
+  teamLogoUrl,
 } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Surface } from '@/components/ui/Surface';
@@ -507,6 +508,15 @@ function DecisionHero({
 }) {
   return (
     <section className="siq-decision-hero">
+      {val.current_team && (
+        <div className="siq-decision-logo-bg" aria-hidden="true">
+          <img
+            src={teamLogoUrl(val.current_team.team_id)}
+            alt=""
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+        </div>
+      )}
       <div className="siq-decision-identity">
         <Avatar name={val.player_name} size="xl" position={val.position} playerId={val.player_id} />
         <div style={{ minWidth: 0 }}>

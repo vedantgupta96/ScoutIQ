@@ -3,7 +3,7 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Users, SlidersHorizontal, Target, Shield, Moon, Sun, Bell, Search } from 'lucide-react';
+import { Users, SlidersHorizontal, Target, Shield, Moon, Sun, Bell, Search, Menu } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { getHealth } from '@/lib/api';
 
@@ -21,9 +21,9 @@ const TITLES: Record<string, string> = {
   '/model':     'Model & backtest',
 };
 
-function Sidebar({ active }: { active: string }) {
+function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) {
   return (
-    <aside className="siq-sidebar" style={{
+    <aside className={`siq-sidebar${collapsed ? ' siq-sidebar--collapsed' : ''}`} style={{
       flexShrink: 0,
       background: 'var(--bg-panel)',
       borderRight: '1px solid var(--border-subtle)',
@@ -88,7 +88,19 @@ function Sidebar({ active }: { active: string }) {
   );
 }
 
-function TopBar({ title, query, onQuery }: { title: string; query: string; onQuery: (q: string) => void }) {
+function TopBar({
+  title,
+  query,
+  onQuery,
+  sidebarCollapsed,
+  onToggleSidebar,
+}: {
+  title: string;
+  query: string;
+  onQuery: (q: string) => void;
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
+}) {
   const [dark, setDark] = useState(false);
   const [season, setSeason] = useState<string | null>(null);
 
@@ -124,6 +136,17 @@ function TopBar({ title, query, onQuery }: { title: string; query: string; onQue
       background: 'var(--bg-app)',
       borderBottom: '1px solid var(--border-subtle)',
     }}>
+      <button
+        type="button"
+        className="siq-icon-button"
+        onClick={onToggleSidebar}
+        aria-label={sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
+        aria-pressed={sidebarCollapsed}
+        title={sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
+      >
+        <Menu size={17} />
+      </button>
+
       <h1 className="siq-topbar-title" style={{
         fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 20,
         color: 'var(--text-primary)', whiteSpace: 'nowrap', margin: 0,
@@ -199,6 +222,7 @@ export function Shell({ children }: ShellProps) {
   const baseTitle = TITLES[pathname] ?? TITLES[`/${pathname.split('/')[1]}`] ?? 'ScoutIQ';
 
   const [query, setQuery] = useState('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const lastSubmittedQuery = useRef('');
 
   const handleQuery = (q: string) => {
@@ -222,10 +246,16 @@ export function Shell({ children }: ShellProps) {
   }, [pathname, query, router]);
 
   return (
-    <div className="siq-shell">
-      <Sidebar active={activeId} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <TopBar title={baseTitle} query={query} onQuery={handleQuery} />
+    <div className={`siq-shell${sidebarCollapsed ? ' siq-shell--sidebar-collapsed' : ''}`}>
+      <Sidebar active={activeId} collapsed={sidebarCollapsed} />
+      <div className="siq-shell-workspace" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <TopBar
+          title={baseTitle}
+          query={query}
+          onQuery={handleQuery}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={() => setSidebarCollapsed((collapsed) => !collapsed)}
+        />
         <main className="siq-main">
           <div className="siq-content">
             {children}

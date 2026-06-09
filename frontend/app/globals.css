@@ -259,11 +259,48 @@ a { color: inherit; }
   display: flex;
   height: 100vh;
   overflow: hidden;
+  position: relative;
 }
 
 .siq-sidebar {
   width: var(--sidebar-width);
   flex-shrink: 0;
+  position: relative;
+  z-index: 3;
+  transition: width var(--duration-base) var(--ease-out);
+}
+
+.siq-sidebar--collapsed {
+  width: var(--sidebar-collapsed);
+}
+
+.siq-shell--sidebar-collapsed .siq-logo-text,
+.siq-shell--sidebar-collapsed .siq-nav-eyebrow,
+.siq-shell--sidebar-collapsed .siq-nav-label,
+.siq-shell--sidebar-collapsed .siq-sidebar-footer {
+  display: none;
+}
+
+.siq-shell--sidebar-collapsed .siq-sidebar-logo {
+  justify-content: center;
+  padding: 0;
+}
+
+.siq-shell--sidebar-collapsed .siq-sidebar-nav {
+  padding: 10px 8px;
+  align-items: center;
+}
+
+.siq-shell--sidebar-collapsed .siq-sidebar-link {
+  width: 42px;
+  height: 42px;
+  justify-content: center;
+  padding: 0;
+}
+
+.siq-shell-workspace {
+  position: relative;
+  z-index: 1;
 }
 
 .siq-main {
@@ -275,6 +312,30 @@ a { color: inherit; }
 .siq-content {
   max-width: var(--content-max);
   margin: 0 auto;
+}
+
+.siq-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.siq-icon-button:hover {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  background: var(--bg-inset);
 }
 
 .siq-profile-grid {
@@ -347,6 +408,36 @@ a { color: inherit; }
   overflow: hidden;
   position: relative;
   isolation: isolate;
+}
+
+.siq-decision-logo-bg {
+  position: absolute;
+  left: -92px;
+  top: -52px;
+  width: 282px;
+  height: 230px;
+  background:
+    linear-gradient(112deg, color-mix(in srgb, var(--team-primary) 24%, var(--bg-panel)) 0 58%, transparent 58%),
+    linear-gradient(112deg, transparent 0 64%, rgba(255,255,255,0.36) 64% 72%, transparent 72%);
+  clip-path: polygon(0 0, 78% 0, 58% 100%, 0 100%);
+  overflow: hidden;
+  transform: rotate(-18deg);
+  transform-origin: center;
+  opacity: 0.9;
+  pointer-events: none;
+  user-select: none;
+}
+
+.siq-decision-logo-bg img {
+  position: absolute;
+  left: -6px;
+  top: 16px;
+  width: 228px;
+  height: 228px;
+  object-fit: contain;
+  opacity: 0.25;
+  transform: rotate(18deg);
+  filter: saturate(0.8);
 }
 
 .siq-decision-hero::after {
@@ -1027,11 +1118,18 @@ a { color: inherit; }
     padding: 16px;
   }
 
-  .siq-decision-hero::before {
-    right: 16px;
+  .siq-decision-logo-bg {
+    left: -74px;
+    top: -42px;
+    width: 230px;
+    height: 178px;
+  }
+
+  .siq-decision-logo-bg img {
+    left: -2px;
     top: 14px;
-    width: 108px;
-    height: 52px;
+    width: 174px;
+    height: 174px;
   }
 
   .siq-decision-identity {
@@ -1099,6 +1197,20 @@ a { color: inherit; }
 
   .siq-decision-identity h1 {
     font-size: 27px;
+  }
+
+  .siq-decision-logo-bg {
+    left: -62px;
+    top: -34px;
+    width: 200px;
+    height: 154px;
+  }
+
+  .siq-decision-logo-bg img {
+    left: -2px;
+    top: 12px;
+    width: 152px;
+    height: 152px;
   }
 
   .siq-workspace-tabs button {
