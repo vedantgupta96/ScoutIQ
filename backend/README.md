@@ -40,6 +40,7 @@ python -m scoutiq.etl.load_bbref                  # ...then full (slow first run
 python -m scoutiq.etl.repair_team_history         # cache-only: fix historical team_id from BBRef
 python -m scoutiq.etl.load_current_rosters        # current roster team -> players.current_team_*
 python -m scoutiq.etl.load_contracts              # Spotrac forward contract structure (networked)
+python -m scoutiq.etl.load_bbref_contracts        # BBRef fallback for players absent from Spotrac team pages
 python -m scoutiq.etl.bridge_contract_salaries    # bridge 2025-26 cap hits into player_salaries
 python -m scoutiq.etl.check_contract_coverage     # audit players with stats but missing pay/contract rows
 python -m scoutiq.etl.check_coverage              # data-quality gate -> trainable row count

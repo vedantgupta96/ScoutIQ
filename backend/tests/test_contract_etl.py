@@ -1,4 +1,5 @@
 from scoutiq.etl import load_contracts
+from scoutiq.etl.load_bbref_contracts import parse_contract_rows
 
 
 def test_spotrac_team_parser_uses_clean_link_text(monkeypatch):
@@ -66,3 +67,25 @@ def test_player_matcher_handles_known_source_aliases():
     assert load_contracts._match_player("Nicolas Claxton", index) == 4
     assert load_contracts._match_player("Ron Holland II", index) == 5
     assert load_contracts._match_player("Sviatoslav Mykhailiuk", index) == 6
+
+
+def test_bbref_contract_parser_reads_current_salary_table():
+    html = """
+    <table>
+      <thead>
+        <tr><th>Rk</th><th>Player</th><th>Tm</th><th>2025-26</th><th>2026-27</th><th>Guaranteed</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>171</td><td>Jaden Ivey</td><td>CHI</td><td>$10,107,163</td><td></td><td>$10,107,163</td></tr>
+        <tr><td>999</td><td>Two-Way Missing</td><td>IND</td><td></td><td>$85,300</td><td>$85,300</td></tr>
+      </tbody>
+    </table>
+    """
+
+    rows = parse_contract_rows(html, "2025-26")
+
+    assert rows == [{
+        "full_name": "Jaden Ivey",
+        "team": "CHI",
+        "years": [{"season": "2025-26", "aav": 10_107_163}],
+    }]
