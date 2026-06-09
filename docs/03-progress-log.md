@@ -120,6 +120,38 @@ Most were caught by actually running the pipeline, not by reading code:
 
 ---
 
+## Experiment: playoff features (null result, reverted — 2026-06-09)
+**Question:** does adding playoff performance to the model improve the production-implied value backtest?
+Teams pay for playoff impact, so it's a plausible signal the regular-season-only model misses.
+
+**Method:** ingested nba.com postseason stats (`SeasonType=Playoffs`, all 14 seasons) into two new JSONB
+columns, derived 6 NaN-tolerant features — `made_playoffs`, `po_minutes`, `po_pie`, `po_net_rating`, and
+the **elevation deltas** `pie_delta`/`net_rating_delta` (playoff − regular). Ran an **ablation on
+identical data** (same 4321 train / 795 test rows; only the feature set varied) so the comparison was
+clean, not confounded by the data refresh that came with reloading nba.com stats.
+
+**Result — no framing earns its place:**
+
+| subset | R² | MAE % cap |
+|---|---|---|
+| none (baseline) | **0.7692** | 3.098 |
+| made_playoffs flag only | 0.7692 | 3.090 |
+| deltas only | 0.7675 | 3.091 |
+| po_minutes only | 0.7661 | 3.087 |
+| all 6 | 0.7622 | 3.107 |
+
+The best case (flag only) ties baseline R² with an MAE delta inside the noise; everything richer
+regresses. Playoff quality is collinear with the regular-season production the model already ingests
+(BPM/PIE/ratings), so it adds dimensionality without lift. **Per the "keep only if it improves" rule, the
+model + data-layer changes were reverted.** A documented null result, not a shipped feature.
+
+**Process note / lesson:** re-running the full `load_stats` to backfill playoff columns overwrote the
+`advanced` JSONB that `load_bbref` co-owns (BPM/VORP/WS), which zeroed trainable rows; recovered by
+re-merging from the cached BBRef HTML (no data permanently lost). Takeaway: prefer a *targeted* column
+update over a broad table reload, and/or make `load_stats` merge into `advanced` rather than overwrite it.
+
+---
+
 ## Next
 The highest-leverage next feature is **current contract timeline + one-click extension simulation**:
 show what the player is owed, compare it to production-implied value, and let the user launch a proposed
