@@ -145,3 +145,47 @@ class ContractYear(Base):
     is_team_option: Mapped[bool] = mapped_column(Boolean, default=False)
 
     contract: Mapped[Contract] = relationship(back_populates="contract_years")
+
+
+class ScoutReport(Base):
+    """A qualitative scouting narrative sourced from Perplexity Sonar (WORDS only, with citations).
+
+    `source_text` is the narrative the LLM later extracts ratings from; `citations` preserves the
+    Sonar source URLs so every derived rating is traceable. Never holds stats/salary/cap numbers.
+    """
+    __tablename__ = "scout_reports"
+
+    report_id: Mapped[str] = mapped_column(String(64), primary_key=True)  # stable, e.g. 'sonar-{pid}-{season}'
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.player_id"), index=True)
+    season: Mapped[str] = mapped_column(String(7))
+    source_label: Mapped[str] = mapped_column(String(64))  # e.g. 'Perplexity Sonar'
+    source_text: Mapped[str] = mapped_column(String)       # the narrative (TEXT)
+    citations: Mapped[list | None] = mapped_column(JSONB)  # list[str] of source URLs
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    ratings: Mapped[list["PlayerRating"]] = relationship(
+        back_populates="report", cascade="all, delete-orphan"
+    )
+
+
+class PlayerRating(Base):
+    """One Claude-extracted, schema-validated trait rating for a ScoutReport.
+
+    Mirrors `llm.schemas.ScoutRating` (trait/score/confidence/evidence_span). Model-extracted from a
+    public narrative — not official scouting.
+    """
+    __tablename__ = "player_ratings"
+    __table_args__ = (
+        UniqueConstraint("report_id", "trait", name="uq_player_rating_report_trait"),
+        Index("ix_player_ratings_player_id", "player_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    report_id: Mapped[str] = mapped_column(String(64), ForeignKey("scout_reports.report_id"), index=True)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.player_id"), index=True)
+    trait: Mapped[str] = mapped_column(String(32))
+    score: Mapped[int] = mapped_column(Integer)             # 1-5
+    confidence: Mapped[str] = mapped_column(String(8))      # low | medium | high
+    evidence_span: Mapped[str] = mapped_column(String)      # verbatim span from source_text (TEXT)
+
+    report: Mapped[ScoutReport] = relationship(back_populates="ratings")

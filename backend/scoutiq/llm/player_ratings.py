@@ -1,4 +1,4 @@
-"""Fixture-backed player scout-rating aggregation."""
+"""Player scout-rating aggregation — DB-backed (Sonar→Claude) with a synthetic-fixture fallback."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -6,15 +6,27 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from scoutiq.llm.eval_scout_ratings import load_jsonl
 from scoutiq.llm.schemas import ScoutRating, Trait
+from scoutiq.models import ScoutReport
 
 DEFAULT_PLAYER_REPORTS_PATH = Path(__file__).resolve().parent / "eval_data" / "player_scout_reports_fixture.jsonl"
 
+FIXTURE_CAVEAT = (
+    "Synthetic, project-authored scout-report fixture. This is a UI/API contract preview, "
+    "not real scouting coverage or live LLM output."
+)
+DB_CAVEAT = (
+    "{n} Perplexity Sonar–sourced report{s}, with ratings extracted by Claude and schema-validated. "
+    "Ratings are model-extracted from public narratives, not official scouting — see the cited sources."
+)
+
 
 class PlayerScoutReport(BaseModel):
-    """Synthetic scout report fixture keyed to a known NBA player_id."""
+    """A scout report (synthetic fixture or Sonar-sourced) keyed to a known NBA player_id."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -24,6 +36,8 @@ class PlayerScoutReport(BaseModel):
     source_label: str
     source_text: str
     ratings: list[ScoutRating]
+    citations: list[str] = []
+    fetched_at: str | None = None
 
     @field_validator("report_id", "player_name", "source_label", "source_text")
     @classmethod
@@ -64,22 +78,18 @@ class PlayerScoutRatings(BaseModel):
     traits: list[AggregatedTraitRating]
     reports: list[PlayerScoutReport]
     caveat: str
+    citations: list[str] = []
+    last_fetched: str | None = None
 
 
 def load_player_reports(path: Path = DEFAULT_PLAYER_REPORTS_PATH) -> list[PlayerScoutReport]:
     return [PlayerScoutReport.model_validate(row) for row in load_jsonl(path)]
 
 
-def aggregate_player_scout_ratings(
-    player_id: int,
-    player_name: str,
-    reports: list[PlayerScoutReport],
-) -> PlayerScoutRatings:
-    """Aggregate synthetic scout-report ratings for a player."""
-    player_reports = [report for report in reports if report.player_id == player_id]
+def _aggregate_traits(reports: list[PlayerScoutReport]) -> list[AggregatedTraitRating]:
+    """Average trait scores across a player's reports (the shared aggregation core)."""
     by_trait: dict[Trait, list[ScoutRating]] = defaultdict(list)
-
-    for report in player_reports:
+    for report in reports:
         for rating in report.ratings:
             by_trait[rating.trait].append(rating)
 
@@ -98,16 +108,68 @@ def aggregate_player_scout_ratings(
             confidence_mix=ConfidenceMix(**confidence_counts),
             evidence=[rating.evidence_span for rating in ratings[:3]],
         ))
+    return traits
 
+
+def aggregate_player_scout_ratings(
+    player_id: int,
+    player_name: str,
+    reports: list[PlayerScoutReport],
+) -> PlayerScoutRatings:
+    """Aggregate synthetic fixture scout-report ratings for a player."""
+    player_reports = [report for report in reports if report.player_id == player_id]
     return PlayerScoutRatings(
         player_id=player_id,
         player_name=player_reports[0].player_name if player_reports else player_name,
         source_mode="synthetic_fixture",
         report_count=len(player_reports),
-        traits=traits,
+        traits=_aggregate_traits(player_reports),
         reports=player_reports,
-        caveat=(
-            "Synthetic, project-authored scout-report fixture. This is a UI/API contract preview, "
-            "not real scouting coverage or live LLM output."
-        ),
+        caveat=FIXTURE_CAVEAT,
+    )
+
+
+def aggregate_from_db(db: Session, player_id: int, player_name: str) -> PlayerScoutRatings | None:
+    """Aggregate real Sonar→Claude ratings from the DB, or None if the player has no coverage."""
+    db_reports = db.scalars(
+        select(ScoutReport).where(ScoutReport.player_id == player_id).order_by(ScoutReport.season)
+    ).all()
+    if not db_reports:
+        return None
+
+    reports = [
+        PlayerScoutReport(
+            report_id=r.report_id,
+            player_id=r.player_id,
+            player_name=player_name,
+            source_label=r.source_label,
+            source_text=r.source_text,
+            ratings=[
+                ScoutRating(
+                    trait=rating.trait,
+                    score=rating.score,
+                    confidence=rating.confidence,
+                    evidence_span=rating.evidence_span,
+                )
+                for rating in r.ratings
+            ],
+            citations=r.citations or [],
+            fetched_at=r.fetched_at.isoformat() if r.fetched_at else None,
+        )
+        for r in db_reports
+    ]
+
+    citations = list(dict.fromkeys(c for report in reports for c in report.citations))
+    fetched = [r.fetched_at for r in reports if r.fetched_at]
+    n = len(reports)
+    return PlayerScoutRatings(
+        player_id=player_id,
+        player_name=player_name,
+        source_mode="sonar_claude_db",
+        report_count=n,
+        traits=_aggregate_traits(reports),
+        reports=reports,
+        caveat=DB_CAVEAT.format(n=n, s="" if n == 1 else "s"),
+        citations=citations,
+        last_fetched=max(fetched) if fetched else None,
     )

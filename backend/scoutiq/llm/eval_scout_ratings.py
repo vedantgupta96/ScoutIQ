@@ -7,22 +7,13 @@ import os
 from pathlib import Path
 from typing import Any
 
-import requests
 from pydantic import ValidationError
 
+from scoutiq.llm.extract import call_anthropic_raw
 from scoutiq.llm.schemas import ScoutRatingExtraction
 from scoutiq.llm.scoring import score_extractions
 
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / "artifacts" / "scout_ratings_eval.json"
-ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
-ANTHROPIC_VERSION = "2023-06-01"
-SYSTEM_PROMPT = (
-    "You extract structured NBA scouting ratings. Return only valid JSON matching this shape: "
-    '{"note_id":"...","player_name":"...","source_text":"...","ratings":[{"trait":"leadership",'
-    '"score":1,"confidence":"low","evidence_span":"..."}]}. '
-    "Allowed traits: leadership, coachability, work_ethic, athleticism, discipline, basketball_iq. "
-    "Scores are integers 1-5. Evidence spans must be copied verbatim from the note."
-)
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -49,52 +40,6 @@ def load_gold(path: Path) -> list[ScoutRatingExtraction]:
     return gold
 
 
-def _extract_json_object(text: str) -> dict[str, Any]:
-    """Best-effort unwrap for live responses that include surrounding prose."""
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("live response did not contain a JSON object")
-    return json.loads(text[start:end + 1])
-
-
-def _live_extract_one(gold_row: ScoutRatingExtraction, api_key: str, model: str) -> dict[str, Any]:
-    payload = {
-        "model": model,
-        "max_tokens": 1200,
-        "temperature": 0,
-        "system": SYSTEM_PROMPT,
-        "messages": [
-            {
-                "role": "user",
-                "content": (
-                    f"note_id: {gold_row.note_id}\n"
-                    f"player_name: {gold_row.player_name}\n"
-                    f"source_text: {gold_row.source_text}\n"
-                ),
-            }
-        ],
-    }
-    response = requests.post(
-        ANTHROPIC_MESSAGES_URL,
-        headers={
-            "x-api-key": api_key,
-            "anthropic-version": ANTHROPIC_VERSION,
-            "content-type": "application/json",
-        },
-        json=payload,
-        timeout=45,
-    )
-    response.raise_for_status()
-    body = response.json()
-    text_parts = [
-        part.get("text", "")
-        for part in body.get("content", [])
-        if part.get("type") == "text"
-    ]
-    return _extract_json_object("\n".join(text_parts))
-
-
 def run_live_predictions(gold: list[ScoutRatingExtraction]) -> list[dict[str, Any]]:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     model = os.environ.get("SCOUTIQ_LLM_MODEL")
@@ -103,7 +48,10 @@ def run_live_predictions(gold: list[ScoutRatingExtraction]) -> list[dict[str, An
             "Live eval requires ANTHROPIC_API_KEY and SCOUTIQ_LLM_MODEL. "
             "Use --predictions for offline fixture mode."
         )
-    return [_live_extract_one(row, api_key, model) for row in gold]
+    return [
+        call_anthropic_raw(row.note_id, row.player_name, row.source_text, api_key=api_key, model=model)
+        for row in gold
+    ]
 
 
 def build_parser() -> argparse.ArgumentParser:

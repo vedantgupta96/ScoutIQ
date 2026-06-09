@@ -335,16 +335,20 @@ export interface PlayerScoutReport {
   source_label: string;
   source_text: string;
   ratings: ScoutRatingRow[];
+  citations?: string[];
+  fetched_at?: string | null;
 }
 
 export interface PlayerScoutRatingsResponse {
   player_id: number;
   player_name: string;
-  source_mode: 'synthetic_fixture';
+  source_mode: 'synthetic_fixture' | 'sonar_claude_db';
   report_count: number;
   traits: PlayerScoutTraitRating[];
   reports: PlayerScoutReport[];
   caveat: string;
+  citations?: string[];
+  last_fetched?: string | null;
 }
 
 // ---- Team war room -------------------------------------------

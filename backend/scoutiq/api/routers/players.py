@@ -9,7 +9,12 @@ from pydantic import BaseModel
 from sqlalchemy import and_, desc, select
 
 from scoutiq.api.deps import DB
-from scoutiq.llm.player_ratings import PlayerScoutRatings, aggregate_player_scout_ratings, load_player_reports
+from scoutiq.llm.player_ratings import (
+    PlayerScoutRatings,
+    aggregate_from_db,
+    aggregate_player_scout_ratings,
+    load_player_reports,
+)
 from scoutiq.model.predict import build_features_from_season, predict_from_features, predict_many_from_features
 from scoutiq.model.similarity import (
     SIMILARITY_BASIS,
@@ -935,14 +940,18 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
 
 @router.get("/{player_id}/scout-ratings", response_model=PlayerScoutRatings)
 def get_scout_ratings(player_id: int, db: DB = None):
-    """Return fixture-backed scout-rating aggregates for a player.
+    """Return scout-rating aggregates for a player.
 
-    Phase 2B is intentionally offline-first: this reads committed synthetic
-    reports and does not call live LLMs, Sonar, or a scout-report database.
+    Serves real Sonar-sourced, Claude-extracted ratings from the DB when the player has coverage,
+    falling back to the committed synthetic fixture otherwise. Read-only: never calls Sonar/Claude.
     """
     player = db.get(Player, player_id)
     if not player:
         raise HTTPException(status_code=404, detail=f"Player {player_id} not found.")
+
+    db_ratings = aggregate_from_db(db, player_id, player.full_name)
+    if db_ratings is not None:
+        return db_ratings
 
     try:
         reports = load_player_reports()

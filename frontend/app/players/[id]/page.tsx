@@ -154,23 +154,28 @@ function ScoutTraitRow({ trait }: { trait: PlayerScoutTraitRating }) {
 }
 
 function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsResponse | null; error: string | null }) {
+  const isReal = ratings?.source_mode === 'sonar_claude_db';
   return (
     <Surface
       variant="dossier"
       teamAccent
       eyebrow="Scout ratings"
       icon={<ClipboardCheck size={15} />}
-      action={<Badge tone="warning" variant="outline" size="sm">synthetic fixture</Badge>}
+      action={
+        <Badge tone={isReal ? 'neutral' : 'warning'} variant="outline" size="sm">
+          {isReal ? 'Sonar · Claude' : 'synthetic fixture'}
+        </Badge>
+      }
     >
       {error ? (
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-          Scout-rating fixture unavailable: {error}
+          Scout ratings unavailable: {error}
         </p>
       ) : ratings == null ? (
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading scout ratings…</p>
       ) : ratings.report_count === 0 ? (
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-          No synthetic scout-report fixture exists for this player yet.
+          No scout-report coverage for this player yet.
         </p>
       ) : (
         <>
@@ -179,10 +184,30 @@ function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsRespo
               {ratings.report_count}
             </span>
             <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-              synthetic report{ratings.report_count === 1 ? '' : 's'} aggregated
+              {isReal ? 'sourced' : 'synthetic'} report{ratings.report_count === 1 ? '' : 's'} aggregated
             </span>
           </div>
           {ratings.traits.map((trait) => <ScoutTraitRow key={trait.trait} trait={trait} />)}
+          {isReal && ratings.citations && ratings.citations.length > 0 && (
+            <div style={{ margin: '12px 0 0' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 5 }}>
+                Sources
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {ratings.citations.map((url, i) => (
+                  <a
+                    key={url}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 11, color: 'var(--accent-text, var(--text-secondary))', textDecoration: 'underline' }}
+                  >
+                    [{i + 1}] {citationHost(url)}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
             {ratings.caveat}
           </p>
@@ -190,6 +215,14 @@ function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsRespo
       )}
     </Surface>
   );
+}
+
+function citationHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
 }
 
 function ContractYearRow({ year }: { year: PlayerContractYear }) {
@@ -718,7 +751,7 @@ function FrontOfficeRead({
         <div className="siq-confidence-bracket">
           <div className="siq-confidence-stack">
             <RiskLine label="Model interval" value={`${fmtPct(val.lo_pct)} to ${fmtPct(val.hi_pct)}`} />
-            <RiskLine label="Scout fixture" value={scoutRatings ? `${scoutRatings.report_count} reports` : 'Loading'} />
+            <RiskLine label="Scout coverage" value={scoutRatings ? `${scoutRatings.report_count} reports` : 'Loading'} />
             <RiskLine label="Top trait" value={scoutTop ? `${traitLabel(scoutTop.trait)} ${scoutTop.average_score.toFixed(1)}/5` : '—'} />
           </div>
         </div>
