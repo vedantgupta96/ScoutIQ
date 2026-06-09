@@ -259,11 +259,71 @@ a { color: inherit; }
   display: flex;
   height: 100vh;
   overflow: hidden;
+  position: relative;
 }
 
 .siq-sidebar {
   width: var(--sidebar-width);
   flex-shrink: 0;
+  position: relative;
+  z-index: 3;
+  transition: width var(--duration-base) var(--ease-out);
+}
+
+.siq-sidebar--collapsed {
+  width: var(--sidebar-collapsed);
+}
+
+.siq-shell--sidebar-collapsed .siq-logo-text,
+.siq-shell--sidebar-collapsed .siq-nav-eyebrow,
+.siq-shell--sidebar-collapsed .siq-nav-label,
+.siq-shell--sidebar-collapsed .siq-sidebar-footer {
+  display: none;
+}
+
+.siq-shell--sidebar-collapsed .siq-sidebar-logo {
+  justify-content: center;
+  padding: 0;
+}
+
+.siq-shell--sidebar-collapsed .siq-sidebar-nav {
+  padding: 10px 8px;
+  align-items: center;
+}
+
+.siq-shell--sidebar-collapsed .siq-sidebar-link {
+  width: 42px;
+  height: 42px;
+  justify-content: center;
+  padding: 0;
+}
+
+.siq-shell-workspace {
+  position: relative;
+  z-index: 1;
+}
+
+.siq-sidebar-player-figure {
+  position: absolute;
+  z-index: 2;
+  left: calc(var(--sidebar-collapsed) + 8px);
+  bottom: -34px;
+  width: clamp(260px, 24vw, 420px);
+  height: min(72vh, 680px);
+  object-fit: contain;
+  object-position: center bottom;
+  opacity: 0;
+  transform: translateX(-56px) scale(0.96);
+  filter: grayscale(0.08) saturate(0.88) drop-shadow(0 26px 42px rgba(16,24,40,0.18));
+  pointer-events: none;
+  transition:
+    opacity 260ms var(--ease-out),
+    transform 320ms var(--ease-out);
+}
+
+.siq-sidebar-player-figure--active {
+  opacity: 0.12;
+  transform: translateX(0) scale(1);
 }
 
 .siq-main {
@@ -275,6 +335,30 @@ a { color: inherit; }
 .siq-content {
   max-width: var(--content-max);
   margin: 0 auto;
+}
+
+.siq-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.siq-icon-button:hover {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  background: var(--bg-inset);
 }
 
 .siq-profile-grid {
