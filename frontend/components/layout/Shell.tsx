@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Users, SlidersHorizontal, Target, Shield, Moon, Sun, Bell, Search, Menu } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
-import { getHealth, headshotUrl } from '@/lib/api';
+import { getHealth } from '@/lib/api';
 
 const NAV = [
   { id: 'players',   href: '/players',   label: 'Players',      Icon: Users },
@@ -210,20 +210,6 @@ function TopBar({
   );
 }
 
-function PlayerSidebarFigure({ playerId, active }: { playerId: number | null; active: boolean }) {
-  if (playerId == null) return null;
-
-  return (
-    <img
-      src={headshotUrl(playerId)}
-      alt=""
-      aria-hidden="true"
-      className={`siq-sidebar-player-figure${active ? ' siq-sidebar-player-figure--active' : ''}`}
-      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-    />
-  );
-}
-
 interface ShellProps {
   children: ReactNode;
 }
@@ -234,8 +220,6 @@ export function Shell({ children }: ShellProps) {
 
   const activeId = NAV.find((n) => pathname.startsWith(n.href))?.id ?? 'players';
   const baseTitle = TITLES[pathname] ?? TITLES[`/${pathname.split('/')[1]}`] ?? 'ScoutIQ';
-  const playerProfileMatch = pathname.match(/^\/players\/(\d+)/);
-  const profilePlayerId = playerProfileMatch ? Number(playerProfileMatch[1]) : null;
 
   const [query, setQuery] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -264,7 +248,6 @@ export function Shell({ children }: ShellProps) {
   return (
     <div className={`siq-shell${sidebarCollapsed ? ' siq-shell--sidebar-collapsed' : ''}`}>
       <Sidebar active={activeId} collapsed={sidebarCollapsed} />
-      <PlayerSidebarFigure playerId={profilePlayerId} active={sidebarCollapsed && profilePlayerId != null} />
       <div className="siq-shell-workspace" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <TopBar
           title={baseTitle}
