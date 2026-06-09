@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     BBREF_DELAY_SECONDS: float = 3.5
     BBREF_USER_AGENT: str = "ScoutIQ/0.1 (personal portfolio research; contact via github)"
 
+    # Qualitative scouting layer. These keys are read ONLY by the offline backfill scripts
+    # (etl/load_scout_reports.py + etl/extract_scout_ratings.py); the FastAPI app never calls
+    # Sonar or Claude — it serves cached DB rows. Sonar is for WORDS only, never stats/salary/cap.
+    PERPLEXITY_API_KEY: str = ""
+    SONAR_MODEL: str = "sonar"
+    ANTHROPIC_API_KEY: str = ""
+    SCOUTIQ_LLM_MODEL: str = "claude-sonnet-4-6"
+
     @property
     def seasons(self) -> list[str]:
         """['2012-13', '2013-14', ..., '2025-26'] — NBA season string format."""

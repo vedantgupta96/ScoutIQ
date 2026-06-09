@@ -1,11 +1,18 @@
 import json
+from datetime import datetime, timezone
 
 from pydantic import ValidationError
 
+from scoutiq.llm import extract
 from scoutiq.llm.eval_scout_ratings import main
-from scoutiq.llm.player_ratings import PlayerScoutReport, aggregate_player_scout_ratings
+from scoutiq.llm.player_ratings import (
+    PlayerScoutReport,
+    aggregate_from_db,
+    aggregate_player_scout_ratings,
+)
 from scoutiq.llm.schemas import ScoutRatingExtraction
 from scoutiq.llm.scoring import score_extractions
+from scoutiq.models import PlayerRating, ScoutReport
 
 
 def _valid_row():
@@ -179,3 +186,96 @@ def test_player_scout_rating_aggregation_averages_traits_and_confidence_mix():
     assert leadership.confidence_mix.high == 1
     assert leadership.confidence_mix.medium == 1
     assert leadership.evidence[0] == "organized the huddle"
+
+
+class _FakeScalars:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return self._rows
+
+
+class _FakeDB:
+    """Minimal stand-in: aggregate_from_db only calls db.scalars(stmt).all()."""
+
+    def __init__(self, rows):
+        self._rows = rows
+
+    def scalars(self, _stmt):
+        return _FakeScalars(self._rows)
+
+
+def _db_report(report_id, ratings, citations, fetched_at):
+    report = ScoutReport(
+        report_id=report_id,
+        player_id=1,
+        season="2025-26",
+        source_label="Perplexity Sonar",
+        source_text="Organizes the huddle and stays late for shooting.",
+        citations=citations,
+        fetched_at=fetched_at,
+    )
+    report.ratings = [PlayerRating(report_id=report_id, player_id=1, **r) for r in ratings]
+    return report
+
+
+def test_extract_ratings_validates_and_pins_context_fields(monkeypatch):
+    body = {
+        "content": [
+            {
+                "type": "text",
+                "text": 'prose {"ratings":[{"trait":"leadership","score":4,'
+                '"confidence":"high","evidence_span":"organized the huddle"}]} trailing',
+            }
+        ]
+    }
+
+    class _Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return body
+
+    monkeypatch.setattr(extract.requests, "post", lambda *a, **k: _Resp())
+
+    result = extract.extract_ratings(
+        "sonar-1-2025-26", "Avery Stone", "organized the huddle", api_key="k", model="m"
+    )
+
+    # Context fields are pinned to known values even though the model omitted them.
+    assert result.note_id == "sonar-1-2025-26"
+    assert result.player_name == "Avery Stone"
+    assert result.ratings[0].trait.value == "leadership"
+    assert result.ratings[0].score == 4
+
+
+def test_aggregate_from_db_builds_real_coverage_with_citations():
+    fetched = datetime(2026, 6, 9, tzinfo=timezone.utc)
+    rows = [
+        _db_report(
+            "sonar-1-2025-26",
+            [
+                {"trait": "leadership", "score": 4, "confidence": "high", "evidence_span": "organized the huddle"},
+                {"trait": "work_ethic", "score": 5, "confidence": "medium", "evidence_span": "stays late"},
+            ],
+            ["https://www.espn.com/x", "https://example.com/y"],
+            fetched,
+        )
+    ]
+
+    result = aggregate_from_db(_FakeDB(rows), 1, "Avery Stone")
+
+    assert result is not None
+    assert result.source_mode == "sonar_claude_db"
+    assert result.report_count == 1
+    assert "Sonar" in result.caveat and "Claude" in result.caveat
+    assert result.citations == ["https://www.espn.com/x", "https://example.com/y"]
+    assert result.last_fetched == fetched.isoformat()
+    leadership = next(r for r in result.traits if r.trait.value == "leadership")
+    assert leadership.average_score == 4.0
+
+
+def test_aggregate_from_db_returns_none_without_coverage():
+    assert aggregate_from_db(_FakeDB([]), 999, "Nobody") is None
