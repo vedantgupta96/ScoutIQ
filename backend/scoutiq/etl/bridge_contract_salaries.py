@@ -6,9 +6,10 @@ that table. This backfills player_salaries for a forward season from
 contract_years.aav (the per-season cap hit), tagged source='contract_years' so it
 stays distinguishable from realized BBRef salaries.
 
-A minimum-salary floor drops the small set of malformed/stale Spotrac rows
-(sub-minimum values that are parse artifacts, not real contracts). Realized
-BBRef rows are never overwritten.
+By default every positive non-null contract amount is bridged. Some current
+contracts are two-way, exhibit, or partial-season rows below the NBA minimum;
+preserving those source amounts is better than leaving the valuation UI with no
+pay data. Realized BBRef rows are never overwritten.
 
 Usage:
     python -m scoutiq.etl.bridge_contract_salaries                       # season 2025-26
@@ -26,7 +27,7 @@ from scoutiq.db import get_session
 from scoutiq.models import PlayerSalary
 
 DEFAULT_SEASON = settings.CURRENT_SEASON  # '2025-26'
-DEFAULT_FLOOR = 1_100_000  # below any NBA minimum -> malformed/stale source row, skip
+DEFAULT_FLOOR = 1
 
 
 def run(season: str, floor: int) -> None:
@@ -64,15 +65,13 @@ def run(season: str, floor: int) -> None:
                 )
             )
 
-    print(
-        f"bridge {season}: wrote {len(kept)} salaries (source=contract_years); "
-        f"skipped {dropped} below floor ${floor:,}"
-    )
+    floor_note = f"; skipped {dropped} below floor ${floor:,}" if floor > 1 else ""
+    print(f"bridge {season}: wrote {len(kept)} salaries (source=contract_years){floor_note}")
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", default=DEFAULT_SEASON, help="forward season to bridge (default: CURRENT_SEASON)")
-    ap.add_argument("--floor", type=int, default=DEFAULT_FLOOR, help="skip cap hits below this (default: 1.1M)")
+    ap.add_argument("--floor", type=int, default=DEFAULT_FLOOR, help="skip cap hits below this (default: 1)")
     args = ap.parse_args()
     run(args.season, args.floor)

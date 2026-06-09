@@ -1,4 +1,5 @@
 from scoutiq.etl import load_contracts
+from scoutiq.etl.load_salary_overrides import _read_rows
 from scoutiq.etl.load_bbref_contracts import parse_contract_rows
 
 
@@ -89,3 +90,11 @@ def test_bbref_contract_parser_reads_current_salary_table():
         "team": "CHI",
         "years": [{"season": "2025-26", "aav": 10_107_163}],
     }]
+
+
+def test_salary_override_seed_contains_source_confirmed_blanks():
+    rows = _read_rows(load_contracts.settings.DATA_DIR / "current_salary_overrides.csv", "2025-26")
+
+    by_name = {row["full_name"]: row for row in rows}
+    assert by_name["Ethan Thompson"]["salary"] == "508416"
+    assert by_name["Javon Small"]["salary"] == "636434"

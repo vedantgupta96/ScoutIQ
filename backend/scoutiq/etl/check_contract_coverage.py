@@ -128,7 +128,8 @@ def main() -> None:
         f"contract coverage {args.season}: "
         f"missing_salary={len(missing_salary)} missing_contract={len(missing_contract)}"
     )
-    print("reasons: " + " ".join(f"{reason}={count}" for reason, count in reason_counts.items()))
+    reason_text = " ".join(f"{reason}={count}" for reason, count in reason_counts.items()) or "none"
+    print(f"reasons: {reason_text}")
     for row in rows[:100]:
         gaps = []
         if not row.has_salary:
