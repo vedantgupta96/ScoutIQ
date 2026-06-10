@@ -78,12 +78,10 @@ export function CapBar({
       {showLabels && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
           {markers.map((marker) => (
-            <button
+            <span
               key={marker.label}
               title={`${marker.label}: ${fmtM(marker.value)}`}
               onMouseEnter={() => setHover({ label: marker.label, value: marker.value, pct: marker.pct })}
-              onFocus={() => setHover({ label: marker.label, value: marker.value, pct: marker.pct })}
-              onBlur={() => setHover(null)}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -93,14 +91,14 @@ export function CapBar({
                 background: 'transparent',
                 color: 'var(--text-muted)',
                 font: 'inherit',
-                cursor: 'help',
+                cursor: 'default',
               }}
             >
               <span style={{ width: 6, height: 6, borderRadius: 'var(--radius-pill)', background: marker.color, boxShadow: '0 0 0 2px var(--bg-panel)' }} />
               <span className="ds-eyebrow" style={{ fontSize: 12, letterSpacing: '0.02em', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 {marker.label}
               </span>
-            </button>
+            </span>
           ))}
         </div>
       )}

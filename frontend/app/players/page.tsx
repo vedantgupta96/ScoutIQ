@@ -131,11 +131,11 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
     : null;
 
   return (
-    <Link href={`/players/${player.player_id}`} style={{ textDecoration: 'none' }}>
-      <button
-        className="siq-case-card"
-        style={{ '--case-accent': accent } as React.CSSProperties}
-      >
+    <Link
+      href={`/players/${player.player_id}`}
+      className="siq-case-card"
+      style={{ '--case-accent': accent } as React.CSSProperties}
+    >
         {/* Header row */}
         <div className="siq-case-card__head">
           <Avatar name={player.full_name} size="lg" position={player.position} playerId={player.player_id} />
@@ -200,7 +200,6 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
             Loading valuation…
           </div>
         )}
-      </button>
     </Link>
   );
 }
@@ -319,7 +318,16 @@ function PlayersContent() {
     <div>
       <div className="siq-watchlist-command">
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-          <span className="ds-eyebrow">Contract watchlist</span>
+          <h1 style={{
+            margin: 0,
+            fontFamily: 'var(--font-display)',
+            fontSize: 24,
+            fontWeight: 700,
+            lineHeight: 1,
+            color: 'var(--text-primary)',
+          }}>
+            Contract watchlist
+          </h1>
           {!loading && (
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               {total} players · largest value/pay mismatches{watchlist?.season ? ` · ${watchlist.season}` : ''}
@@ -329,6 +337,8 @@ function PlayersContent() {
             <Badge tone="accent" size="sm">
               Searching: {q}
               <button
+                type="button"
+                aria-label="Clear player search"
                 onClick={() => { setDraftQuery(''); router.push('/players'); }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: 4, color: 'inherit', padding: 0 }}
               >
@@ -350,6 +360,7 @@ function PlayersContent() {
             value={draftQuery}
             onChange={(e) => setDraftQuery(e.target.value)}
             placeholder="Search by first name, last name, or both..."
+            aria-label="Search watchlist players"
             style={{
               flex: 1,
               minWidth: 0,
@@ -377,7 +388,9 @@ function PlayersContent() {
               return (
                 <button
                   key={b.value}
+                  type="button"
                   onClick={() => setBucket(b.value)}
+                  aria-pressed={active}
                   style={{
                     border: 'none',
                     borderRadius: 'calc(var(--radius-md) - 3px)',
@@ -398,6 +411,7 @@ function PlayersContent() {
           <select
             value={position}
             onChange={(e) => setPosition(e.target.value)}
+            aria-label="Filter by position"
             style={SELECT_STYLE}
           >
             {POSITIONS.map((p) => (
@@ -488,8 +502,9 @@ function PlayersContent() {
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               Showing {pageStart}-{pageEnd} of {total}
             </span>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="siq-pagination" style={{ display: 'flex', gap: 8 }}>
               <button
+                type="button"
                 disabled={!canPageBack}
                 onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
                 style={{
@@ -506,6 +521,7 @@ function PlayersContent() {
                 Previous
               </button>
               <button
+                type="button"
                 disabled={!canPageForward}
                 onClick={() => setOffset(offset + PAGE_SIZE)}
                 style={{

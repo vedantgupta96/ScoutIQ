@@ -24,7 +24,7 @@ export function AssumptionFlag({ children, title, tone = 'warning', icon }: Assu
       borderRadius: 'var(--radius-lg)',
       background: c.bg,
       border: `1px solid ${c.border}30`,
-      borderLeft: `3px solid ${c.border}`,
+      boxShadow: `inset 0 0 0 1px ${c.border}20`,
       padding: '12px 14px',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>

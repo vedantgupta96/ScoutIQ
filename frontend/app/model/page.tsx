@@ -42,6 +42,7 @@ function MiniSlider({ label, value, onChange, min, max, step, suffix }: {
       <input
         className="siq-slider"
         type="range" min={min} max={max} step={step} value={value}
+        aria-label={label}
         onChange={(e) => onChange(Number(e.target.value))}
         style={{ '--siq-slider-pct': `${Math.min(100, Math.max(0, pct))}%`, flex: 1 } as CSSProperties}
       />
@@ -484,6 +485,7 @@ export default function ModelPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
+      <h1 className="siq-sr-only">Model performance</h1>
       {/* Headline metrics */}
       {backtestError && (
         <AssumptionFlag tone="negative" title="Backtest metadata unavailable" icon={<TriangleAlert size={16} />}>

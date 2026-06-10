@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500;600;700&family=Commissioner:wght@400;500;600;700;800&family=Saira+Semi+Condensed:wght@500;600;700;800&display=swap');
 @import 'tailwindcss';
 
 /* ============================================================
@@ -119,9 +119,9 @@
   --glow-accent:     0 0 0 4px var(--orange-soft), 0 2px 8px var(--orange-glow);
 
   /* Shadows */
-  --shadow-card: 0 1px 0 rgba(24,31,24,0.06), 0 6px 12px -8px rgba(24,31,24,0.22);
-  --shadow-md:   0 8px 14px -9px rgba(24,31,24,0.30);
-  --shadow-accent-glow: 0 0 0 1px rgba(255,90,31,0.24), 0 7px 14px -7px rgba(255,90,31,0.38);
+  --shadow-card: 0 1px 0 rgba(24,31,24,0.07), 0 4px 8px -6px rgba(24,31,24,0.30);
+  --shadow-md:   0 1px 0 rgba(24,31,24,0.10), 0 7px 8px -7px rgba(24,31,24,0.34);
+  --shadow-accent-glow: 0 0 0 1px rgba(255,90,31,0.28), 0 5px 8px -6px rgba(255,90,31,0.48);
   --shadow-focus: 0 0 0 3px rgba(244,98,31,0.25);
 
   /* Motion */
@@ -139,9 +139,9 @@
   --sidebar-collapsed: 60px;
 
   /* Fonts */
-  --font-display: 'Space Grotesk', system-ui, sans-serif;
-  --font-sans:    'Hanken Grotesk', system-ui, sans-serif;
-  --font-mono:    'JetBrains Mono', ui-monospace, monospace;
+  --font-display: 'Saira Semi Condensed', system-ui, sans-serif;
+  --font-sans:    'Commissioner', system-ui, sans-serif;
+  --font-mono:    'Azeret Mono', ui-monospace, monospace;
 
   /* Radii */
   --radius-xs: 3px;
@@ -206,9 +206,9 @@
   --confidence-soft: var(--teal-soft);
   --focus-ring:    var(--orange-400);
 
-  --shadow-card: 0 1px 0 rgba(255,255,255,0.035), 0 10px 18px -14px rgba(0,0,0,0.75);
-  --shadow-md:   0 16px 24px -18px rgba(0,0,0,0.85);
-  --shadow-accent-glow: 0 0 0 1px rgba(255,90,31,0.28), 0 8px 18px -9px rgba(255,90,31,0.72);
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.045), 0 5px 8px -6px rgba(0,0,0,0.76);
+  --shadow-md:   0 1px 0 rgba(255,255,255,0.06), 0 7px 8px -6px rgba(0,0,0,0.86);
+  --shadow-accent-glow: 0 0 0 1px rgba(255,90,31,0.32), 0 5px 8px -6px rgba(255,90,31,0.78);
 }
 
 /* ============================================================
@@ -228,6 +228,18 @@ body {
 }
 
 a { color: inherit; }
+
+.siq-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 ::selection {
   background: color-mix(in srgb, var(--accent) 28%, transparent);
@@ -282,9 +294,28 @@ textarea::placeholder {
   overflow: hidden;
   position: relative;
   background:
-    radial-gradient(circle at 14% 10%, rgba(255,90,31,0.13), transparent 26%),
-    radial-gradient(circle at 82% 8%, rgba(31,193,193,0.10), transparent 24%),
-    linear-gradient(180deg, var(--bg-backdrop), var(--bg-app) 38%);
+    linear-gradient(118deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 34%),
+    linear-gradient(242deg, color-mix(in srgb, var(--confidence) 7%, transparent), transparent 38%),
+    linear-gradient(180deg, var(--bg-backdrop), var(--bg-app) 42%);
+}
+
+.siq-shell::before {
+  content: '';
+  position: absolute;
+  inset: var(--topbar-height) 0 0 var(--sidebar-width);
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent 0 11%, color-mix(in srgb, var(--confidence) 12%, transparent) 11% calc(11% + 1px), transparent calc(11% + 1px) 50%, color-mix(in srgb, var(--accent) 10%, transparent) 50% calc(50% + 1px), transparent calc(50% + 1px) 89%, color-mix(in srgb, var(--confidence) 10%, transparent) 89% calc(89% + 1px), transparent calc(89% + 1px)),
+    linear-gradient(180deg, transparent 0 18%, color-mix(in srgb, var(--text-primary) 7%, transparent) 18% calc(18% + 1px), transparent calc(18% + 1px) 64%, color-mix(in srgb, var(--accent) 8%, transparent) 64% calc(64% + 1px), transparent calc(64% + 1px)),
+    conic-gradient(from 90deg at 50% 0%, transparent 0 38deg, color-mix(in srgb, var(--confidence) 9%, transparent) 38deg 41deg, transparent 41deg 319deg, color-mix(in srgb, var(--confidence) 9%, transparent) 319deg 322deg, transparent 322deg);
+  mask-image: linear-gradient(180deg, rgba(0,0,0,0.84), transparent 78%);
+  opacity: 0.8;
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.siq-shell--sidebar-collapsed::before {
+  left: var(--sidebar-collapsed);
 }
 
 .siq-sidebar {
@@ -293,13 +324,13 @@ textarea::placeholder {
   position: relative;
   z-index: 3;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 84%, var(--accent) 6%), var(--bg-panel)),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 82%, var(--confidence) 5%), var(--bg-panel)),
     var(--bg-panel);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   height: 100%;
-  transition: width var(--duration-base) var(--ease-out);
+  transition: background var(--duration-base) var(--ease-out);
 }
 
 .siq-sidebar::after {
@@ -325,10 +356,10 @@ textarea::placeholder {
 .siq-brand-mark {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: 6px;
   background:
-    radial-gradient(circle at 70% 24%, rgba(255,255,255,0.36), transparent 20%),
-    linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--confidence)));
+    linear-gradient(135deg, transparent 0 42%, rgba(255,255,255,0.26) 42% 46%, transparent 46%),
+    linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 50%, var(--confidence)));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -384,9 +415,20 @@ textarea::placeholder {
   gap: 16px;
   padding: 0 22px;
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--bg-app) 86%, var(--accent) 4%), color-mix(in srgb, var(--bg-app) 90%, var(--confidence) 4%));
+    linear-gradient(90deg, color-mix(in srgb, var(--bg-app) 88%, var(--confidence) 5%), color-mix(in srgb, var(--bg-app) 89%, var(--accent) 4%));
   border-bottom: 1px solid var(--border-subtle);
-  backdrop-filter: blur(12px);
+  position: relative;
+}
+
+.siq-topbar::after {
+  content: '';
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--confidence) 48%, transparent) 18%, color-mix(in srgb, var(--accent) 56%, transparent) 52%, transparent 86%);
+  pointer-events: none;
 }
 
 .siq-main {
@@ -426,11 +468,13 @@ textarea::placeholder {
 
 .siq-card {
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 94%, var(--accent) 3%), var(--bg-panel));
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 44%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 92%, var(--confidence) 2%), var(--bg-panel));
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   overflow: hidden;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
   transition:
     border-color var(--duration-fast) var(--ease-out),
     transform var(--duration-fast) var(--ease-out),
@@ -612,9 +656,21 @@ textarea::placeholder {
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--team-primary) 8%, transparent), transparent 46%),
     var(--bg-inset);
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--team-primary) 42%, transparent);
   position: relative;
   z-index: 2;
+}
+
+.siq-decision-snapshot::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 0;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(90deg, var(--team-primary), var(--team-secondary));
+  opacity: 0.72;
+  pointer-events: none;
 }
 
 .siq-decision-actions {
@@ -745,6 +801,15 @@ textarea::placeholder {
 .siq-market-signal {
   display: grid;
   gap: 10px;
+}
+
+.siq-market-player-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  color: var(--text-primary);
+  font-weight: 800;
+  text-decoration: none;
 }
 
 .siq-similar-dossier-row {
@@ -1044,6 +1109,7 @@ textarea::placeholder {
   justify-content: center;
   gap: 8px;
   padding: 9px 16px;
+  min-height: 38px;
   border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--text-on-accent);
@@ -1071,6 +1137,7 @@ textarea::placeholder {
   justify-content: center;
   gap: 7px;
   padding: 8px 12px;
+  min-height: 38px;
   border-radius: var(--radius-md);
   background: var(--bg-panel);
   color: var(--text-secondary);
@@ -1174,10 +1241,12 @@ textarea::placeholder {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 88%, var(--surface-accent, var(--accent)) 4%), var(--bg-panel));
+    linear-gradient(135deg, color-mix(in srgb, var(--surface-accent, var(--accent)) 5%, transparent), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 88%, var(--confidence) 2%), var(--bg-panel));
   box-shadow: var(--shadow-card);
   overflow: hidden;
   isolation: isolate;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
   transition:
     border-color var(--duration-fast) var(--ease-out),
     transform var(--duration-fast) var(--ease-out),
@@ -1225,9 +1294,8 @@ textarea::placeholder {
 /* ---- Instrument panel: the Decision Brief reads like a console readout ---- */
 .siq-surface--instrument {
   background:
-    linear-gradient(180deg,
-      color-mix(in srgb, var(--surface-accent, var(--accent)) 6%, transparent),
-      transparent 140px),
+    linear-gradient(110deg, color-mix(in srgb, var(--confidence) 6%, transparent), transparent 36%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-accent, var(--accent)) 6%, transparent), transparent 140px),
     var(--bg-panel);
 }
 
@@ -1254,9 +1322,7 @@ textarea::placeholder {
   padding: 16px 18px 6px;
   border-radius: var(--radius-md);
   background:
-    radial-gradient(130% 150% at 50% 0%,
-      color-mix(in srgb, var(--surface-accent, var(--accent)) 7%, transparent),
-      transparent 72%),
+    linear-gradient(90deg, color-mix(in srgb, var(--surface-accent, var(--accent)) 6%, transparent), transparent 48%),
     var(--bg-inset);
   border: 1px solid var(--border-subtle);
   box-shadow: inset 0 1px 3px rgba(16,24,40,0.07);
@@ -1426,10 +1492,15 @@ textarea::placeholder {
   }
 
   .siq-sidebar-link {
-    width: 42px;
-    height: 42px;
+    width: 44px;
+    height: 44px;
     justify-content: center;
     padding: 0;
+  }
+
+  .siq-icon-button {
+    width: 44px;
+    height: 44px;
   }
 
   .siq-topbar {
@@ -1524,7 +1595,21 @@ textarea::placeholder {
   }
 
   .siq-workspace-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     border-radius: var(--radius-md);
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .siq-workspace-tabs button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+  }
+
+  .siq-workspace-tabs button:first-child {
+    grid-column: 1 / -1;
   }
 
   .siq-player-card-row {
@@ -1538,6 +1623,22 @@ textarea::placeholder {
 
 .siq-primary-button {
   width: 100%;
+}
+
+.siq-primary-button,
+.siq-secondary-button,
+.siq-back-link,
+.siq-watchlist-command button,
+.siq-watchlist-command select,
+.siq-watchlist-command label,
+.siq-pagination button {
+  min-height: 44px;
+}
+
+.siq-roster-ledger-row a {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
 }
 
 }
@@ -1622,6 +1723,7 @@ textarea::placeholder {
   border-radius: var(--radius-lg);
   padding: 16px;
   cursor: pointer;
+  text-decoration: none;
   display: flex;
   flex-direction: column;
   gap: 13px;
@@ -1841,6 +1943,10 @@ textarea::placeholder {
 }
 
 @media (max-width: 720px) {
+  .siq-market-player-link {
+    min-height: 44px;
+  }
+
   .siq-similar-dossier-row {
     grid-template-columns: minmax(0, 1fr);
   }

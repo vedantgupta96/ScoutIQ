@@ -610,10 +610,13 @@ function WorkspaceTabs({
   onChange: (tab: WorkspaceTab) => void;
 }) {
   return (
-    <div className="siq-workspace-tabs">
+    <div className="siq-workspace-tabs" role="tablist" aria-label="Player case sections">
       {WORKSPACE_TABS.map((tab) => (
         <button
           key={tab.key}
+          type="button"
+          role="tab"
+          aria-selected={active === tab.key}
           onClick={() => onChange(tab.key)}
           className={active === tab.key ? 'is-active' : undefined}
         >
@@ -710,7 +713,7 @@ function FrontOfficeRead({
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
               <Avatar name={topMatch.player.full_name} size="md" position={topMatch.player.position} playerId={topMatch.player.player_id} />
               <div style={{ minWidth: 0 }}>
-                <Link href={`/players/${topMatch.player.player_id}`} style={{ textDecoration: 'none', fontWeight: 800, color: 'var(--text-primary)' }}>
+                <Link href={`/players/${topMatch.player.player_id}`} className="siq-market-player-link">
                   {topMatch.player.full_name}
                 </Link>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -777,16 +780,23 @@ function RationaleCard({ playerId }: { playerId: number }) {
     <Surface variant="dossier" teamAccent eyebrow="Scout's rationale" icon={<FileText size={15} />}
       action={cost ? <Badge tone="neutral" variant="outline" size="sm">${cost.est_cost_usd.toFixed(4)} · {Math.round((cost.input_tokens + cost.output_tokens) / 100) / 10}k tok</Badge> : undefined}
     >
+      {!data && (
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.5 }}>
+          Generate a cited rationale on demand. Cached responses show cost after completion.
+        </p>
+      )}
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
         {(['fusion', 'multi_source'] as RationaleMode[]).map((m) => (
           <button
             key={m}
+            type="button"
             onClick={() => generate(m)}
             disabled={loading}
+            aria-busy={loading && mode === m}
             className={mode === m && (data || loading) ? 'siq-primary-button' : 'siq-secondary-button'}
             style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
           >
-            {m === 'fusion' ? 'Model vs scout' : 'Multi-source'}
+            {m === 'fusion' ? 'Generate model vs scout' : 'Generate multi-source'}
           </button>
         ))}
       </div>
@@ -1089,7 +1099,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
       />
 
       <div className="siq-workspace-layout">
-        <main className="siq-workspace-main">
+        <section className="siq-workspace-main" aria-label="Player workspace">
           <WorkspaceTabs active={activeTab} onChange={setActiveTab} />
 
           <div className="siq-workspace-panel">
@@ -1137,7 +1147,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
               <ModelInputs val={val} valueUsd={valueUsd} actualUsd={actualUsd} />
             )}
           </div>
-        </main>
+        </section>
 
         <ActionRail
           val={val}
