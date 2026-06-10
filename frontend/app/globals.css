@@ -756,6 +756,8 @@ textarea::placeholder {
   align-items: center;
   position: relative;
   overflow: hidden;
+  content-visibility: auto;
+  contain-intrinsic-size: 94px;
 }
 
 .siq-similar-dossier-row::before {
@@ -919,6 +921,8 @@ textarea::placeholder {
 .siq-roster-ledger-row {
   padding: 8px 0;
   border-bottom: 1px solid var(--border-subtle);
+  content-visibility: auto;
+  contain-intrinsic-size: 54px;
 }
 
 .siq-roster-ledger-row:hover {
@@ -1611,6 +1615,8 @@ textarea::placeholder {
   --case-accent: var(--accent);
   width: 100%;
   min-height: 234px;
+  content-visibility: auto;
+  contain-intrinsic-size: 234px;
   text-align: left;
   border: 1px solid color-mix(in srgb, var(--case-accent) 24%, var(--border-subtle));
   border-radius: var(--radius-lg);

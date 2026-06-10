@@ -878,89 +878,20 @@ function ActionRail({
   );
 }
 
-export default function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const playerId = Number(id);
-  const router = useRouter();
-
-  const [val, setVal] = useState<ValuationResponse | null>(null);
-  const [contract, setContract] = useState<PlayerContractResponse | null>(null);
-  const [contractError, setContractError] = useState<string | null>(null);
-  const [similarMode, setSimilarMode] = useState<SimilarPlayersMode>('twins');
-  const [similarMarket, setSimilarMarket] = useState<SimilarPlayersResponse | null>(null);
-  const [similarError, setSimilarError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>('brief');
-  const [scoutRatings, setScoutRatings] = useState<PlayerScoutRatingsResponse | null>(null);
-  const [scoutError, setScoutError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    getValuation(playerId)
-      .then(setVal)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load valuation.'))
-      .finally(() => setLoading(false));
-
-    setContract(null);
-    setContractError(null);
-    getPlayerContract(playerId)
-      .then(setContract)
-      .catch((e: unknown) => setContractError(e instanceof Error ? e.message : 'Failed to load contract.'));
-
-    setScoutRatings(null);
-    setScoutError(null);
-    getPlayerScoutRatings(playerId)
-      .then(setScoutRatings)
-      .catch((e: unknown) => setScoutError(e instanceof Error ? e.message : 'Failed to load scout ratings.'));
-  }, [playerId]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setSimilarMarket(null);
-    setSimilarError(null);
-    getSimilarPlayers(playerId, { mode: similarMode, limit: 8 }, controller.signal)
-      .then(setSimilarMarket)
-      .catch((e: unknown) => {
-        if (!controller.signal.aborted) {
-          setSimilarError(e instanceof Error ? e.message : 'Failed to load similar players.');
-        }
-      });
-    return () => controller.abort();
-  }, [playerId, similarMode]);
-
-  if (loading) {
-    return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>;
-  }
-
-  if (error || !val) {
-    return (
-      <div>
-        <Link href="/players" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 16, textDecoration: 'none', fontSize: 13, color: 'var(--text-secondary)' }}>
-          <ArrowLeft size={15} /> All players
-        </Link>
-        <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-lg)', background: 'var(--negative-soft)', color: 'var(--negative-text)', fontSize: 13 }}>
-          {error ?? 'Player not found.'}
-        </div>
-      </div>
-    );
-  }
-
-  const capM = val.salary_cap ?? 140_588_000;
-  const valueUsd = val.value_usd ?? Math.round(val.value_pct / 100 * capM);
-  const actualUsd = val.actual_usd;
-
-  // Feature entries — raw stat values from the model input
+function ModelInputs({
+  val,
+  valueUsd,
+  actualUsd,
+}: {
+  val: ValuationResponse;
+  valueUsd: number;
+  actualUsd: number | null;
+}) {
   const featureEntries = val.features
     ? Object.entries(val.features).slice(0, 8)
     : [];
-  const extensionAav = clamp(Number(val.value_pct.toFixed(1)), 1, 35);
-  const extensionHref = contract?.extension_start_season
-    ? `/simulator?player=${playerId}&start=${encodeURIComponent(contract.extension_start_season)}&aav=${extensionAav}&years=4`
-    : `/simulator?player=${playerId}&aav=${extensionAav}`;
-  const visual = teamVisual(val.current_team?.abbreviation);
 
-  const modelInputs = (
+  return (
     <div className="siq-read-grid">
       <Surface
         variant="instrument"
@@ -1055,6 +986,85 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
       </AssumptionFlag>
     </div>
   );
+}
+
+export default function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const playerId = Number(id);
+  const router = useRouter();
+
+  const [val, setVal] = useState<ValuationResponse | null>(null);
+  const [contract, setContract] = useState<PlayerContractResponse | null>(null);
+  const [contractError, setContractError] = useState<string | null>(null);
+  const [similarMode, setSimilarMode] = useState<SimilarPlayersMode>('twins');
+  const [similarMarket, setSimilarMarket] = useState<SimilarPlayersResponse | null>(null);
+  const [similarError, setSimilarError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('brief');
+  const [scoutRatings, setScoutRatings] = useState<PlayerScoutRatingsResponse | null>(null);
+  const [scoutError, setScoutError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    getValuation(playerId)
+      .then(setVal)
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load valuation.'))
+      .finally(() => setLoading(false));
+
+    setContract(null);
+    setContractError(null);
+    getPlayerContract(playerId)
+      .then(setContract)
+      .catch((e: unknown) => setContractError(e instanceof Error ? e.message : 'Failed to load contract.'));
+
+    setScoutRatings(null);
+    setScoutError(null);
+    getPlayerScoutRatings(playerId)
+      .then(setScoutRatings)
+      .catch((e: unknown) => setScoutError(e instanceof Error ? e.message : 'Failed to load scout ratings.'));
+  }, [playerId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setSimilarMarket(null);
+    setSimilarError(null);
+    getSimilarPlayers(playerId, { mode: similarMode, limit: 8 }, controller.signal)
+      .then(setSimilarMarket)
+      .catch((e: unknown) => {
+        if (!controller.signal.aborted) {
+          setSimilarError(e instanceof Error ? e.message : 'Failed to load similar players.');
+        }
+      });
+    return () => controller.abort();
+  }, [playerId, similarMode]);
+
+  if (loading) {
+    return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>;
+  }
+
+  if (error || !val) {
+    return (
+      <div>
+        <Link href="/players" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 16, textDecoration: 'none', fontSize: 13, color: 'var(--text-secondary)' }}>
+          <ArrowLeft size={15} /> All players
+        </Link>
+        <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-lg)', background: 'var(--negative-soft)', color: 'var(--negative-text)', fontSize: 13 }}>
+          {error ?? 'Player not found.'}
+        </div>
+      </div>
+    );
+  }
+
+  const capM = val.salary_cap ?? 140_588_000;
+  const valueUsd = val.value_usd ?? Math.round(val.value_pct / 100 * capM);
+  const actualUsd = val.actual_usd;
+
+  const extensionAav = clamp(Number(val.value_pct.toFixed(1)), 1, 35);
+  const extensionHref = contract?.extension_start_season
+    ? `/simulator?player=${playerId}&start=${encodeURIComponent(contract.extension_start_season)}&aav=${extensionAav}&years=4`
+    : `/simulator?player=${playerId}&aav=${extensionAav}`;
+  const visual = teamVisual(val.current_team?.abbreviation);
 
   return (
     <div
@@ -1123,7 +1133,9 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
               </div>
             )}
 
-            {activeTab === 'model' && modelInputs}
+            {activeTab === 'model' && (
+              <ModelInputs val={val} valueUsd={valueUsd} actualUsd={actualUsd} />
+            )}
           </div>
         </main>
 

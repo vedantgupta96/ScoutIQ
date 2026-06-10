@@ -449,14 +449,33 @@ export default function ModelPage() {
   // (enables click-through to the profile + the avatar position badge).
   useEffect(() => {
     if (!leaderKey) return;
-    for (const name of leaderKey.split('|')) {
-      if (name in lookup) continue;
-      searchPlayers(name, 5)
-        .then((res) => setLookup((prev) => ({ ...prev, [name]: res.find((p) => p.full_name === name) ?? null })))
-        .catch(() => setLookup((prev) => ({ ...prev, [name]: null })));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leaderKey]);
+    const missingNames = leaderKey.split('|').filter((name) => !(name in lookup));
+    if (missingNames.length === 0) return;
+
+    const controller = new AbortController();
+    Promise.all(
+      missingNames.map(async (name) => {
+        try {
+          const res = await searchPlayers(name, 5, controller.signal);
+          return [name, res.find((p) => p.full_name === name) ?? null] as const;
+        } catch {
+          if (controller.signal.aborted) return null;
+          return [name, null] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (controller.signal.aborted) return;
+      setLookup((prev) => {
+        const next = { ...prev };
+        for (const entry of entries) {
+          if (entry) next[entry[0]] = entry[1];
+        }
+        return next;
+      });
+    });
+
+    return () => controller.abort();
+  }, [leaderKey, lookup]);
 
   const loading = valRows.length === 0;
   const metrics = backtest?.metrics;

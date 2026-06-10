@@ -73,19 +73,19 @@ function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) 
 
 function TopBar({
   title,
-  query,
-  onQuery,
   sidebarCollapsed,
   onToggleSidebar,
 }: {
   title: string;
-  query: string;
-  onQuery: (q: string) => void;
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
 }) {
+  const pathname = usePathname();
+  const router = useRouter();
   const [dark, setDark] = useState(false);
   const [season, setSeason] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const lastSubmittedQuery = useRef('');
 
   useEffect(() => {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('siq-theme') : null;
@@ -110,6 +110,22 @@ function TopBar({
     document.documentElement.setAttribute('data-theme', next ? 'dark' : '');
     try { localStorage.setItem('siq-theme', next ? 'dark' : 'light'); } catch {}
   };
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    const t = setTimeout(() => {
+      if (trimmed) {
+        if (trimmed !== lastSubmittedQuery.current) {
+          lastSubmittedQuery.current = trimmed;
+          router.replace(`/players?q=${encodeURIComponent(trimmed)}`);
+        }
+      } else if (lastSubmittedQuery.current && pathname.startsWith('/players')) {
+        lastSubmittedQuery.current = '';
+        router.replace('/players');
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [pathname, query, router]);
 
   return (
     <header className="siq-topbar">
@@ -144,7 +160,7 @@ function TopBar({
           <input
             type="text"
             value={query}
-            onChange={(e) => onQuery(e.target.value)}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder="Search players…"
             style={{
               flex: 1, background: 'transparent', border: 'none', outline: 'none',
@@ -152,7 +168,7 @@ function TopBar({
             }}
           />
           {query && (
-            <button onClick={() => onQuery('')} style={{
+            <button onClick={() => setQuery('')} style={{
               background: 'none', border: 'none', cursor: 'pointer',
               color: 'var(--text-muted)', padding: 0, display: 'flex',
             }}>✕</button>
@@ -193,34 +209,11 @@ interface ShellProps {
 
 export function Shell({ children }: ShellProps) {
   const pathname = usePathname();
-  const router = useRouter();
 
   const activeId = NAV.find((n) => pathname.startsWith(n.href))?.id ?? 'players';
   const baseTitle = TITLES[pathname] ?? TITLES[`/${pathname.split('/')[1]}`] ?? 'ScoutIQ';
 
-  const [query, setQuery] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const lastSubmittedQuery = useRef('');
-
-  const handleQuery = (q: string) => {
-    setQuery(q);
-  };
-
-  useEffect(() => {
-    const trimmed = query.trim();
-    const t = setTimeout(() => {
-      if (trimmed) {
-        if (trimmed !== lastSubmittedQuery.current) {
-          lastSubmittedQuery.current = trimmed;
-          router.replace(`/players?q=${encodeURIComponent(trimmed)}`);
-        }
-      } else if (lastSubmittedQuery.current && pathname.startsWith('/players')) {
-        lastSubmittedQuery.current = '';
-        router.replace('/players');
-      }
-    }, 250);
-    return () => clearTimeout(t);
-  }, [pathname, query, router]);
 
   return (
     <div className={`siq-shell${sidebarCollapsed ? ' siq-shell--sidebar-collapsed' : ''}`}>
@@ -228,8 +221,6 @@ export function Shell({ children }: ShellProps) {
       <div className="siq-shell-workspace" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <TopBar
           title={baseTitle}
-          query={query}
-          onQuery={handleQuery}
           sidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed((collapsed) => !collapsed)}
         />
