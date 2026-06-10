@@ -497,6 +497,31 @@ export function getPlayerScoutRatings(id: number): Promise<PlayerScoutRatingsRes
   return apiFetch<PlayerScoutRatingsResponse>(`/players/${id}/scout-ratings`);
 }
 
+export type RationaleMode = 'fusion' | 'multi_source';
+
+export interface PlayerRationaleResponse {
+  player_id: number;
+  player_name: string;
+  consensus_mode: RationaleMode;
+  rationale: string;
+  citations: string[];
+  cost: {
+    input_tokens: number;
+    output_tokens: number;
+    est_cost_usd: number;
+    sonar_cost_usd: number;
+  };
+  grounding_issues: string[];
+  model: string | null;
+  generated_at: string | null;
+  cached: boolean;
+  caveat: string;
+}
+
+export function getPlayerRationale(id: number, mode: RationaleMode): Promise<PlayerRationaleResponse> {
+  return apiFetch<PlayerRationaleResponse>(`/players/${id}/rationale?consensus=${mode}`);
+}
+
 export interface HealthResponse {
   status: string;
   service: string;

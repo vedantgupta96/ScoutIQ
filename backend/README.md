@@ -48,6 +48,7 @@ python -m scoutiq.etl.check_coverage              # data-quality gate -> trainab
 python -m scoutiq.model.train                     # regenerate model.joblib + backtest artifacts
 python -m scoutiq.etl.load_scout_reports --limit 5  # Sonar scouting narratives (WORDS only; needs PERPLEXITY_API_KEY)
 python -m scoutiq.etl.extract_scout_ratings --eval-gate  # Claude trait extraction (needs ANTHROPIC_API_KEY + SCOUTIQ_LLM_MODEL)
+python -m scoutiq.etl.compare_rationale_cost --players 5 # cost: fusion vs multi_source rationale ($/rationale)
 uvicorn scoutiq.api.main:app --reload             # serve API at http://127.0.0.1:8000
 ```
 
@@ -67,6 +68,7 @@ curl 'http://127.0.0.1:8000/players/1630217'
 curl 'http://127.0.0.1:8000/players/1630217/valuation?season=2024-25'
 curl 'http://127.0.0.1:8000/players/1630217/headshot'
 curl 'http://127.0.0.1:8000/players/1630217/scout-ratings'
+curl 'http://127.0.0.1:8000/players/1630217/rationale?consensus=fusion'   # LIVE Claude (cached after); ?consensus=multi_source for cross-source
 curl 'http://127.0.0.1:8000/backtest'
 curl 'http://127.0.0.1:8000/llm/scout-ratings/eval'
 curl -X POST 'http://127.0.0.1:8000/simulate/contract' \

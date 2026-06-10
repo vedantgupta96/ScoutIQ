@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     SCOUTIQ_LLM_MODEL: str = "claude-sonnet-4-6"
 
+    # Grounded rationale generation. UNLIKE the scouting/eval layers, the rationale endpoint may call
+    # Claude (and, in multi_source mode, Sonar) LIVE — a deliberate, scoped exception. Results are cached
+    # in player_rationales; ?refresh=true forces a fresh generation.
+    RATIONALE_CONSENSUS_MODE: str = "fusion"   # "fusion" | "multi_source"
+    RATIONALE_MULTI_SOURCE_N: int = 3          # # of Sonar angles fetched in multi_source mode
+
     @property
     def seasons(self) -> list[str]:
         """['2012-13', '2013-14', ..., '2025-26'] — NBA season string format."""

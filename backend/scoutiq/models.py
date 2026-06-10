@@ -189,3 +189,24 @@ class PlayerRating(Base):
     evidence_span: Mapped[str] = mapped_column(String)      # verbatim span from source_text (TEXT)
 
     report: Mapped[ScoutReport] = relationship(back_populates="ratings")
+
+
+class PlayerRationale(Base):
+    """A grounded, cited natural-language verdict fusing the model's value gap with the scouting signal.
+
+    Generated live by the rationale endpoint and cached here per (player, consensus_mode). Records token
+    usage + estimated cost so the two consensus modes can be compared.
+    """
+    __tablename__ = "player_rationales"
+    __table_args__ = (UniqueConstraint("player_id", "consensus_mode", name="uq_player_rationale_mode"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.player_id"), index=True)
+    consensus_mode: Mapped[str] = mapped_column(String(16))   # fusion | multi_source
+    rationale_text: Mapped[str] = mapped_column(String)       # the generated verdict (TEXT)
+    citations: Mapped[list | None] = mapped_column(JSONB)     # list[str] of source URLs
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    est_cost_usd: Mapped[float | None] = mapped_column(Numeric(10, 6))
+    model: Mapped[str | None] = mapped_column(String(48))
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

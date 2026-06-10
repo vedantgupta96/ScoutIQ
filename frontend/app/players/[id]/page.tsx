@@ -19,13 +19,16 @@ import {
 } from 'lucide-react';
 import {
   getPlayerContract,
+  getPlayerRationale,
   getPlayerScoutRatings,
   getSimilarPlayers,
   getValuation,
   PlayerContractResponse,
   PlayerContractYear,
+  PlayerRationaleResponse,
   PlayerScoutRatingsResponse,
   PlayerScoutTraitRating,
+  RationaleMode,
   SimilarPlayerResult,
   SimilarPlayersMode,
   SimilarPlayersResponse,
@@ -763,6 +766,77 @@ function FrontOfficeRead({
   );
 }
 
+function RationaleCard({ playerId }: { playerId: number }) {
+  const [mode, setMode] = useState<RationaleMode>('fusion');
+  const [data, setData] = useState<PlayerRationaleResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Generation is live + billed, so fetch only on explicit request — never on mount.
+  function generate(next: RationaleMode) {
+    setMode(next);
+    setLoading(true);
+    setError(null);
+    setData(null);
+    getPlayerRationale(playerId, next)
+      .then(setData)
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Generation failed.'))
+      .finally(() => setLoading(false));
+  }
+
+  const cost = data?.cost;
+  return (
+    <Surface variant="dossier" teamAccent eyebrow="Scout's rationale" icon={<FileText size={15} />}
+      action={cost ? <Badge tone="neutral" variant="outline" size="sm">${cost.est_cost_usd.toFixed(4)} · {Math.round((cost.input_tokens + cost.output_tokens) / 100) / 10}k tok</Badge> : undefined}
+    >
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+        {(['fusion', 'multi_source'] as RationaleMode[]).map((m) => (
+          <button
+            key={m}
+            onClick={() => generate(m)}
+            disabled={loading}
+            className={mode === m && (data || loading) ? 'siq-primary-button' : 'siq-secondary-button'}
+            style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
+          >
+            {m === 'fusion' ? 'Model vs scout' : 'Multi-source'}
+          </button>
+        ))}
+      </div>
+      {loading ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Generating rationale…</p>
+      ) : error ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{error}</p>
+      ) : !data ? (
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+          Pick a mode to generate a cited verdict fusing the value model with the scouting signal.
+        </p>
+      ) : (
+        <>
+          <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: 0, lineHeight: 1.6 }}>{data.rationale.replace(/\*\*/g, '')}</p>
+          {data.grounding_issues.length > 0 && (
+            <p style={{ fontSize: 11, color: 'var(--negative-text)', margin: '8px 0 0' }}>
+              ⚠ grounding: {data.grounding_issues.join('; ')}
+            </p>
+          )}
+          {data.citations.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '10px 0 0' }}>
+              {data.citations.map((url, i) => (
+                <a key={url} href={url} target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: 11, color: 'var(--accent-text, var(--text-secondary))', textDecoration: 'underline' }}>
+                  [{i + 1}] {citationHost(url)}
+                </a>
+              ))}
+            </div>
+          )}
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+            {data.cached ? 'Cached · ' : ''}{data.caveat}
+          </p>
+        </>
+      )}
+    </Surface>
+  );
+}
+
 function ActionRail({
   val,
   contract,
@@ -810,6 +884,8 @@ function ActionRail({
         <RiskLine label="Top comp" value={topMatch?.player.full_name ?? 'Loading'} />
         <RiskLine label="Extension window" value={contract?.extension_start_season ?? '—'} />
       </Surface>
+
+      <RationaleCard playerId={val.player_id} />
     </aside>
   );
 }
