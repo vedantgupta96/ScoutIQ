@@ -279,6 +279,7 @@ function TeamsContent() {
   const [error, setError] = useState<string | null>(null);
 
   const selectedId = teamParam ? Number(teamParam) : null;
+  const effectiveSelectedId = selectedId ?? teams[0]?.team_id ?? null;
 
   useEffect(() => {
     getTeams().then(setTeams).catch(() => {});
@@ -292,11 +293,11 @@ function TeamsContent() {
   }, [selectedId, teams, router]);
 
   useEffect(() => {
-    if (selectedId == null) return;
+    if (effectiveSelectedId == null) return;
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    getTeamCapSheet(selectedId, undefined, controller.signal)
+    getTeamCapSheet(effectiveSelectedId, undefined, controller.signal)
       .then((res) => { setSheet(res); setLoading(false); })
       .catch((e: unknown) => {
         if (e instanceof DOMException && e.name === 'AbortError') return;
@@ -305,14 +306,14 @@ function TeamsContent() {
         setLoading(false);
       });
     return () => controller.abort();
-  }, [selectedId]);
+  }, [effectiveSelectedId]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <span className="ds-eyebrow">Team war room</span>
         <select
-          value={selectedId ?? ''}
+          value={effectiveSelectedId ?? ''}
           onChange={(e) => router.replace(`/teams?team=${e.target.value}`)}
           aria-label="Select team"
           style={{

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { animate, motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
@@ -31,28 +30,12 @@ const TONE_TEXT: Record<GapTone, string> = {
   warning: 'var(--warning-text)',
 };
 
-// Count a numeric label up from its previous value on mount / change. Calm,
-// one-shot ease-out; honors prefers-reduced-motion by snapping to the value.
 function CountUpPct({
   value, decimals = 1, withSign = false, style,
 }: { value: number; decimals?: number; withSign?: boolean; style?: React.CSSProperties }) {
-  const reduce = useReducedMotion();
-  const mv = useMotionValue(reduce ? value : 0);
-  const [shown, setShown] = useState(reduce ? value : 0);
-
-  useEffect(() => {
-    if (reduce) { setShown(value); return; }
-    const controls = animate(mv, value, {
-      duration: 0.6,
-      ease: [0.22, 1, 0.36, 1],
-      onUpdate: (v) => setShown(v),
-    });
-    return () => controls.stop();
-  }, [value, reduce, mv]);
-
   return (
     <span className="ds-tnum" style={style}>
-      {withSign ? signed(shown, decimals) : shown.toFixed(decimals)}%
+      {withSign ? signed(value, decimals) : value.toFixed(decimals)}%
     </span>
   );
 }
@@ -63,7 +46,6 @@ function CountUpPct({
 function ValuePayGauge({
   value, lo, hi, pay, tone,
 }: { value: number; lo: number; hi: number; pay: number | null; tone: GapTone }) {
-  const reduce = useReducedMotion();
   const domainMax = Math.max(hi, value, pay ?? 0) * 1.12 || 6;
   const pct = (x: number) => Math.max(0, Math.min(100, (x / domainMax) * 100));
   const bandLeft = pct(lo);
@@ -92,12 +74,10 @@ function ValuePayGauge({
         background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
         overflow: 'hidden',
       }}>
-        <motion.div
-          initial={reduce ? false : { width: 0 }}
-          animate={{ width: `${bandWidth}%` }}
-          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+        <div
           style={{
             position: 'absolute', top: 0, bottom: 0, left: `${bandLeft}%`,
+            width: `${bandWidth}%`,
             background: 'var(--confidence-soft)',
             borderLeft: '1.5px solid var(--confidence)',
             borderRight: '1.5px solid var(--confidence)',
