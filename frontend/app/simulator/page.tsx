@@ -30,8 +30,8 @@ function DSSlider({
   const pct = max === min ? 0 : ((value - min) / (max - min)) * 100;
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+    <div className="siq-control-slab">
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
         <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</span>
         <span className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
           {format(value)}
@@ -88,14 +88,39 @@ function PlayerSearch({ onPick }: { onPick: (p: PlayerSummary) => void }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PlayerSummary[]>([]);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!query.trim()) { setResults([]); return; }
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setResults([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    const controller = new AbortController();
     const t = setTimeout(() => {
-      searchPlayers(query, 8).then(setResults).catch(() => {});
+      setLoading(true);
+      setError(null);
+      searchPlayers(trimmed, 8, controller.signal)
+        .then(setResults)
+        .catch((e: unknown) => {
+          if (controller.signal.aborted) return;
+          setResults([]);
+          setError(e instanceof Error ? e.message : 'Player search failed.');
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
+        });
     }, 250);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
   }, [query]);
+
+  const showMenu = open && query.trim().length > 0 && (loading || error || results.length > 0);
 
   return (
     <div style={{ position: 'relative' }}>
@@ -112,30 +137,40 @@ function PlayerSearch({ onPick }: { onPick: (p: PlayerSummary) => void }) {
           style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--text-primary)' }}
         />
       </div>
-      {open && results.length > 0 && (
+      {showMenu && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
           background: 'var(--bg-panel)', border: '1px solid var(--border-default)',
           borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)', marginTop: 4,
           overflow: 'hidden',
         }}>
-          {results.map((p) => (
-            <button key={p.player_id}
-              onClick={() => { onPick(p); setQuery(''); setResults([]); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                padding: '10px 14px', background: 'transparent', border: 'none',
-                borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer', textAlign: 'left',
-              }}>
-              <Avatar name={p.full_name} size="sm" position={p.position} playerId={p.player_id} />
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{p.full_name}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  {p.current_team?.abbreviation ?? p.latest_stats_team?.abbreviation ?? '—'} · {p.position}
+          {loading ? (
+            <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>Searching…</div>
+          ) : error ? (
+            <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--negative-text)', lineHeight: 1.45 }}>
+              {error}
+            </div>
+          ) : results.length === 0 ? (
+            <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>No players found.</div>
+          ) : (
+            results.map((p) => (
+              <button key={p.player_id}
+                onClick={() => { onPick(p); setQuery(''); setResults([]); setOpen(false); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                  padding: '10px 14px', background: 'transparent', border: 'none',
+                  borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer', textAlign: 'left',
+                }}>
+                <Avatar name={p.full_name} size="sm" position={p.position} playerId={p.player_id} />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{p.full_name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {p.current_team?.abbreviation ?? p.latest_stats_team?.abbreviation ?? '—'} · {p.position ?? '—'}
+                  </div>
                 </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            ))
+          )}
         </div>
       )}
     </div>
@@ -231,7 +266,7 @@ function SimulatorContent() {
     >
       {/* Player select */}
       {!player && (
-        <Surface variant="instrument" eyebrow="Select a player" icon={<SlidersHorizontal size={15} />}>
+        <Surface variant="instrument" eyebrow="Select a player" icon={<SlidersHorizontal size={15} />} style={{ overflow: 'visible' }}>
           <PlayerSearch onPick={(p) => { setPlayer(p); router.push(`/simulator?player=${p.player_id}`); }} />
         </Surface>
       )}
@@ -271,15 +306,15 @@ function SimulatorContent() {
           <div className="siq-simulator-grid">
             {/* Controls */}
             <Surface variant="instrument" teamAccent eyebrow="Contract terms" icon={<SlidersHorizontal size={15} />}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+              <div className="siq-simulator-controls">
                 <DSSlider
                   label="AAV"
                   value={aav} onChange={setAav}
                   min={1} max={35} step={0.5}
                   format={(v) => `${v}% of cap`}
                 />
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div className="siq-control-slab">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                     <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>Start season</span>
                     <span className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
                       {startSeason}
@@ -334,9 +369,20 @@ function SimulatorContent() {
             {/* Results */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
               {loading && !result && (
-                <Card padded>
-                  <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-                  Running simulation…
+                <Card padded className="siq-sim-loading-card">
+                  <div className="siq-sim-loading-head">
+                    <span className="ds-eyebrow">Running simulation</span>
+                    <span className="siq-loading-dot" />
+                  </div>
+                  <div className="siq-sim-loading-grid" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <div className="siq-sim-loading-bars" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
                   </div>
                 </Card>
               )}
@@ -351,7 +397,7 @@ function SimulatorContent() {
                 <>
                   {/* Summary card */}
                   <Surface variant="board" teamAccent eyebrow="Proposed deal" icon={<SlidersHorizontal size={15} />}>
-                    <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                    <div className="siq-sim-summary-grid">
                       <StatTile
                         label="Contract AAV"
                         value={fmtM(result.proposed_aav_usd)}
@@ -371,13 +417,13 @@ function SimulatorContent() {
                           size="md"
                         />
                       )}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <span className="ds-eyebrow">AAV vs. value</span>
                         <VerdictPill gapPct={result.value_gap_pct} size="md" />
                       </div>
                     </div>
                     {result.value_pct != null && (
-                      <div style={{ marginTop: 16 }}>
+                      <div style={{ marginTop: 12 }}>
                         <div className="ds-eyebrow" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                           <span style={{ color: 'var(--confidence-text)' }}>model value {fmtPct(result.value_pct)}</span>
                           <span>proposed AAV {fmtPct(result.proposed_aav_pct)}</span>
@@ -401,10 +447,10 @@ function SimulatorContent() {
                       </div>
                     }
                   >
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.5 }}>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.45 }}>
                       Cap hit for this contract each season. Markers show tax line and apron thresholds.
                     </p>
-                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16, fontSize: 11, color: 'var(--text-muted)' }}>
+                    <div className="siq-cap-legend">
                       {[
                         { c: 'var(--grad-positive)', t: 'Under tax' },
                         { c: 'rgba(236,178,46,0.5)', t: 'Tax → apron' },
@@ -417,7 +463,7 @@ function SimulatorContent() {
                         </span>
                       ))}
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div className="siq-cap-year-stack">
                       {result.years.map((yr) => <CapBar key={yr.season} yr={yr} />)}
                     </div>
                   </Surface>

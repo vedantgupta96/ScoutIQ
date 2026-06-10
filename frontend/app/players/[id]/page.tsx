@@ -147,7 +147,7 @@ function ScoutTraitRow({ trait }: { trait: PlayerScoutTraitRating }) {
           {trait.report_count} report{trait.report_count === 1 ? '' : 's'}
         </Badge>
         {topEvidence && (
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             &quot;{topEvidence}&quot;
           </span>
         )}
@@ -193,7 +193,7 @@ function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsRespo
           {ratings.traits.map((trait) => <ScoutTraitRow key={trait.trait} trait={trait} />)}
           {isReal && ratings.citations && ratings.citations.length > 0 && (
             <div style={{ margin: '12px 0 0' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 5 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 5 }}>
                 Sources
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -203,7 +203,7 @@ function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsRespo
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ fontSize: 11, color: 'var(--accent-text, var(--text-secondary))', textDecoration: 'underline' }}
+                    style={{ fontSize: 12, color: 'var(--accent-text, var(--text-secondary))', textDecoration: 'underline' }}
                   >
                     [{i + 1}] {citationHost(url)}
                   </a>
@@ -211,7 +211,7 @@ function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsRespo
               </div>
             </div>
           )}
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
             {ratings.caveat}
           </p>
         </>
@@ -239,14 +239,7 @@ function ContractYearRow({ year }: { year: PlayerContractYear }) {
     : gap >= 0 ? 'var(--grad-positive)' : 'var(--grad-negative)';
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '76px minmax(0, 1fr) auto',
-      gap: 10,
-      alignItems: 'center',
-      padding: '10px 0',
-      borderBottom: '1px solid var(--border-subtle)',
-    }}>
+    <div className="siq-contract-year-row">
       <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
         {year.season}
       </span>
@@ -262,13 +255,13 @@ function ContractYearRow({ year }: { year: PlayerContractYear }) {
           {!year.is_guaranteed && !optionLabel && <Badge tone="neutral" variant="outline" size="sm">Non-gtd</Badge>}
         </div>
         {year.value_pct != null && (
-          <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>
+          <div style={{ marginTop: 2, fontSize: 12, color: 'var(--text-muted)' }}>
             Model value {fmtPct(year.value_pct)} of cap
           </div>
         )}
         {year.cap_hit_pct != null && (
           <div style={{
-            position: 'relative', height: 5, marginTop: 7, borderRadius: 'var(--radius-pill)',
+            position: 'relative', height: 4, marginTop: 5, borderRadius: 'var(--radius-pill)',
             background: 'var(--bg-inset)', overflow: 'hidden',
           }}>
             <div style={{
@@ -310,7 +303,7 @@ function ContractCard({
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading contract…</p>
       ) : (
         <>
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 6 }}>
+          <div className="siq-contract-summary-strip">
             <StatTile
               label="Total value"
               value={contract.total_value != null ? fmtM(contract.total_value) : '—'}
@@ -324,15 +317,15 @@ function ContractCard({
               size="sm"
             />
           </div>
-          <div>
+          <div className="siq-contract-ledger">
             {contract.years_detail.map((year) => <ContractYearRow key={year.season} year={year} />)}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+          <div className="siq-compact-action-row">
             <button onClick={onSimulateExtension} className="siq-primary-button" disabled={!contract.extension_start_season}>
               <SlidersHorizontal size={15} />
               Simulate extension
             </button>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5, flex: '1 1 220px' }}>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5, flex: '1 1 220px' }}>
               {contract.caveat}
             </p>
           </div>
@@ -358,7 +351,7 @@ function SimilarPlayerRow({ result }: { result: SimilarPlayerResult }) {
   return (
     <div className="siq-similar-dossier-row">
       <PlayerCutout playerId={result.player.player_id} name={result.player.full_name} variant="card" />
-      <Link href={`/players/${result.player.player_id}`} style={{ textDecoration: 'none', minWidth: 0 }}>
+      <Link href={`/players/${result.player.player_id}`} className="siq-similar-identity-link">
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
           <Avatar name={result.player.full_name} size="md" position={result.player.position} playerId={result.player.player_id} />
           <div style={{ minWidth: 0 }}>
@@ -370,48 +363,43 @@ function SimilarPlayerRow({ result }: { result: SimilarPlayerResult }) {
                 {result.player.position ?? '—'}
               </Badge>
             </div>
-            <div style={{ marginTop: 3, fontSize: 11, color: 'var(--text-muted)' }}>
+            <div style={{ marginTop: 3, fontSize: 12, color: 'var(--text-muted)' }}>
               {result.player.current_team?.abbreviation ?? result.player.latest_stats_team?.abbreviation ?? '—'}
               {result.age != null ? ` · age ${result.age.toFixed(0)}` : ''}
             </div>
           </div>
         </div>
-        {result.explanation_tags.length > 0 && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-            {result.explanation_tags.map((tag) => (
-              <Badge key={tag} tone={tag.includes('cheaper') || tag.includes('surplus') ? 'positive' : 'neutral'} variant="outline" size="sm">
-                {tag}
-              </Badge>
-            ))}
-          </div>
-        )}
       </Link>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
+      {result.explanation_tags.length > 0 && (
+        <div className="siq-compact-tags siq-similar-tags">
+          {result.explanation_tags.slice(0, 3).map((tag) => (
+            <Badge key={tag} tone={tag.includes('cheaper') || tag.includes('surplus') ? 'positive' : 'neutral'} variant="outline" size="sm">
+              {tag}
+            </Badge>
+          ))}
+        </div>
+      )}
+      <div className="siq-similar-metrics">
         <span className="ds-tnum" style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-text)' }}>
           {result.similarity_score.toFixed(1)}
         </span>
-        <span className="ds-eyebrow">match strength</span>
-        <div style={{ width: 124, height: 6, borderRadius: 'var(--radius-pill)', background: 'var(--bg-inset)', overflow: 'hidden' }}>
-          <div style={{
-            width: `${clamp(result.similarity_score, 0, 100).toFixed(1)}%`,
-            height: '100%', background: 'var(--grad-confidence)', boxShadow: 'var(--glow-confidence)',
-          }} />
-        </div>
-        <div style={{ width: 124, marginTop: 3 }}>
+        <span className="ds-eyebrow">match</span>
+        <div className="siq-similar-gauge" style={{ width: 92, flex: '0 0 auto' }}>
           <MiniValuePayGauge valuePct={result.value_pct} payPct={result.salary_pct} />
         </div>
-        <div style={{ textAlign: 'right', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          <div>Value {result.value_pct != null ? fmtPct(result.value_pct) : '—'}</div>
-          <div>Pay {result.salary_pct != null ? fmtPct(result.salary_pct) : '—'}</div>
-          <div style={{ color: gapColor }}>Gap {gap != null ? `${signed(gap)}%` : '—'}</div>
+        <div className="siq-similar-value-strip" style={{ fontSize: 12 }}>
+          <div>V {result.value_pct != null ? fmtPct(result.value_pct) : '—'}</div>
+          <div>P {result.salary_pct != null ? fmtPct(result.salary_pct) : '—'}</div>
+          <div style={{ color: gapColor }}>G {gap != null ? `${signed(gap)}%` : '—'}</div>
         </div>
         <Link
           href={simHref}
           className="siq-secondary-button"
-          style={{ padding: '5px 8px', fontSize: 11, textDecoration: 'none' }}
+          aria-label={`Simulate ${result.player.full_name}`}
+          title={`Simulate ${result.player.full_name}`}
+          style={{ width: 30, minWidth: 30, padding: 5, fontSize: 0, gap: 0, textDecoration: 'none' }}
         >
           <SlidersHorizontal size={13} />
-          Sim
         </Link>
       </div>
     </div>
@@ -437,7 +425,7 @@ function SimilarPlayersCard({
       icon={<Users size={15} />}
       action={market ? <Badge tone="confidence" variant="outline" size="sm">{market.season}</Badge> : undefined}
     >
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+      <div className="siq-compact-control-row">
         {(Object.keys(SIMILAR_MODE_LABELS) as SimilarPlayersMode[]).map((key) => (
           <button
             key={key}
@@ -462,7 +450,7 @@ function SimilarPlayersCard({
         </p>
       ) : (
         <>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
+          <div className="siq-compact-tags" style={{ marginBottom: 2 }}>
             {market.basis.slice(0, 5).map((basis) => (
               <Badge key={basis} tone="neutral" variant="outline" size="sm">{basis}</Badge>
             ))}
@@ -470,7 +458,7 @@ function SimilarPlayersCard({
           {market.results.slice(0, 6).map((result) => (
             <SimilarPlayerRow key={result.player.player_id} result={result} />
           ))}
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
             {market.caveat}
           </p>
         </>
@@ -814,7 +802,7 @@ function RationaleCard({ playerId }: { playerId: number }) {
         <>
           <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: 0, lineHeight: 1.6 }}>{data.rationale.replace(/\*\*/g, '')}</p>
           {data.grounding_issues.length > 0 && (
-            <p style={{ fontSize: 11, color: 'var(--negative-text)', margin: '8px 0 0' }}>
+            <p style={{ fontSize: 12, color: 'var(--negative-text)', margin: '8px 0 0' }}>
               ⚠ grounding: {data.grounding_issues.join('; ')}
             </p>
           )}
@@ -822,13 +810,13 @@ function RationaleCard({ playerId }: { playerId: number }) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '10px 0 0' }}>
               {data.citations.map((url, i) => (
                 <a key={url} href={url} target="_blank" rel="noopener noreferrer"
-                  style={{ fontSize: 11, color: 'var(--accent-text, var(--text-secondary))', textDecoration: 'underline' }}>
+                  style={{ fontSize: 12, color: 'var(--accent-text, var(--text-secondary))', textDecoration: 'underline' }}>
                   [{i + 1}] {citationHost(url)}
                 </a>
               ))}
             </div>
           )}
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
             {data.cached ? 'Cached · ' : ''}{data.caveat}
           </p>
         </>
@@ -1024,7 +1012,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
               const { label, formatted } = formatFeatureValue(key, value);
               return <StatRow key={key} label={label} value={formatted} />;
             })}
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
               Raw feature values fed to the model for this season.
             </p>
           </>

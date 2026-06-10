@@ -133,7 +133,7 @@ function MetricCell({
       <div className="ds-tnum" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginTop: 3 }}>
         {pct != null ? fmtPct(pct) : '—'}
       </div>
-      <div className="ds-tnum" style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+      <div className="ds-tnum" style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>
         {usd != null ? fmtM(usd) : '—'}
       </div>
     </div>
@@ -141,7 +141,6 @@ function MetricCell({
 }
 
 function RosterCard({ player }: { player: PlayerCardResponse }) {
-  const [hovered, setHovered] = useState(false);
   const team = player.current_team ?? player.latest_stats_team;
   const valuation = player.valuation_status === 'ready' ? player.valuation : undefined;
   const gap = valuation?.gap_pct ?? null;
@@ -154,26 +153,11 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
   return (
     <Link href={`/players/${player.player_id}`} style={{ textDecoration: 'none' }}>
       <button
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        style={{
-          width: '100%',
-          textAlign: 'left',
-          border: `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border-subtle)'}`,
-          background: `linear-gradient(180deg, ${accent} 0 3px, var(--bg-panel) 3px)`,
-          borderRadius: 'var(--radius-lg)',
-          padding: 16,
-          cursor: 'pointer',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 13,
-          boxShadow: hovered ? 'var(--shadow-md)' : 'var(--shadow-card)',
-          transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
-          transition: 'border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out)',
-        }}
+        className="siq-case-card"
+        style={{ '--case-accent': accent } as React.CSSProperties}
       >
         {/* Header row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="siq-case-card__head">
           <Avatar name={player.full_name} size="lg" position={player.position} playerId={player.player_id} />
           <div style={{ minWidth: 0 }}>
             <div style={{
@@ -192,10 +176,7 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
         {valuation ? (
           <>
             {/* Verdict + hero gap */}
-            <div style={{
-              display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
-              gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-subtle)',
-            }}>
+            <div className="siq-case-card__verdict">
               <span style={{ fontSize: 12, fontWeight: 600, color: TONE_TEXT[tone] }}>
                 {valuation.verdict_label ?? gapLabel(gap)}
               </span>
@@ -219,7 +200,7 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
               tone={tone}
             />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div className="siq-case-card__metrics">
               <MetricCell label="value" dotColor="var(--confidence)" pct={valuation.value_pct} usd={valueUsd} />
               <MetricCell label="pay" dotColor={TONE_COLOR[tone]} pct={valuation.actual_pct} usd={valuation.actual_usd} align="right" />
             </div>
@@ -356,9 +337,9 @@ function PlayersContent() {
 
   return (
     <div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+      <div className="siq-watchlist-command">
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-          <span className="ds-eyebrow">Contract Watchlist</span>
+          <span className="ds-eyebrow">Contract watchlist</span>
           {!loading && (
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               {total} players · largest value/pay mismatches{watchlist?.season ? ` · ${watchlist.season}` : ''}
@@ -472,6 +453,7 @@ function PlayersContent() {
               type="checkbox"
               checked={qualifiedOnly}
               onChange={(e) => setQualifiedOnly(e.target.checked)}
+              style={{ accentColor: 'var(--accent)' }}
             />
             Qualified only
           </label>
@@ -498,7 +480,7 @@ function PlayersContent() {
         <>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
-            marginBottom: 12, fontSize: 11.5, color: 'var(--text-muted)',
+            marginBottom: 12, fontSize: 12, color: 'var(--text-muted)',
           }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 16, height: 9, borderRadius: 3, background: 'var(--confidence-soft)', border: '1.5px solid var(--confidence)' }} />
@@ -511,11 +493,7 @@ function PlayersContent() {
             <span>Value excludes current salary on purpose — this is worth, not what is on the books.</span>
           </div>
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))',
-            gap: 'var(--panel-gap)',
-          }}>
+          <div className="siq-pressure-board">
             {players.map((p) => <RosterCard key={p.player_id} player={p} />)}
           </div>
 

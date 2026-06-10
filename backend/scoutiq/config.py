@@ -24,9 +24,8 @@ class Settings(BaseSettings):
     BBREF_DELAY_SECONDS: float = 3.5
     BBREF_USER_AGENT: str = "ScoutIQ/0.1 (personal portfolio research; contact via github)"
 
-    # Qualitative scouting layer. These keys are read ONLY by the offline backfill scripts
-    # (etl/load_scout_reports.py + etl/extract_scout_ratings.py); the FastAPI app never calls
-    # Sonar or Claude — it serves cached DB rows. Sonar is for WORDS only, never stats/salary/cap.
+    # Qualitative scouting backfills. Sonar is for WORDS only, never stats/salary/cap.
+    # Most API scouting endpoints serve cached DB rows; the rationale endpoint below is the live exception.
     PERPLEXITY_API_KEY: str = ""
     SONAR_MODEL: str = "sonar"
     ANTHROPIC_API_KEY: str = ""

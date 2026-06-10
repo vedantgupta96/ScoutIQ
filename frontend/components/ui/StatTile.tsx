@@ -48,7 +48,7 @@ export function StatTile({ label, value, unit, sub, delta, deltaDir, size = 'md'
         )}
       </div>
       {sub && (
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.3 }}>{sub}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.3 }}>{sub}</span>
       )}
     </div>
   );

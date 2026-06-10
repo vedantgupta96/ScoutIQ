@@ -115,7 +115,7 @@ export function MiniValuePayGauge({ valuePct, payPct, showLabels = false, domain
             borderRadius: 'var(--radius-sm)',
             background: 'var(--ink-900)',
             color: '#fff',
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: 700,
             whiteSpace: 'nowrap',
             boxShadow: 'var(--shadow-md)',
@@ -128,11 +128,11 @@ export function MiniValuePayGauge({ valuePct, payPct, showLabels = false, domain
       </div>
       {showLabels && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 5 }}>
-          <span className="ds-tnum" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--confidence-text)', fontWeight: 700 }}>
+          <span className="ds-tnum" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--confidence-text)', fontWeight: 700 }}>
             <span style={{ width: 7, height: 7, borderRadius: 'var(--radius-pill)', background: 'var(--confidence)' }} />
             Value {fmtPct(value)}
           </span>
-          <span className="ds-tnum" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: pay == null ? 'var(--text-muted)' : payColor, fontWeight: 700 }}>
+          <span className="ds-tnum" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: pay == null ? 'var(--text-muted)' : payColor, fontWeight: 700 }}>
             <span style={{ width: 7, height: 7, borderRadius: 'var(--radius-pill)', background: pay == null ? 'var(--border-strong)' : payColor }} />
             Pay {pay != null ? fmtPct(pay) : '—'}
           </span>
