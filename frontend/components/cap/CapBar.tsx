@@ -97,7 +97,7 @@ export function CapBar({
               }}
             >
               <span style={{ width: 6, height: 6, borderRadius: 'var(--radius-pill)', background: marker.color, boxShadow: '0 0 0 2px var(--bg-panel)' }} />
-              <span className="ds-eyebrow" style={{ fontSize: 9, letterSpacing: '0.06em', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              <span className="ds-eyebrow" style={{ fontSize: 12, letterSpacing: '0.02em', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 {marker.label}
               </span>
             </button>
@@ -169,7 +169,7 @@ export function CapBar({
               left: labelLeft,
               top: height + 7,
               transform: 'translateX(-50%)',
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: 700,
               color: 'var(--text-primary)',
               whiteSpace: 'nowrap',
@@ -190,7 +190,7 @@ export function CapBar({
               borderRadius: 'var(--radius-sm)',
               background: 'var(--ink-900)',
               color: '#fff',
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: 700,
               whiteSpace: 'nowrap',
               boxShadow: 'var(--shadow-md)',

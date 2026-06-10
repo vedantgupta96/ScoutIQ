@@ -24,13 +24,18 @@ class Settings(BaseSettings):
     BBREF_DELAY_SECONDS: float = 3.5
     BBREF_USER_AGENT: str = "ScoutIQ/0.1 (personal portfolio research; contact via github)"
 
-    # Qualitative scouting layer. These keys are read ONLY by the offline backfill scripts
-    # (etl/load_scout_reports.py + etl/extract_scout_ratings.py); the FastAPI app never calls
-    # Sonar or Claude — it serves cached DB rows. Sonar is for WORDS only, never stats/salary/cap.
+    # Qualitative scouting backfills. Sonar is for WORDS only, never stats/salary/cap.
+    # Most API scouting endpoints serve cached DB rows; the rationale endpoint below is the live exception.
     PERPLEXITY_API_KEY: str = ""
     SONAR_MODEL: str = "sonar"
     ANTHROPIC_API_KEY: str = ""
     SCOUTIQ_LLM_MODEL: str = "claude-sonnet-4-6"
+
+    # Grounded rationale generation. UNLIKE the scouting/eval layers, the rationale endpoint may call
+    # Claude (and, in multi_source mode, Sonar) LIVE — a deliberate, scoped exception. Results are cached
+    # in player_rationales; ?refresh=true forces a fresh generation.
+    RATIONALE_CONSENSUS_MODE: str = "fusion"   # "fusion" | "multi_source"
+    RATIONALE_MULTI_SOURCE_N: int = 3          # # of Sonar angles fetched in multi_source mode
 
     @property
     def seasons(self) -> list[str]:

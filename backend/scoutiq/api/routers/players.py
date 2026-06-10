@@ -2,13 +2,18 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import and_, desc, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from scoutiq.api.deps import DB
+from scoutiq.config import settings
+from scoutiq.llm import generate
+from scoutiq.llm.pricing import Usage
 from scoutiq.llm.player_ratings import (
     PlayerScoutRatings,
     aggregate_from_db,
@@ -23,7 +28,17 @@ from scoutiq.model.similarity import (
     build_similarity_features,
     rank_similar_players,
 )
-from scoutiq.models import CapConstants, Contract, ContractYear, Player, PlayerSalary, PlayerSeason, Team
+from scoutiq.models import (
+    CapConstants,
+    Contract,
+    ContractYear,
+    Player,
+    PlayerRationale,
+    PlayerSalary,
+    PlayerSeason,
+    ScoutReport,
+    Team,
+)
 
 router = APIRouter(prefix="/players", tags=["players"])
 
@@ -959,3 +974,168 @@ def get_scout_ratings(player_id: int, db: DB = None):
         raise HTTPException(status_code=503, detail=f"Scout-rating fixture unavailable: {exc}") from exc
 
     return aggregate_player_scout_ratings(player_id, player.full_name, reports)
+
+
+# --- Grounded rationale ------------------------------------------------------
+
+class RationaleCost(BaseModel):
+    input_tokens: int
+    output_tokens: int
+    est_cost_usd: float
+    sonar_cost_usd: float
+
+
+class PlayerRationaleResponse(BaseModel):
+    player_id: int
+    player_name: str
+    consensus_mode: str
+    rationale: str
+    citations: list[str]
+    cost: RationaleCost
+    grounding_issues: list[str]
+    model: str | None
+    generated_at: str | None
+    cached: bool
+    caveat: str
+
+
+def _contract_summary(db: DB, player_id: int) -> str | None:
+    contract = db.scalars(
+        select(Contract).where(Contract.player_id == player_id)
+        .order_by(desc(Contract.season_start), desc(Contract.scraped_at)).limit(1)
+    ).first()
+    if contract is None:
+        return None
+    total = f"${contract.total_value / 1e6:.1f}M" if contract.total_value else "?"
+    return f"{contract.years}yr / {total} from {contract.season_start}"
+
+
+@router.get("/{player_id}/rationale", response_model=PlayerRationaleResponse)
+def get_player_rationale(
+    player_id: int,
+    consensus: Literal["fusion", "multi_source"] | None = None,
+    refresh: bool = False,
+    db: DB = None,
+):
+    """Generate (and cache) a grounded, cited verdict fusing the model's value gap with the scouting signal.
+
+    Live LLM call — a deliberate, scoped exception to the offline posture; cached per (player, mode),
+    `refresh=true` forces a fresh generation. Requires scout coverage + a valuation.
+    """
+    mode = consensus or settings.RATIONALE_CONSENSUS_MODE
+    player = db.get(Player, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail=f"Player {player_id} not found.")
+
+    if not refresh:
+        cached = db.scalars(
+            select(PlayerRationale).where(
+                PlayerRationale.player_id == player_id, PlayerRationale.consensus_mode == mode
+            )
+        ).first()
+        if cached is not None:
+            return _rationale_response(player, cached, cached_flag=True)
+
+    if not settings.ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY not set; rationale generation unavailable.")
+    if mode == "multi_source" and not settings.PERPLEXITY_API_KEY:
+        raise HTTPException(status_code=503, detail="PERPLEXITY_API_KEY not set; multi_source mode unavailable.")
+
+    ratings = aggregate_from_db(db, player_id, player.full_name)
+    if ratings is None or not ratings.traits:
+        raise HTTPException(status_code=404, detail="No scout coverage for this player; cannot ground a rationale.")
+
+    val = get_valuation(player_id, None, db)  # raises 404 if the player has no stats/valuation
+    traits = [(t.trait.value, t.average_score, (t.evidence[0] if t.evidence else "")) for t in ratings.traits]
+
+    sonar_usage: Usage | None = None
+    if mode == "multi_source":
+        narratives, citations, sonar_usage = generate.gather_multi_source(
+            player_id, player.full_name, settings.CURRENT_SEASON, settings.RATIONALE_MULTI_SOURCE_N
+        )
+        if not narratives:
+            raise HTTPException(status_code=503, detail="Sonar returned no narratives for multi_source mode.")
+    else:
+        db_reports = db.scalars(select(ScoutReport).where(ScoutReport.player_id == player_id)).all()
+        narratives = [r.source_text for r in db_reports]
+        citations = list(dict.fromkeys(c for r in db_reports for c in (r.citations or [])))
+
+    inputs = generate.RationaleInputs(
+        player_name=player.full_name,
+        season=val.get("season"),
+        value_pct=val.get("value_pct"),
+        actual_pct=val.get("actual_pct"),
+        gap_pct=val.get("gap_pct"),
+        verdict_label=val.get("verdict_label"),
+        caution_flags=val.get("caution_flags") or [],
+        contract_summary=_contract_summary(db, player_id),
+        traits=traits,
+        narratives=narratives,
+        citations=citations,
+    )
+    try:
+        result = generate.generate_rationale(
+            inputs, api_key=settings.ANTHROPIC_API_KEY, model=settings.SCOUTIQ_LLM_MODEL, sonar_usage=sonar_usage
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Rationale generation failed: {exc}") from exc
+
+    now = datetime.now(tz=timezone.utc)
+    db.execute(
+        pg_insert(PlayerRationale)
+        .values(
+            player_id=player_id, consensus_mode=mode, rationale_text=result.text,
+            citations=result.citations, input_tokens=result.input_tokens, output_tokens=result.output_tokens,
+            est_cost_usd=result.est_cost_usd, model=settings.SCOUTIQ_LLM_MODEL, generated_at=now,
+        )
+        .on_conflict_do_update(
+            constraint="uq_player_rationale_mode",
+            set_={
+                "rationale_text": result.text, "citations": result.citations,
+                "input_tokens": result.input_tokens, "output_tokens": result.output_tokens,
+                "est_cost_usd": result.est_cost_usd, "model": settings.SCOUTIQ_LLM_MODEL, "generated_at": now,
+            },
+        )
+    )
+
+    return PlayerRationaleResponse(
+        player_id=player_id,
+        player_name=player.full_name,
+        consensus_mode=mode,
+        rationale=result.text,
+        citations=result.citations,
+        cost=RationaleCost(
+            input_tokens=result.input_tokens, output_tokens=result.output_tokens,
+            est_cost_usd=result.est_cost_usd, sonar_cost_usd=result.sonar_cost_usd,
+        ),
+        grounding_issues=result.grounding_issues,
+        model=settings.SCOUTIQ_LLM_MODEL,
+        generated_at=now.isoformat(),
+        cached=False,
+        caveat=(
+            "Generated by Claude, fusing the production-implied value model with cited scouting reports. "
+            "Model-written analysis, not official guidance — verify against the cited sources."
+        ),
+    )
+
+
+def _rationale_response(player: Player, row: PlayerRationale, *, cached_flag: bool) -> PlayerRationaleResponse:
+    return PlayerRationaleResponse(
+        player_id=row.player_id,
+        player_name=player.full_name,
+        consensus_mode=row.consensus_mode,
+        rationale=row.rationale_text,
+        citations=row.citations or [],
+        cost=RationaleCost(
+            input_tokens=row.input_tokens or 0, output_tokens=row.output_tokens or 0,
+            est_cost_usd=float(row.est_cost_usd or 0), sonar_cost_usd=0.0,
+        ),
+        grounding_issues=[],
+        model=row.model,
+        generated_at=row.generated_at.isoformat() if row.generated_at else None,
+        cached=cached_flag,
+        caveat=(
+            "Generated by Claude, fusing the production-implied value model with cited scouting reports. "
+            "Model-written analysis, not official guidance — verify against the cited sources."
+        ),
+    )

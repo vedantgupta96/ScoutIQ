@@ -12,16 +12,7 @@ interface CardProps {
 
 export function Card({ children, eyebrow, icon, action, padded, flushBody, className = '' }: CardProps) {
   return (
-    <div
-      className={className}
-      style={{
-        background: 'var(--bg-panel)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 'var(--radius-lg)',
-        boxShadow: 'var(--shadow-card)',
-        overflow: 'hidden',
-      }}
-    >
+    <div className={`siq-card ${className}`.trim()}>
       {eyebrow && (
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',

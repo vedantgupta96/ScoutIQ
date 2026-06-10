@@ -54,14 +54,7 @@ function RoomLine({ label, room }: { label: string; room: number | null }) {
 function RosterRow({ player, gaugeDomainMaxPct }: { player: TeamCapSheetPlayer; gaugeDomainMaxPct: number }) {
   const team = player.current_team ?? player.latest_stats_team;
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'minmax(0, 1.5fr) 120px minmax(120px, 1fr) 92px',
-      gap: 12,
-      alignItems: 'center',
-      padding: '11px 0',
-      borderBottom: '1px solid var(--border-subtle)',
-    }}>
+    <div className="siq-roster-ledger-row">
       <Link href={`/players/${player.player_id}`} style={{ textDecoration: 'none', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <Avatar name={player.full_name} size="md" position={player.position} playerId={player.player_id} />
@@ -72,7 +65,7 @@ function RosterRow({ player, gaugeDomainMaxPct }: { player: TeamCapSheetPlayer; 
             }}>
               {player.full_name}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               {player.position ?? '—'}{player.age != null ? ` · age ${player.age}` : ''}{team?.abbreviation ? ` · ${team.abbreviation}` : ''}
             </div>
           </div>
@@ -83,12 +76,12 @@ function RosterRow({ player, gaugeDomainMaxPct }: { player: TeamCapSheetPlayer; 
         <div className="ds-tnum" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
           {player.cap_hit_usd != null ? fmtM(player.cap_hit_usd) : '—'}
         </div>
-        <div className="ds-tnum" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+        <div className="ds-tnum" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           {player.salary_pct != null ? `${fmtPct(player.salary_pct)} cap` : (player.pay_source == null ? 'no cap data' : '—')}
         </div>
       </div>
 
-      <div>
+      <div className="siq-roster-gauge-cell">
         {player.valuation_status === 'ready' ? (
           <MiniValuePayGauge
             valuePct={player.value_pct}
@@ -97,11 +90,11 @@ function RosterRow({ player, gaugeDomainMaxPct }: { player: TeamCapSheetPlayer; 
             domainMaxPct={gaugeDomainMaxPct}
           />
         ) : (
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No model value</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No model value</span>
         )}
       </div>
 
-      <div className="ds-tnum" style={{ textAlign: 'right', fontSize: 14, fontWeight: 700, color: gapColor(player.gap_pct) }}>
+      <div className="ds-tnum" style={{ textAlign: 'right', fontSize: 14, fontWeight: 800, color: gapColor(player.gap_pct) }}>
         {player.gap_pct != null ? `${signed(player.gap_pct)}%` : '—'}
       </div>
     </div>
@@ -221,7 +214,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
       </Surface>
 
       {/* Summary tiles */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--panel-gap)' }}>
+      <div className="siq-summary-tile-grid">
         {summaryTiles.map((tile) => (
           <Card key={tile.label} padded>
             <StatTile {...tile} size="sm" />
@@ -231,6 +224,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
 
       {/* Roster board */}
       <Card
+        className="siq-roster-ledger"
         eyebrow={`Roster · ${totals.roster_size} players`}
         icon={<Users size={15} />}
         action={
@@ -258,10 +252,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
             </Badge>
           </div>
         )}
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) 120px minmax(120px, 1fr) 92px',
-          gap: 12, paddingBottom: 8, borderBottom: '1px solid var(--border-default)',
-        }}>
+        <div className="siq-roster-ledger-head">
           <span className="ds-eyebrow">Player</span>
           <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Cap hit</span>
           <span className="ds-eyebrow">Value vs pay</span>

@@ -23,27 +23,10 @@ const TITLES: Record<string, string> = {
 
 function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) {
   return (
-    <aside className={`siq-sidebar${collapsed ? ' siq-sidebar--collapsed' : ''}`} style={{
-      flexShrink: 0,
-      background: 'var(--bg-panel)',
-      borderRight: '1px solid var(--border-subtle)',
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-    }}>
+    <aside className={`siq-sidebar${collapsed ? ' siq-sidebar--collapsed' : ''}`}>
       {/* Logo */}
-      <div className="siq-sidebar-logo" style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '0 18px', height: 'var(--topbar-height)',
-        borderBottom: '1px solid var(--border-subtle)',
-        flexShrink: 0,
-      }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: 8,
-          background: 'var(--accent)', display: 'flex',
-          alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-        }}>
+      <div className="siq-sidebar-logo">
+        <div className="siq-brand-mark">
           <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 13, color: 'var(--text-on-accent)' }}>S</span>
         </div>
         <span className="siq-logo-text" style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 19, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
@@ -62,15 +45,15 @@ function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) 
               padding: '9px 10px', borderRadius: 'var(--radius-md)',
               textDecoration: 'none', position: 'relative',
               fontFamily: 'var(--font-sans)', fontSize: 14,
-              fontWeight: isActive ? 600 : 500,
+              fontWeight: isActive ? 700 : 500,
               color: isActive ? 'var(--accent-text)' : 'var(--text-secondary)',
-              background: isActive ? 'var(--accent-soft)' : 'transparent',
+              background: isActive ? 'var(--nav-active-bg)' : 'transparent',
               transition: 'background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out)',
             }}>
               {isActive && (
                 <span style={{
-                  position: 'absolute', left: 0, top: 8, bottom: 8,
-                  width: 3, borderRadius: 3, background: 'var(--accent)',
+                  position: 'absolute', left: 7, right: 7, bottom: 4,
+                  height: 1, borderRadius: 3, background: 'var(--accent)',
                 }} />
               )}
               <Icon size={17} />
@@ -81,7 +64,7 @@ function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) 
       </nav>
 
       {/* Footer */}
-      <div className="siq-sidebar-footer" style={{ padding: '12px 14px', borderTop: '1px solid var(--border-subtle)' }}>
+      <div className="siq-sidebar-footer">
         <Badge tone="confidence" variant="outline" size="sm" dot>v0-gbm-conformal</Badge>
       </div>
     </aside>
@@ -106,7 +89,7 @@ function TopBar({
 
   useEffect(() => {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('siq-theme') : null;
-    const isDark = saved === 'dark';
+    const isDark = saved !== 'light';
     setDark(isDark);
     document.documentElement.setAttribute('data-theme', isDark ? 'dark' : '');
   }, []);
@@ -129,13 +112,7 @@ function TopBar({
   };
 
   return (
-    <header className="siq-topbar" style={{
-      height: 'var(--topbar-height)', flexShrink: 0,
-      display: 'flex', alignItems: 'center', gap: 16,
-      padding: '0 22px',
-      background: 'var(--bg-app)',
-      borderBottom: '1px solid var(--border-subtle)',
-    }}>
+    <header className="siq-topbar">
       <button
         type="button"
         className="siq-icon-button"

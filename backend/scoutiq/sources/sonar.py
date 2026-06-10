@@ -37,19 +37,23 @@ SYSTEM_PROMPT = (
 class SonarReport:
     source_text: str
     citations: list[str]
+    input_tokens: int = 0   # 0 for cache hits (usage not recorded for cached reports)
+    output_tokens: int = 0
 
 
-def _cache_path(player_id: int, season: str) -> Path:
+def _cache_path(player_id: int, season: str, angle: str | None = None) -> Path:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     safe_season = re.sub(r"[^0-9-]", "", season)
-    return CACHE_DIR / f"{player_id}_{safe_season}.json"
+    suffix = f"_{re.sub(r'[^a-z0-9]+', '-', angle.lower())}" if angle else ""
+    return CACHE_DIR / f"{player_id}_{safe_season}{suffix}.json"
 
 
-def _user_prompt(player_name: str, season: str) -> str:
-    return (
+def _user_prompt(player_name: str, season: str, angle: str | None = None) -> str:
+    base = (
         f"Write a qualitative scouting report for {player_name} as of the {season} NBA season. "
         "Focus on playing style and intangibles. No numbers."
     )
+    return f"{base} Emphasize: {angle}." if angle else base
 
 
 def fetch_scout_report(
@@ -58,6 +62,7 @@ def fetch_scout_report(
     season: str,
     *,
     use_cache: bool = True,
+    angle: str | None = None,
 ) -> SonarReport | None:
     """Return a cited scouting narrative for the player, or None on failure.
 
@@ -65,7 +70,7 @@ def fetch_scout_report(
     re-runs are free and the corpus is reproducible.
     """
     global _last_fetch_ts
-    cache = _cache_path(player_id, season)
+    cache = _cache_path(player_id, season, angle)
     if use_cache and cache.exists():
         data = json.loads(cache.read_text(encoding="utf-8"))
         return SonarReport(source_text=data["source_text"], citations=data.get("citations", []))
@@ -84,7 +89,7 @@ def fetch_scout_report(
         "model": settings.SONAR_MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": _user_prompt(player_name, season)},
+            {"role": "user", "content": _user_prompt(player_name, season, angle)},
         ],
         "temperature": 0.2,
     }
@@ -114,9 +119,12 @@ def fetch_scout_report(
         r.get("url") for r in body.get("search_results", []) if r.get("url")
     ]
     citations = [c for c in citations if c]
+    usage = body.get("usage") or {}
+    in_tok = int(usage.get("prompt_tokens") or 0)
+    out_tok = int(usage.get("completion_tokens") or 0)
 
     cache.write_text(
         json.dumps({"source_text": source_text, "citations": citations}, indent=2),
         encoding="utf-8",
     )
-    return SonarReport(source_text=source_text, citations=citations)
+    return SonarReport(source_text=source_text, citations=citations, input_tokens=in_tok, output_tokens=out_tok)

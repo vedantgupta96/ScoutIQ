@@ -118,7 +118,7 @@ function RatingPill({ rating }: { rating: ScoutRatingRow }) {
         <Badge tone={rating.confidence === 'high' ? 'confidence' : rating.confidence === 'medium' ? 'neutral' : 'warning'} size="sm">
           {rating.confidence}
         </Badge>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           &quot;{rating.evidence_span}&quot;
         </span>
       </div>
@@ -152,13 +152,13 @@ function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | nu
               background: 'var(--bg-inset)',
               minWidth: 0,
             }}>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 5 }}>
+              <div style={{ fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 5 }}>
                 {metric.label}
               </div>
               <div className="ds-tnum" style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
                 {metric.value}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5 }}>{metric.sub}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5 }}>{metric.sub}</div>
             </div>
           ))}
           <div style={{
@@ -168,7 +168,7 @@ function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | nu
             background: 'var(--bg-inset)',
             minWidth: 0,
           }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 5 }}>
+            <div style={{ fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 5 }}>
               Invalid rows
             </div>
             <div className="ds-tnum" style={{
@@ -179,7 +179,7 @@ function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | nu
             }}>
               {report?.invalid_output_count ?? '—'}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5 }}>
               {scoutEval ? `${scoutEval.gold_count} synthetic notes` : 'Loading fixture'}
             </div>
           </div>
@@ -195,7 +195,7 @@ function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | nu
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{example.player_name}</span>
-                <span className="ds-tnum" style={{ fontSize: 11, color: 'var(--text-muted)' }}>{example.note_id}</span>
+                <span className="ds-tnum" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{example.note_id}</span>
               </div>
               <p style={{ margin: '0 0 10px', fontSize: 12, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
                 {example.source_text}
@@ -207,7 +207,7 @@ function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | nu
           ))}
         </div>
 
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
           {scoutEval?.caveat ?? 'Offline fixture metrics are loading from the FastAPI eval endpoint.'}
           {' '}This is model-quality metadata for the scout-text extractor, not player-profile data yet.
           {scoutEval ? ` CLI artifact target: ${scoutEval.artifact_path}.` : ''}
@@ -244,7 +244,7 @@ function LeaderRow({ row, summary, onPick }: {
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {row.full_name}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           {team ? `${team} · ` : ''}{row.next_season} · {row.min_per_g} MPG
         </div>
       </div>
@@ -281,7 +281,7 @@ function CautionRow({ player, onPick }: { player: PlayerCardResponse; onPick: ()
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {player.full_name}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {team ? `${team} · ` : ''}{valuation?.caution_flags.slice(0, 2).join(' · ') || 'Model caution'}
         </div>
       </div>
@@ -368,7 +368,7 @@ function ScatterPlot({ points, highlight }: { points: ScatterPoint[]; highlight:
           </div>
         </div>
       )}
-      <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+      <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--accent)' }} />
           leaderboard player
@@ -513,7 +513,7 @@ export default function ModelPage() {
                 {['Nominal', 'Empirical', '± width'].map((h, i) => (
                   <th key={h} style={{
                     textAlign: i === 2 ? 'right' : 'left', padding: '0 8px 8px',
-                    fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
+                    fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase',
                     color: 'var(--text-muted)', fontWeight: 600,
                   }}>{h}</th>
                 ))}
@@ -538,7 +538,7 @@ export default function ModelPage() {
               )}
             </tbody>
           </table>
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '12px 0 0', lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0 0', lineHeight: 1.5 }}>
             Conformal intervals are well-calibrated when empirical ≈ nominal. Coverage tracks the diagonal across all levels.
           </p>
         </Surface>
@@ -582,7 +582,7 @@ export default function ModelPage() {
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px 24px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto' }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Leaderboard qualification</span>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               {loading ? 'Loading…' : `${qualifiedCount} players clear the floor`}
             </span>
           </div>
