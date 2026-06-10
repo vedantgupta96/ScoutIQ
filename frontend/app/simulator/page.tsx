@@ -40,6 +40,7 @@ function DSSlider({
       <input
         className="siq-slider"
         type="range" min={min} max={max} step={step} value={value}
+        aria-label={label}
         onChange={(e) => onChange(Number(e.target.value))}
         style={{ '--siq-slider-pct': `${Math.min(100, Math.max(0, pct))}%` } as CSSProperties}
       />
@@ -132,6 +133,7 @@ function PlayerSearch({ onPick }: { onPick: (p: PlayerSummary) => void }) {
         <Search size={15} color="var(--text-muted)" />
         <input
           type="text" placeholder="Search a player to simulate…" value={query}
+          aria-label="Search players to simulate"
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--text-primary)' }}
@@ -264,6 +266,7 @@ function SimulatorContent() {
         '--team-wash': visual.wash,
       } as CSSProperties}
     >
+      <h1 className="siq-sr-only">Cap simulator</h1>
       {/* Player select */}
       {!player && (
         <Surface variant="instrument" eyebrow="Select a player" icon={<SlidersHorizontal size={15} />} style={{ overflow: 'visible' }}>
@@ -324,6 +327,7 @@ function SimulatorContent() {
                     value={startSeason}
                     onChange={(e) => setStartSeason(e.target.value)}
                     maxLength={7}
+                    aria-label="Start season"
                     style={{
                       width: '100%',
                       padding: '8px 10px',

@@ -140,12 +140,12 @@ function TopBar({
         <Menu size={17} />
       </button>
 
-      <h1 className="siq-topbar-title" style={{
+      <div className="siq-topbar-title" style={{
         fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 20,
         color: 'var(--text-primary)', whiteSpace: 'nowrap', margin: 0,
       }}>
         {title}
-      </h1>
+      </div>
 
       {/* Search */}
       <div className="siq-topbar-search" style={{ flex: 1, maxWidth: 340, marginLeft: 8 }}>
@@ -162,13 +162,19 @@ function TopBar({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search players…"
+            aria-label="Search players"
             style={{
               flex: 1, background: 'transparent', border: 'none', outline: 'none',
               fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-primary)',
             }}
           />
           {query && (
-            <button onClick={() => setQuery('')} style={{
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Clear player search"
+              title="Clear player search"
+              style={{
               background: 'none', border: 'none', cursor: 'pointer',
               color: 'var(--text-muted)', padding: 0, display: 'flex',
             }}>✕</button>
@@ -184,7 +190,13 @@ function TopBar({
         </span>
       )}
 
-      <button onClick={toggleTheme} style={{
+      <button
+        type="button"
+        className="siq-icon-button"
+        onClick={toggleTheme}
+        aria-label={dark ? 'Use light theme' : 'Use dark theme'}
+        title={dark ? 'Use light theme' : 'Use dark theme'}
+        style={{
         display: 'inline-flex', padding: 7, borderRadius: 'var(--radius-md)',
         border: '1px solid var(--border-subtle)', background: 'var(--bg-panel)',
         color: 'var(--text-secondary)', cursor: 'pointer',
@@ -192,10 +204,16 @@ function TopBar({
         {dark ? <Sun size={16} /> : <Moon size={16} />}
       </button>
 
-      <button className="siq-bell-button" style={{
+      <button
+        type="button"
+        className="siq-icon-button siq-bell-button"
+        aria-label="Notifications are not available yet"
+        title="Notifications are not available yet"
+        disabled
+        style={{
         display: 'inline-flex', padding: 7, borderRadius: 'var(--radius-md)',
         border: '1px solid var(--border-subtle)', background: 'var(--bg-panel)',
-        color: 'var(--text-secondary)', cursor: 'pointer',
+        color: 'var(--text-muted)', cursor: 'not-allowed', opacity: 0.62,
       }}>
         <Bell size={16} />
       </button>
