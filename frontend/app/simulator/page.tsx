@@ -1,12 +1,13 @@
 'use client';
 
-import type { CSSProperties } from 'react';
-import { useEffect, useRef, useState, Suspense } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Search, SlidersHorizontal, TriangleAlert } from 'lucide-react';
+import Link from 'next/link';
+import { Search, SlidersHorizontal, TriangleAlert, Scale, BarChart3, ArrowRight, ArrowUpRight } from 'lucide-react';
 import {
-  searchPlayers, getPlayer, simulateContract,
-  PlayerSummary, SimulatorResponse, ContractYearResponse,
+  searchPlayers, getPlayer, simulateContract, getPlayerWatchlist,
+  PlayerSummary, PlayerCardResponse, SimulatorResponse, ContractYearResponse,
 } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Surface } from '@/components/ui/Surface';
@@ -16,8 +17,7 @@ import { VerdictPill } from '@/components/ui/VerdictPill';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
 import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
-import { CapBar as SharedCapBar, CAP_TIER_LABEL, capTierBadgeTone } from '@/components/cap/CapBar';
-import { capTier, fmtM, fmtPct, signed } from '@/lib/utils';
+import { fmtM, fmtPct, signed } from '@/lib/utils';
 import { teamVisual } from '@/lib/teamVisuals';
 
 // ---- Slider -------------------------------------------------------
@@ -27,59 +27,89 @@ function DSSlider({
   label: string; value: number; onChange: (v: number) => void;
   min: number; max: number; step: number; format: (v: number) => string;
 }) {
-  const pct = max === min ? 0 : ((value - min) / (max - min)) * 100;
+  // Defend against an out-of-range value (e.g. the available range shrank): the
+  // thumb, the fill, and the readout must always agree.
+  const clamped = Math.max(min, Math.min(max, value));
+  const disabled = max <= min;
+  const pct = max === min ? 0 : ((clamped - min) / (max - min)) * 100;
 
   return (
-    <div className="siq-control-slab">
+    <div className="siq-control-slab" style={{ opacity: disabled ? 0.6 : 1 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
         <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</span>
         <span className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
-          {format(value)}
+          {format(clamped)}
         </span>
       </div>
       <input
         className="siq-slider"
-        type="range" min={min} max={max} step={step} value={value}
+        type="range" min={min} max={max} step={step} value={clamped}
         aria-label={label}
+        disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={{ '--siq-slider-pct': `${Math.min(100, Math.max(0, pct))}%` } as CSSProperties}
+        style={{
+          '--siq-slider-pct': `${Math.min(100, Math.max(0, pct))}%`,
+          cursor: disabled ? 'not-allowed' : 'pointer',
+        } as CSSProperties}
       />
     </div>
   );
 }
 
-// ---- CapBar (per contract year) -----------------------------------
-function CapBar({ yr }: { yr: ContractYearResponse }) {
-  const tier = capTier(yr.cap_hit_usd, yr.tax_line, yr.first_apron, yr.second_apron);
-  const optionLabel = yr.is_player_option ? 'Player opt.' : yr.is_team_option ? 'Team opt.' : null;
+// ---- Max-salary tiers — the thresholds that actually bind one contract -----
+// A single player's cap hit never approaches the *team* tax/apron lines, so
+// reading it against them is meaningless (always "under tax"). What binds an
+// individual is the max-salary scale: 25% of the cap (≤6 yrs service), 30%
+// (7–9 yrs), 35% (10+ yrs). We grade the deal's cap share against those.
+function maxTierInfo(pct: number): { label: string; tone: 'positive' | 'warning' | 'negative'; fill: string } {
+  if (pct >= 35) return { label: 'Supermax tier',  tone: 'negative', fill: 'var(--grad-negative)' };
+  if (pct >= 30) return { label: '30% max tier',   tone: 'warning',  fill: 'linear-gradient(90deg, var(--amber-500), var(--orange-500))' };
+  if (pct >= 25) return { label: '25% max tier',   tone: 'warning',  fill: 'linear-gradient(90deg, var(--amber-500), var(--amber-600))' };
+  return { label: 'Below max', tone: 'positive', fill: 'linear-gradient(90deg, var(--teal-500), var(--green-500))' };
+}
 
+const SHARE_SCALE_MAX = 38; // % of cap the share bar spans
+const MAX_TIERS = [25, 30, 35];
+
+// The deal's cap share read against the individual max-salary tiers.
+function CapShareBar({ sharePct }: { sharePct: number }) {
+  const place = (v: number) => Math.min(100, Math.max(0, (v / SHARE_SCALE_MAX) * 100));
+  const fillW = place(sharePct);
+  const info = maxTierInfo(sharePct);
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, alignItems: 'center' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-            {yr.season}
-          </span>
-          {optionLabel && <Badge tone="warning" size="sm">{optionLabel}</Badge>}
-          {!yr.is_guaranteed && !yr.is_player_option && !yr.is_team_option && (
-            <Badge tone="neutral" size="sm">Non-gtd</Badge>
-          )}
-          {yr.is_projected_cap && <Badge tone="neutral" variant="outline" size="sm">Projected cap</Badge>}
+    <div className="siq-sim-share">
+      <div className="siq-sim-share__rail">
+        <div className="siq-sim-share__track">
+          <div className="siq-sim-share__fill" style={{ width: `${fillW}%`, background: info.fill }} />
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Badge tone={capTierBadgeTone(tier)} size="sm">{CAP_TIER_LABEL[tier]}</Badge>
-          <span className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            {fmtM(yr.cap_hit_usd)} · {fmtPct(yr.cap_hit_pct)}
-          </span>
-        </div>
+        {MAX_TIERS.map((t) => (
+          <span key={t} className="siq-sim-share__tier" style={{ left: `${place(t)}%` }} aria-hidden="true" />
+        ))}
+        <span className="siq-sim-share__dot" style={{ left: `${fillW}%`, background: info.fill }} aria-hidden="true" />
       </div>
+      <div className="siq-sim-share__ticks" aria-hidden="true">
+        {MAX_TIERS.map((t) => (
+          <span key={t} className="siq-sim-share__tick" style={{ left: `${place(t)}%` }}>{t}%</span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-      <SharedCapBar
-        value={yr.cap_hit_usd}
-        taxLine={yr.tax_line}
-        firstApron={yr.first_apron}
-        secondApron={yr.second_apron}
-      />
+// ---- One contract year in the structure ledger --------------------
+function YearRow({ yr }: { yr: ContractYearResponse }) {
+  const optionLabel = yr.is_player_option ? 'Player opt.' : yr.is_team_option ? 'Team opt.' : null;
+  const nonGtd = !yr.is_guaranteed && !yr.is_player_option && !yr.is_team_option;
+  return (
+    <div className="siq-sim-year-row">
+      <span className="ds-tnum siq-sim-year-row__season">{yr.season}</span>
+      <span className="siq-sim-year-row__flags">
+        {optionLabel && <Badge tone="warning" size="sm">{optionLabel}</Badge>}
+        {nonGtd && <Badge tone="neutral" size="sm">Non-gtd</Badge>}
+        {yr.is_projected_cap && <Badge tone="neutral" variant="outline" size="sm">Projected cap</Badge>}
+      </span>
+      <span className="ds-tnum siq-sim-year-row__usd">{fmtM(yr.cap_hit_usd)}</span>
+      <span className="ds-tnum siq-sim-year-row__pct">{fmtPct(yr.cap_hit_pct)}</span>
     </div>
   );
 }
@@ -179,6 +209,56 @@ function PlayerSearch({ onPick }: { onPick: (p: PlayerSummary) => void }) {
   );
 }
 
+// ---- Empty-state building blocks ----------------------------------
+const VERDICT_COLOR: Record<string, string> = {
+  positive: 'var(--positive-text)',
+  negative: 'var(--negative-text)',
+  neutral: 'var(--text-secondary)',
+  warning: 'var(--warning-text)',
+};
+
+// One-click starter pulled from the live mismatch board — the players most
+// worth re-pricing, so the user can launch a scenario without typing cold.
+function QuickPick({ p, onPick }: { p: PlayerCardResponse; onPick: (p: PlayerSummary) => void }) {
+  const v = p.valuation_status === 'ready' ? p.valuation : null;
+  const gap = v?.gap_pct ?? null;
+  const tone = v?.verdict_tone ?? 'neutral';
+  const team = p.current_team ?? p.latest_stats_team;
+  return (
+    <button type="button" className="siq-sim-quick" onClick={() => onPick(p)}>
+      <Avatar name={p.full_name} size="sm" position={p.position} playerId={p.player_id} />
+      <span className="siq-sim-quick__id">
+        <span className="siq-sim-quick__name">{p.full_name}</span>
+        <span className="siq-sim-quick__meta">{team?.abbreviation ?? '—'} · {p.position ?? '—'}</span>
+      </span>
+      {gap != null && (
+        <span className="ds-tnum siq-sim-quick__gap" style={{ color: VERDICT_COLOR[tone] }}>
+          {signed(gap)}%
+        </span>
+      )}
+    </button>
+  );
+}
+
+// "What you'll get" — previews the three payoffs the simulator produces so the
+// empty page sells the feature instead of just demanding a search.
+function FeatureCard({ icon, accent, title, body }: { icon: ReactNode; accent: string; title: string; body: string }) {
+  return (
+    <div className="siq-card siq-sim-feature">
+      <span
+        className="siq-sim-feature__icon"
+        style={{ color: accent, background: `color-mix(in srgb, ${accent} 12%, transparent)` }}
+      >
+        {icon}
+      </span>
+      <span className="siq-sim-feature__title">{title}</span>
+      <span className="siq-sim-feature__body">{body}</span>
+    </div>
+  );
+}
+
+const clampInt = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(v)));
+
 function numParam(value: string | null, fallback: number, min: number, max: number): number {
   if (value == null) return fallback;
   const parsed = Number(value);
@@ -205,7 +285,13 @@ function SimulatorContent() {
   const [result, setResult] = useState<SimulatorResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [quickPicks, setQuickPicks] = useState<PlayerCardResponse[]>([]);
   const requestSeq = useRef(0);
+
+  const pick = (p: PlayerSummary) => {
+    setPlayer(p);
+    router.push(`/simulator?player=${p.player_id}`);
+  };
 
   // Auto-load player from query param — fetch directly by ID, not from alphabetical list
   useEffect(() => {
@@ -213,8 +299,49 @@ function SimulatorContent() {
     getPlayer(initialPlayerId).then(setPlayer).catch(() => {});
   }, [initialPlayerId]);
 
+  // Starter suggestions for the empty state: the biggest live value/pay
+  // mismatches — the players most worth running a what-if extension on.
+  useEffect(() => {
+    if (player) return;
+    const controller = new AbortController();
+    getPlayerWatchlist({ bucket: 'all', sort: 'mismatch', qualifiedOnly: true, limit: 6 }, controller.signal)
+      .then((r) => setQuickPicks(r.items))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [player]);
+
   const totalOptions = playerOpts + teamOpts;
-  const effectiveGuaranteed = Math.min(guaranteed, years - totalOptions);
+  const effectiveGuaranteed = clampInt(guaranteed, 0, Math.max(0, years - totalOptions));
+
+  // Contract invariant: guaranteed + player options + team options ≤ years, all
+  // ≥ 0. Every control re-derives the others so the deal can never go incoherent
+  // (the old handlers let options outlive a shortened deal → negative guaranteed
+  // and out-of-range sliders).
+  const setLength = (v: number) => {
+    const y = clampInt(v, 1, 5);
+    const po = Math.min(playerOpts, y);
+    const to = Math.min(teamOpts, y - po);
+    setYears(y);
+    setPlayerOpts(po);
+    setTeamOpts(to);
+    setGuaranteed(clampInt(guaranteed, 0, y - po - to));
+  };
+
+  const setPlayerOption = (v: number) => {
+    const po = clampInt(v, 0, years - teamOpts);
+    setPlayerOpts(po);
+    setGuaranteed(clampInt(guaranteed, 0, years - po - teamOpts));
+  };
+
+  const setTeamOption = (v: number) => {
+    const to = clampInt(v, 0, years - playerOpts);
+    setTeamOpts(to);
+    setGuaranteed(clampInt(guaranteed, 0, years - playerOpts - to));
+  };
+
+  const setGuaranteedYears = (v: number) => {
+    setGuaranteed(clampInt(v, 0, years - totalOptions));
+  };
 
   // Debounced live simulation. Keep the previous result on screen while the
   // latest request is running, and ignore stale responses from older slider ticks.
@@ -243,7 +370,7 @@ function SimulatorContent() {
       } finally {
         if (seq === requestSeq.current) setLoading(false);
       }
-    }, 300);
+    }, 140);
 
     return () => {
       clearTimeout(timer);
@@ -251,8 +378,31 @@ function SimulatorContent() {
     };
   }, [player, aav, years, effectiveGuaranteed, playerOpts, teamOpts, startSeason]);
 
-  const taxYears = result?.years.filter((y) => y.cap_hit_usd >= y.tax_line).length ?? 0;
-  const apronYears = result?.years.filter((y) => y.cap_hit_usd >= y.first_apron).length ?? 0;
+  // Optimistic display: the AAV slider is the most-dragged control, but the
+  // network round-trip makes the readouts feel laggy. The model value is
+  // independent of the proposed AAV, and every cap hit scales linearly with it,
+  // so we can re-price the last server result against the live AAV instantly and
+  // let the debounced response reconcile (it matches, so there's no visible snap).
+  const displayResult = useMemo(() => {
+    if (!result) return null;
+    const base = result.proposed_aav_pct;
+    if (!base || Math.abs(base - aav) < 1e-6) return result;
+    const scale = aav / base;
+    return {
+      ...result,
+      proposed_aav_pct: aav,
+      proposed_aav_usd: result.proposed_aav_usd * scale,
+      value_gap_pct: result.value_pct != null ? result.value_pct - aav : result.value_gap_pct,
+      years: result.years.map((y) => ({
+        ...y,
+        cap_hit_usd: y.cap_hit_usd * scale,
+        cap_hit_pct: y.cap_hit_pct * scale,
+      })),
+    };
+  }, [result, aav]);
+
+  const totalValue = displayResult?.years.reduce((sum, y) => sum + (y.cap_hit_usd ?? 0), 0) ?? 0;
+  const tierInfo = maxTierInfo(displayResult?.proposed_aav_pct ?? 0);
   const visual = teamVisual(player?.current_team?.abbreviation ?? null);
 
   return (
@@ -267,26 +417,86 @@ function SimulatorContent() {
       } as CSSProperties}
     >
       <h1 className="siq-sr-only">Cap simulator</h1>
-      {/* Player select */}
+      {/* First-run cockpit: explain the signature feature, give a prominent
+          picker, and offer one-click starters so the page is never a dead end. */}
       {!player && (
-        <Surface variant="instrument" eyebrow="Select a player" icon={<SlidersHorizontal size={15} />} style={{ overflow: 'visible' }}>
-          <PlayerSearch onPick={(p) => { setPlayer(p); router.push(`/simulator?player=${p.player_id}`); }} />
-        </Surface>
+        <div className="siq-sim-intro">
+          <Surface
+            variant="instrument"
+            eyebrow="What-if contract & cap simulator"
+            icon={<SlidersHorizontal size={15} />}
+            style={{ overflow: 'visible' }}
+          >
+            <div className="siq-sim-intro__hero">
+              <h2 className="siq-sim-intro__title">Model a contract before you offer it.</h2>
+              <p className="siq-sim-intro__lede">
+                Set the terms — AAV, length, guarantees, and options — and ScoutIQ projects the cap hit,
+                luxury tax, and apron exposure for every season, then grades the deal against the player&apos;s
+                model value.
+              </p>
+
+              <div className="siq-sim-intro__search">
+                <PlayerSearch onPick={pick} />
+              </div>
+
+              {quickPicks.length > 0 && (
+                <div className="siq-sim-intro__quick">
+                  <span className="ds-eyebrow">Jump in with a live mismatch</span>
+                  <div className="siq-sim-quick-row">
+                    {quickPicks.map((p) => <QuickPick key={p.player_id} p={p} onPick={pick} />)}
+                  </div>
+                </div>
+              )}
+            </div>
+          </Surface>
+
+          <div className="siq-sim-intro__features">
+            <FeatureCard
+              icon={<Scale size={17} />}
+              accent="var(--confidence)"
+              title="Value gap"
+              body="See instantly whether the deal is a bargain or an overpay versus the player's model value."
+            />
+            <FeatureCard
+              icon={<BarChart3 size={17} />}
+              accent="var(--accent)"
+              title="Year-by-year cap"
+              body="Every season's cap hit laid out as a ladder you can read at a glance."
+            />
+            <FeatureCard
+              icon={<TriangleAlert size={17} />}
+              accent="var(--warning)"
+              title="Tax & apron exposure"
+              body="Flags the seasons a deal crosses the luxury tax line and both aprons."
+            />
+          </div>
+
+          <p className="siq-sim-intro__hint">
+            <ArrowRight size={13} /> Start from a player&apos;s contract page to auto-fill a realistic extension.
+          </p>
+        </div>
       )}
 
       {player && (
         <>
-          {/* Player chip */}
+          {/* Player chip — the identity links through to the full profile, with
+              an explicit "View profile" action so the simulator isn't a dead end. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <Avatar name={player.full_name} size="md" position={player.position} playerId={player.player_id} />
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 16, fontWeight: 600, fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>
-                {player.full_name}
+            <Link
+              href={`/players/${player.player_id}`}
+              className="siq-sim-player-link"
+              style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, textDecoration: 'none', color: 'inherit' }}
+            >
+              <Avatar name={player.full_name} size="md" position={player.position} playerId={player.player_id} />
+              <div style={{ minWidth: 0 }}>
+                <div className="siq-sim-player-name" style={{ fontSize: 16, fontWeight: 600, fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>
+                  {player.full_name}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {player.position} · {player.current_team?.abbreviation ?? '—'} · proposed deal from {startSeason}
+                </div>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                {player.position} · {player.current_team?.abbreviation ?? '—'} · proposed deal from {startSeason}
-              </div>
-            </div>
+            </Link>
             <div style={{ flex: 1 }} />
             {result?.value_pct != null && (
               <Badge tone="confidence" variant="outline" size="sm">
@@ -298,9 +508,14 @@ function SimulatorContent() {
                 Updating
               </Badge>
             )}
+            <Link href={`/players/${player.player_id}`} className="siq-secondary-button">
+              <ArrowUpRight size={15} />
+              View profile
+            </Link>
             <button
+              type="button"
+              className="siq-secondary-button"
               onClick={() => { setPlayer(null); setResult(null); router.push('/simulator'); }}
-              style={{ padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-panel)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12 }}
             >
               Change player
             </button>
@@ -342,28 +557,28 @@ function SimulatorContent() {
                 </div>
                 <DSSlider
                   label="Length"
-                  value={years} onChange={(v) => { setYears(v); setGuaranteed(Math.min(guaranteed, v)); }}
+                  value={years} onChange={setLength}
                   min={1} max={5} step={1}
                   format={(v) => `${v} yr${v > 1 ? 's' : ''}`}
                 />
                 <DSSlider
                   label="Guaranteed years"
                   value={effectiveGuaranteed}
-                  onChange={setGuaranteed}
+                  onChange={setGuaranteedYears}
                   min={0} max={Math.max(0, years - totalOptions)} step={1}
                   format={(v) => `${v} of ${years}`}
                 />
                 <DSSlider
                   label="Player option"
                   value={playerOpts}
-                  onChange={(v) => setPlayerOpts(Math.min(v, years - teamOpts))}
+                  onChange={setPlayerOption}
                   min={0} max={Math.max(0, years - teamOpts)} step={1}
                   format={(v) => `${v} yr${v !== 1 ? 's' : ''}`}
                 />
                 <DSSlider
                   label="Team option"
                   value={teamOpts}
-                  onChange={(v) => setTeamOpts(Math.min(v, years - playerOpts))}
+                  onChange={setTeamOption}
                   min={0} max={Math.max(0, years - playerOpts)} step={1}
                   format={(v) => `${v} yr${v !== 1 ? 's' : ''}`}
                 />
@@ -397,24 +612,24 @@ function SimulatorContent() {
                 </div>
               )}
 
-              {result && (
+              {displayResult && (
                 <>
                   {/* Summary card */}
                   <Surface variant="board" teamAccent eyebrow="Proposed deal" icon={<SlidersHorizontal size={15} />}>
                     <div className="siq-sim-summary-grid">
                       <StatTile
                         label="Contract AAV"
-                        value={fmtM(result.proposed_aav_usd)}
-                        unit={` · ${fmtPct(result.proposed_aav_pct)}`}
-                        sub={`${years}-year deal`}
+                        value={fmtM(displayResult.proposed_aav_usd)}
+                        unit={` · ${fmtPct(displayResult.proposed_aav_pct)}`}
+                        sub={`${displayResult.years.length}-yr · ${fmtM(totalValue)} total`}
                         size="md"
                       />
-                      {result.value_pct != null && (
+                      {displayResult.value_pct != null && (
                         <StatTile
                           label="Value gap"
-                          value={result.value_gap_pct != null ? signed(result.value_gap_pct) + '%' : '—'}
-                          sub={result.value_gap_pct != null
-                            ? (result.value_gap_pct >= 0 ? 'Underpaid' : 'Overpaid')
+                          value={displayResult.value_gap_pct != null ? signed(displayResult.value_gap_pct) + '%' : '—'}
+                          sub={displayResult.value_gap_pct != null
+                            ? (displayResult.value_gap_pct >= 0 ? 'Underpaid' : 'Overpaid')
                             : 'No valuation'
                           }
                           delta={undefined}
@@ -423,57 +638,53 @@ function SimulatorContent() {
                       )}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <span className="ds-eyebrow">AAV vs. value</span>
-                        <VerdictPill gapPct={result.value_gap_pct} size="md" />
+                        <VerdictPill gapPct={displayResult.value_gap_pct} size="md" />
                       </div>
                     </div>
-                    {result.value_pct != null && (
+                    {displayResult.value_pct != null && (
                       <div style={{ marginTop: 12 }}>
                         <div className="ds-eyebrow" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <span style={{ color: 'var(--confidence-text)' }}>model value {fmtPct(result.value_pct)}</span>
-                          <span>proposed AAV {fmtPct(result.proposed_aav_pct)}</span>
+                          <span style={{ color: 'var(--confidence-text)' }}>model value {fmtPct(displayResult.value_pct)}</span>
+                          <span>proposed AAV {fmtPct(displayResult.proposed_aav_pct)}</span>
                         </div>
-                        <MiniValuePayGauge valuePct={result.value_pct} payPct={result.proposed_aav_pct} />
+                        <MiniValuePayGauge valuePct={displayResult.value_pct} payPct={displayResult.proposed_aav_pct} />
                       </div>
                     )}
                   </Surface>
 
-                  {/* Year-by-year */}
+                  {/* Cap share & structure — read against the individual
+                      max-salary tiers (a single deal never nears the team tax line),
+                      plus the year-by-year dollar escalation and guarantee structure. */}
                   <Surface
                     variant="board"
                     teamAccent
-                    eyebrow="Year-by-year cap hits"
+                    eyebrow="Cap share & structure"
                     icon={<SlidersHorizontal size={15} />}
-                    action={
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        {taxYears > 0 && <Badge tone="warning" size="sm">{taxYears} yr over tax</Badge>}
-                        {apronYears > 0 && <Badge tone="negative" size="sm" dot>{apronYears} yr in apron</Badge>}
-                        {taxYears === 0 && <Badge tone="positive" size="sm" dot>Under tax</Badge>}
-                      </div>
-                    }
+                    action={<Badge tone={tierInfo.tone} size="sm">{tierInfo.label}</Badge>}
                   >
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.45 }}>
-                      Cap hit for this contract each season. Markers show tax line and apron thresholds.
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
+                      This deal commits {fmtPct(displayResult.proposed_aav_pct)} of the cap. A single contract never
+                      nears the team tax line, so it&apos;s read against the max-salary tiers that actually bind one player.
                     </p>
-                    <div className="siq-cap-legend">
-                      {[
-                        { c: 'var(--grad-positive)', t: 'Under tax' },
-                        { c: 'rgba(236,178,46,0.5)', t: 'Tax → apron' },
-                        { c: 'rgba(244,98,31,0.6)', t: 'First apron' },
-                        { c: 'rgba(238,71,71,0.6)', t: 'Second apron' },
-                      ].map((z) => (
-                        <span key={z.t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ width: 14, height: 8, borderRadius: 3, background: z.c }} />
-                          {z.t}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="siq-cap-year-stack">
-                      {result.years.map((yr) => <CapBar key={yr.season} yr={yr} />)}
+
+                    <CapShareBar sharePct={displayResult.proposed_aav_pct} />
+                    <p style={{ fontSize: 11.5, color: 'var(--text-faint)', margin: '9px 0 16px' }}>
+                      Max-salary tiers — 25% (≤6 yrs service) · 30% (7–9 yrs) · 35% (10+ yrs)
+                    </p>
+
+                    <div className="siq-sim-year-stack">
+                      <div className="siq-sim-year-row siq-sim-year-row--head">
+                        <span className="siq-sim-year-row__season">Season</span>
+                        <span className="siq-sim-year-row__flags" />
+                        <span className="siq-sim-year-row__usd">Cap hit</span>
+                        <span className="siq-sim-year-row__pct">Share</span>
+                      </div>
+                      {displayResult.years.map((yr) => <YearRow key={yr.season} yr={yr} />)}
                     </div>
                   </Surface>
 
                   <AssumptionFlag tone="warning" title="Simplified CBA model" icon={<TriangleAlert size={16} />}>
-                    {result.disclaimer} Caps project at {(result.assumptions.cap_projection_rate * 100).toFixed(1)}%/yr.
+                    {displayResult.disclaimer} Caps project at {(displayResult.assumptions.cap_projection_rate * 100).toFixed(1)}%/yr.
                   </AssumptionFlag>
                 </>
               )}
