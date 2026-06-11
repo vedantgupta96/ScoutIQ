@@ -13,7 +13,9 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from scoutiq.api.cap_simulator import classify_tier
 from scoutiq.api.deps import DB
+from scoutiq.api.season import is_valid_season
 from scoutiq.api.routers.players import (
     LATEST_SEASON,
     PlayerSummary,
@@ -144,14 +146,43 @@ def _apron(cap_row: CapConstants | None, field: str, proxy_mult: float) -> int |
     return None
 
 
-def _tier(payroll: int, tax: int | None, ap1: int | None, ap2: int | None) -> str:
-    if ap2 and payroll >= ap2:
-        return "second-apron"
-    if ap1 and payroll >= ap1:
-        return "first-apron"
-    if tax and payroll >= tax:
-        return "taxpayer"
-    return "below-tax"
+def team_cap_hits(
+    db: DB, player_ids: list[int], season: str
+) -> tuple[dict[int, int], dict[int, str]]:
+    """Per-player cap hit for `season` and where it came from.
+
+    Precedence: the contract year for the season (later contracts win), else the
+    realized salary. Shared by the team cap sheet and the simulator's apron overlay so
+    both price a roster the same way. Returns (cap_hit_by_player, pay_source_by_player).
+    """
+    cap_hit_by_player: dict[int, int] = {}
+    pay_source_by_player: dict[int, str] = {}
+    if not player_ids:
+        return cap_hit_by_player, pay_source_by_player
+
+    contract_rows = db.execute(
+        select(ContractYear, Contract.player_id)
+        .join(Contract, Contract.id == ContractYear.contract_id)
+        .where(Contract.player_id.in_(player_ids))
+        .where(ContractYear.season == season)
+        .order_by(Contract.season_start)
+    ).all()
+    for cy, pid in contract_rows:
+        if cy.aav is not None:
+            cap_hit_by_player[pid] = cy.aav
+            pay_source_by_player[pid] = "contract"
+
+    salary_rows = db.scalars(
+        select(PlayerSalary)
+        .where(PlayerSalary.player_id.in_(player_ids))
+        .where(PlayerSalary.season == season)
+    ).all()
+    for sr in salary_rows:
+        if sr.player_id not in cap_hit_by_player and sr.salary is not None:
+            cap_hit_by_player[sr.player_id] = sr.salary
+            pay_source_by_player[sr.player_id] = "salary"
+
+    return cap_hit_by_player, pay_source_by_player
 
 
 @router.get("", response_model=list[TeamListItem])
@@ -173,6 +204,10 @@ def list_teams(db: DB = None):
 @router.get("/{team_id}/cap-sheet", response_model=TeamCapSheetResponse)
 def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     """Roster cap sheet: payroll vs tax/apron + per-player value-vs-pay."""
+    if season is not None and not is_valid_season(season):
+        raise HTTPException(
+            status_code=422, detail="season must be a 'YYYY-YY' label, e.g. '2025-26'."
+        )
     team = db.get(Team, team_id)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found.")
@@ -192,30 +227,7 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     second_apron = _apron(cap_row, "second_apron", 1.097)
 
     # Cap hit precedence: contract year for the season (later contracts win), else realized salary.
-    cap_hit_by_player: dict[int, int] = {}
-    pay_source_by_player: dict[int, str] = {}
-    if player_ids:
-        contract_rows = db.execute(
-            select(ContractYear, Contract.player_id)
-            .join(Contract, Contract.id == ContractYear.contract_id)
-            .where(Contract.player_id.in_(player_ids))
-            .where(ContractYear.season == target)
-            .order_by(Contract.season_start)
-        ).all()
-        for cy, pid in contract_rows:
-            if cy.aav is not None:
-                cap_hit_by_player[pid] = cy.aav
-                pay_source_by_player[pid] = "contract"
-
-        salary_rows = db.scalars(
-            select(PlayerSalary)
-            .where(PlayerSalary.player_id.in_(player_ids))
-            .where(PlayerSalary.season == target)
-        ).all()
-        for sr in salary_rows:
-            if sr.player_id not in cap_hit_by_player and sr.salary is not None:
-                cap_hit_by_player[sr.player_id] = sr.salary
-                pay_source_by_player[sr.player_id] = "salary"
+    cap_hit_by_player, pay_source_by_player = team_cap_hits(db, player_ids, target)
 
     # Model value: batch over rostered players that have a stats season.
     season_rows = (
@@ -299,7 +311,7 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     payroll_pct = round(total_payroll / salary_cap * 100, 2) if salary_cap else None
     surplus_usd = total_value - total_payroll
     surplus_pct = round(surplus_usd / salary_cap * 100, 2) if salary_cap else None
-    tier = _tier(total_payroll, tax_line, first_apron, second_apron)
+    tier = classify_tier(total_payroll, tax_line, first_apron, second_apron)
 
     gapped = [pl for pl in players if pl.gap_pct is not None]
     top_bargain = max(gapped, key=lambda x: x.gap_pct, default=None)

@@ -11,6 +11,7 @@ from sqlalchemy import and_, desc, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from scoutiq.api.deps import DB
+from scoutiq.api.season import next_season
 from scoutiq.config import settings
 from scoutiq.llm import generate
 from scoutiq.llm.pricing import Usage
@@ -160,10 +161,7 @@ def _team_summary(team: Team | None) -> TeamSummary | None:
 
 
 def _next_season(season: str) -> str | None:
-    if not re.match(r"^\d{4}-\d{2}$", season):
-        return None
-    y1, y2 = int(season[:4]), int(season[5:])
-    return f"{y1 + 1}-{str(y2 + 1).zfill(2)}"
+    return next_season(season)
 
 
 def _pct_from_contract_year(year: ContractYear, cap_row: CapConstants | None) -> float | None:
@@ -1045,7 +1043,22 @@ def get_player_rationale(
     if ratings is None or not ratings.traits:
         raise HTTPException(status_code=404, detail="No scout coverage for this player; cannot ground a rationale.")
 
-    val = get_valuation(player_id, None, db)  # raises 404 if the player has no stats/valuation
+    # The player is scouted but may have no valuation-capable season (load-managed,
+    # injured, or never logged qualifying minutes). Re-frame that 404 so the caller
+    # knows *which* signal is missing rather than getting a generic "no stats" error.
+    try:
+        val = get_valuation(player_id, None, db)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"{player.full_name} has scouting coverage but no model valuation "
+                    "(no season with qualifying stats — e.g. load-managed or injured). "
+                    "A grounded rationale needs a production-implied value gap to ground against."
+                ),
+            ) from exc
+        raise
     traits = [(t.trait.value, t.average_score, (t.evidence[0] if t.evidence else "")) for t in ratings.traits]
 
     sonar_usage: Usage | None = None

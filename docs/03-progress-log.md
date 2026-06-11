@@ -152,6 +152,36 @@ update over a broad table reload, and/or make `load_stats` merge into `advanced`
 
 ---
 
+## Hardening + simulator depth pass (2026-06-10)
+
+A focused post-Phase-2 pass on four maintenance/depth items (plus a housekeeping decision), all
+backend-only or API-client-only — no Next.js component changes.
+
+- **Season-label hardening.** Added `scoutiq.api.season` (`is_valid_season` / `validate_season` /
+  `next_season`) and routed every season entry point through it. A malformed season in the simulator
+  (`start_season` / `valuation_season`) or the team cap-sheet now returns a clean **422** instead of a
+  leaked `int()` ValueError; `players._next_season` delegates to the shared helper (also fixes a century
+  rollover, e.g. `1999-00 → 2000-01`).
+- **Rationale coverage clarity.** A scouted player with no valuation-capable season (load-managed /
+  injured) now gets a specific, actionable 404 instead of a generic "no stats." Added
+  `scoutiq.etl.check_rationale_coverage`, an offline read-only audit bucketing every rostered/scouted/
+  valued player into `ready` / `load_managed` / `no_scout_coverage` / `no_coverage` (never calls Sonar
+  or Claude).
+- **Cap-simulator depth.** The what-if simulator now overlays a proposed first-year cap hit onto a real
+  team's payroll (optional `team_id`, netting out the player's existing figure on a re-sign) to show the
+  resulting tax/apron **tier and its 2023-CBA consequences**. New `POST /simulate/compare` runs 2–5
+  proposed contracts side by side with face-value totals, the value gap, and best-value/cheapest picks.
+  Tier classification and the contract-then-salary cap-hit precedence are now shared helpers
+  (`classify_tier`, `team_cap_hits`) the team cap sheet reuses.
+- **Housekeeping.** `skills-lock.json` (local installed-skill lock) is gitignored as local agent config,
+  alongside `.claude/` and `.agents/skills/`.
+
+Tests went from 52 → 81 passing; frontend `npm run build` + TypeScript clean; impeccable a11y detector
+reports no issues. One latent note: API tests run on SQLite where `DISTINCT ON` is silently ignored
+(prod is Neon Postgres, where it works) — a test-fidelity gap, not a prod bug.
+
+---
+
 ## Next
 The highest-leverage next feature is **current contract timeline + one-click extension simulation**:
 show what the player is owed, compare it to production-implied value, and let the user launch a proposed
