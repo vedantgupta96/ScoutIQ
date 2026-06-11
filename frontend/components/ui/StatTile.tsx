@@ -9,6 +9,8 @@ interface StatTileProps {
   deltaDir?: 'up' | 'down';
   size?: 'sm' | 'md' | 'lg';
   labelIcon?: ReactNode;
+  /** Color the value by verdict; glides on change (live readouts). */
+  valueTone?: 'positive' | 'negative' | 'neutral' | 'warning';
 }
 
 const SIZE = {
@@ -17,7 +19,14 @@ const SIZE = {
   lg: { label: 13, value: 38, unit: 16 },
 };
 
-export function StatTile({ label, value, unit, sub, delta, deltaDir, size = 'md', labelIcon }: StatTileProps) {
+const TONE_COLOR = {
+  positive: 'var(--positive-text)',
+  negative: 'var(--negative-text)',
+  warning: 'var(--warning-text)',
+  neutral: 'var(--text-primary)',
+};
+
+export function StatTile({ label, value, unit, sub, delta, deltaDir, size = 'md', labelIcon, valueTone }: StatTileProps) {
   const s = SIZE[size];
 
   return (
@@ -29,8 +38,10 @@ export function StatTile({ label, value, unit, sub, delta, deltaDir, size = 'md'
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
         <span className="ds-tnum" style={{
           fontSize: s.value, fontWeight: 700,
-          color: 'var(--text-primary)', lineHeight: 1.1,
+          color: valueTone ? TONE_COLOR[valueTone] : 'var(--text-primary)',
+          lineHeight: 1.1,
           fontFamily: 'var(--font-display)',
+          transition: 'color var(--duration-slow) var(--ease-out)',
         }}>
           {value}
         </span>

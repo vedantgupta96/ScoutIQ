@@ -17,15 +17,17 @@ import { VerdictPill } from '@/components/ui/VerdictPill';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
 import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
-import { fmtM, fmtPct, signed } from '@/lib/utils';
+import { fmtM, fmtPct, gapLabel, gapTone, signed } from '@/lib/utils';
 import { teamVisual } from '@/lib/teamVisuals';
 
 // ---- Slider -------------------------------------------------------
 function DSSlider({
-  label, value, onChange, min, max, step, format,
+  label, value, onChange, min, max, step, format, verdict = false,
 }: {
   label: string; value: number; onChange: (v: number) => void;
   min: number; max: number; step: number; format: (v: number) => string;
+  /** The control that decides the verdict: its thumb halo speaks --sim-verdict. */
+  verdict?: boolean;
 }) {
   // Defend against an out-of-range value (e.g. the available range shrank): the
   // thumb, the fill, and the readout must always agree.
@@ -42,7 +44,7 @@ function DSSlider({
         </span>
       </div>
       <input
-        className="siq-slider"
+        className={verdict ? 'siq-slider siq-slider--verdict' : 'siq-slider'}
         type="range" min={min} max={max} step={step} value={clamped}
         aria-label={label}
         disabled={disabled}
@@ -405,6 +407,18 @@ function SimulatorContent() {
   const tierInfo = maxTierInfo(displayResult?.proposed_aav_pct ?? 0);
   const visual = teamVisual(player?.current_team?.abbreviation ?? null);
 
+  // The live verdict, made felt: the AAV thumb halo, the verdict pill, and the
+  // value-gap readout all ride this one hue. Green = bargain, red = overpay,
+  // teal = priced at model value (calibration, not a verdict), brand orange
+  // while there's no reading yet.
+  const simGap = displayResult?.value_gap_pct ?? null;
+  const simTone = gapTone(simGap);
+  const simVerdictColor =
+    simGap == null ? 'var(--accent)'
+    : simTone === 'positive' ? 'var(--positive)'
+    : simTone === 'negative' ? 'var(--negative)'
+    : 'var(--confidence)';
+
   return (
     <div
       style={{
@@ -414,6 +428,7 @@ function SimulatorContent() {
         '--team-primary': visual.primary,
         '--team-secondary': visual.secondary,
         '--team-wash': visual.wash,
+        '--sim-verdict': simVerdictColor,
       } as CSSProperties}
     >
       <h1 className="siq-sr-only">Cap simulator</h1>
@@ -530,6 +545,7 @@ function SimulatorContent() {
                   value={aav} onChange={setAav}
                   min={1} max={35} step={0.5}
                   format={(v) => `${v}% of cap`}
+                  verdict
                 />
                 <div className="siq-control-slab">
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -628,17 +644,19 @@ function SimulatorContent() {
                         <StatTile
                           label="Value gap"
                           value={displayResult.value_gap_pct != null ? signed(displayResult.value_gap_pct) + '%' : '—'}
-                          sub={displayResult.value_gap_pct != null
-                            ? (displayResult.value_gap_pct >= 0 ? 'Underpaid' : 'Overpaid')
-                            : 'No valuation'
-                          }
+                          sub={displayResult.value_gap_pct != null ? gapLabel(displayResult.value_gap_pct) : 'No valuation'}
+                          valueTone={simTone}
                           delta={undefined}
                           size="md"
                         />
                       )}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <span className="ds-eyebrow">AAV vs. value</span>
-                        <VerdictPill gapPct={displayResult.value_gap_pct} size="md" />
+                        {/* Keyed by tone: crossing a verdict threshold remounts
+                            the wrapper, replaying the one-shot pulse. */}
+                        <span key={simTone} className="siq-verdict-flip">
+                          <VerdictPill gapPct={displayResult.value_gap_pct} size="md" />
+                        </span>
                       </div>
                     </div>
                     {displayResult.value_pct != null && (
