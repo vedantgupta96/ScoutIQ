@@ -31,10 +31,10 @@ const TONE_TEXT: Record<GapTone, string> = {
 };
 
 function CountUpPct({
-  value, decimals = 1, withSign = false, style,
-}: { value: number; decimals?: number; withSign?: boolean; style?: React.CSSProperties }) {
+  value, decimals = 1, withSign = false, style, className,
+}: { value: number; decimals?: number; withSign?: boolean; style?: React.CSSProperties; className?: string }) {
   return (
-    <span className="ds-tnum" style={style}>
+    <span className={className ? `ds-tnum ${className}` : 'ds-tnum'} style={style}>
       {withSign ? signed(value, decimals) : value.toFixed(decimals)}%
     </span>
   );
@@ -120,7 +120,7 @@ function MetricCell({
   );
 }
 
-function RosterCard({ player }: { player: PlayerCardResponse }) {
+function RosterCard({ player, index = 0 }: { player: PlayerCardResponse; index?: number }) {
   const team = player.current_team ?? player.latest_stats_team;
   const valuation = player.valuation_status === 'ready' ? player.valuation : undefined;
   const gap = valuation?.gap_pct ?? null;
@@ -133,8 +133,14 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
   return (
     <Link
       href={`/players/${player.player_id}`}
-      className="siq-case-card"
-      style={{ '--case-accent': accent } as React.CSSProperties}
+      className="siq-case-card siq-enter"
+      style={{
+        '--case-accent': accent,
+        // Cap the stagger so deep rows don't wait — the cascade reads as one
+        // quick deal of the board, not a slow load.
+        ['--i' as string]: Math.min(index, 11),
+        ['--enter-base' as string]: '40ms',
+      } as React.CSSProperties}
     >
         {/* Header row */}
         <div className="siq-case-card__head">
@@ -164,6 +170,7 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
                 <CountUpPct
                   value={gap}
                   withSign
+                  className="siq-enter-pop"
                   style={{
                     fontSize: 24, fontWeight: 700, lineHeight: 1,
                     fontFamily: 'var(--font-display)', color: TONE_COLOR[tone],
@@ -488,7 +495,7 @@ function PlayersContent() {
           </div>
 
           <div className="siq-pressure-board">
-            {players.map((p) => <RosterCard key={p.player_id} player={p} />)}
+            {players.map((p, i) => <RosterCard key={p.player_id} player={p} index={i} />)}
           </div>
 
           <div style={{

@@ -36,11 +36,12 @@ function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) 
 
       {/* Nav */}
       <nav className="siq-sidebar-nav" style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <span className="ds-eyebrow siq-nav-eyebrow" style={{ padding: '8px 8px 6px' }}>Front office</span>
-        {NAV.map(({ id, href, label, Icon }) => {
+        <span className="ds-eyebrow siq-nav-eyebrow siq-enter-x" style={{ padding: '8px 8px 6px', ['--i' as string]: 0 }}>Front office</span>
+        {NAV.map(({ id, href, label, Icon }, i) => {
           const isActive = active === id;
           return (
-            <Link key={id} href={href} className="siq-sidebar-link" aria-label={label} style={{
+            <Link key={id} href={href} className="siq-sidebar-link siq-enter-x" aria-label={label} style={{
+              ['--i' as string]: i + 1,
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '9px 10px', borderRadius: 'var(--radius-md)',
               textDecoration: 'none', position: 'relative',
@@ -140,15 +141,18 @@ function TopBar({
         <Menu size={17} />
       </button>
 
-      <div className="siq-topbar-title" style={{
+      <div className="siq-topbar-title siq-enter" style={{
+        ['--i' as string]: 1,
         fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 20,
         color: 'var(--text-primary)', whiteSpace: 'nowrap', margin: 0,
       }}>
         {title}
       </div>
 
-      {/* Search */}
-      <div className="siq-topbar-search" style={{ flex: 1, maxWidth: 340, marginLeft: 8 }}>
+      {/* Search — hidden on the simulator, which owns its own player picker
+          (avoids two competing search bars on that page). */}
+      {!pathname.startsWith('/simulator') && (
+      <div className="siq-topbar-search siq-enter" style={{ ['--i' as string]: 2, flex: 1, maxWidth: 340, marginLeft: 8 }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '6px 10px',
@@ -181,6 +185,7 @@ function TopBar({
           )}
         </div>
       </div>
+      )}
 
       <div className="siq-topbar-spacer" style={{ flex: 1 }} />
 
@@ -243,7 +248,7 @@ export function Shell({ children }: ShellProps) {
           onToggleSidebar={() => setSidebarCollapsed((collapsed) => !collapsed)}
         />
         <main className="siq-main">
-          <div className="siq-content">
+          <div key={pathname} className="siq-content siq-route-enter">
             {children}
           </div>
         </main>
