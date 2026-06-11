@@ -2235,6 +2235,44 @@ textarea::placeholder {
   pointer-events: none;
 }
 
+/* ============================================================
+   Verdict moment — the simulator's state change, made felt
+   --sim-verdict (set on the page root) carries the live read:
+   green bargain / red overpay / teal priced-at-model / brand
+   orange before any reading. Only two things glow with it: the
+   halo on the AAV thumb — the hand on the control feels the
+   deal turn — and a one-shot pulse when the verdict pill flips.
+   The thumb itself stays brand orange: the instrument is the
+   brand, the halo is the consequence.
+   ============================================================ */
+.siq-slider--verdict::-webkit-slider-thumb {
+  box-shadow:
+    0 1px 4px rgba(16,24,40,0.18),
+    0 0 0 4px color-mix(in srgb, var(--sim-verdict, var(--accent)) 17%, transparent),
+    0 0 13px 3px color-mix(in srgb, var(--sim-verdict, var(--accent)) 30%, transparent);
+  transition: box-shadow 420ms var(--ease-out);
+}
+
+.siq-slider--verdict::-moz-range-thumb {
+  box-shadow:
+    0 1px 4px rgba(16,24,40,0.18),
+    0 0 0 4px color-mix(in srgb, var(--sim-verdict, var(--accent)) 17%, transparent),
+    0 0 13px 3px color-mix(in srgb, var(--sim-verdict, var(--accent)) 30%, transparent);
+  transition: box-shadow 420ms var(--ease-out);
+}
+
+@keyframes siq-verdict-pulse {
+  0%   { transform: scale(0.93); box-shadow: 0 0 0 0 color-mix(in srgb, var(--sim-verdict, var(--accent)) 45%, transparent); }
+  62%  { transform: scale(1.05); }
+  100% { transform: scale(1); box-shadow: 0 0 0 11px transparent; }
+}
+
+.siq-verdict-flip {
+  display: inline-flex;
+  border-radius: var(--radius-pill);
+  animation: siq-verdict-pulse 420ms var(--ease-expo);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
