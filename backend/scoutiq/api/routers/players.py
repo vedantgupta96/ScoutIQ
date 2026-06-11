@@ -1043,7 +1043,22 @@ def get_player_rationale(
     if ratings is None or not ratings.traits:
         raise HTTPException(status_code=404, detail="No scout coverage for this player; cannot ground a rationale.")
 
-    val = get_valuation(player_id, None, db)  # raises 404 if the player has no stats/valuation
+    # The player is scouted but may have no valuation-capable season (load-managed,
+    # injured, or never logged qualifying minutes). Re-frame that 404 so the caller
+    # knows *which* signal is missing rather than getting a generic "no stats" error.
+    try:
+        val = get_valuation(player_id, None, db)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"{player.full_name} has scouting coverage but no model valuation "
+                    "(no season with qualifying stats — e.g. load-managed or injured). "
+                    "A grounded rationale needs a production-implied value gap to ground against."
+                ),
+            ) from exc
+        raise
     traits = [(t.trait.value, t.average_score, (t.evidence[0] if t.evidence else "")) for t in ratings.traits]
 
     sonar_usage: Usage | None = None

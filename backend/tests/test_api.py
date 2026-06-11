@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import scoutiq.api.routers.headshots as headshots_router
@@ -366,6 +367,28 @@ def test_simulator_malformed_valuation_season_returns_422():
     )
 
     assert response.status_code == 422
+
+
+def test_rationale_load_managed_returns_actionable_404(monkeypatch):
+    """A scouted player with no valuation-capable season gets a specific, actionable
+    error explaining which signal is missing — not a generic 'no stats' 404."""
+
+    class _Ratings:
+        traits = [object()]  # non-empty → scout coverage present
+
+    monkeypatch.setattr(players_router, "aggregate_from_db", lambda *a, **k: _Ratings())
+    monkeypatch.setattr(players_router.settings, "ANTHROPIC_API_KEY", "test-key", raising=False)
+
+    def _no_valuation(*a, **k):
+        raise HTTPException(status_code=404, detail="No stats for player_id=1630217 in season 2025-26.")
+
+    monkeypatch.setattr(players_router, "get_valuation", _no_valuation)
+    client = _client(FakeDB())
+
+    response = client.get("/players/1630217/rationale?consensus=fusion")
+
+    assert response.status_code == 404
+    assert "scouting coverage but no model valuation" in response.json()["detail"]
 
 
 def test_player_search_and_profile_shapes():
