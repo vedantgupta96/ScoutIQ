@@ -339,6 +339,48 @@ def test_simulator_missing_player_returns_404():
     assert response.status_code == 404
 
 
+def test_simulate_compare_ranks_scenarios(monkeypatch):
+    monkeypatch.setattr(
+        simulator_router,
+        "predict_from_features",
+        lambda features: {
+            "value_pct": 25.0,
+            "lo_pct": 20.0,
+            "hi_pct": 30.0,
+            "model_version": "v0-gbm-conformal",
+        },
+    )
+    client = _client(FakeDB())
+
+    response = client.post(
+        "/simulate/compare",
+        json={
+            "scenarios": [
+                {"player_id": 1630217, "aav_pct": 20.0, "years": 4, "start_season": "2024-25"},
+                {"player_id": 1630217, "aav_pct": 30.0, "years": 2, "start_season": "2024-25"},
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["scenarios"]) == 2
+    assert len(body["deltas"]) == 2
+    # value gap = 25 - aav_pct → +5 for scenario 0, -5 for scenario 1, so 0 is the better value.
+    assert body["best_value_index"] == 0
+    assert body["deltas"][0]["value_gap_pct"] == 5.0
+    assert body["deltas"][1]["value_gap_pct"] == -5.0
+
+
+def test_simulate_compare_rejects_single_scenario():
+    client = _client(FakeDB())
+    response = client.post(
+        "/simulate/compare",
+        json={"scenarios": [{"player_id": 1630217, "aav_pct": 20.0, "years": 1, "start_season": "2024-25"}]},
+    )
+    assert response.status_code == 422
+
+
 def test_simulator_malformed_start_season_returns_422_not_500():
     client = _client(FakeDB())
 

@@ -186,6 +186,8 @@ export interface SimulatorRequest {
   team_option_years?: number;
   start_season?: string;
   valuation_season?: string | null;
+  /** If set, overlay the first-year cap hit on this team's payroll for apron consequences. */
+  team_id?: number | null;
 }
 
 export interface ContractYearResponse {
@@ -209,6 +211,24 @@ export interface SimulatorAssumptions {
   not_modeled: string[];
 }
 
+/** Where a proposed first-year cap hit lands a real team against the tax/apron lines. */
+export interface ApronOutlookResponse {
+  team_id: number;
+  team_name: string | null;
+  season: string;
+  existing_payroll_usd: number;
+  replaces_existing_usd: number;
+  proposed_cap_hit_usd: number;
+  payroll_after_usd: number;
+  tier_before: CapTier;
+  tier_after: CapTier;
+  crosses_a_line: boolean;
+  room_to_tax_after: number | null;
+  room_to_first_apron_after: number | null;
+  room_to_second_apron_after: number | null;
+  consequences: string[];
+}
+
 export interface SimulatorResponse {
   player_id: number;
   player_name: string;
@@ -224,6 +244,23 @@ export interface SimulatorResponse {
   years: ContractYearResponse[];
   valuation_season: string;
   disclaimer: string;
+  apron_outlook?: ApronOutlookResponse | null;
+}
+
+export interface ScenarioDelta {
+  label: string;
+  total_cap_hit_usd: number;
+  guaranteed_cap_hit_usd: number;
+  value_gap_pct: number | null;
+  apron_tier_after: CapTier | null;
+}
+
+export interface CompareResponse {
+  scenarios: SimulatorResponse[];
+  deltas: ScenarioDelta[];
+  best_value_index: number | null;
+  cheapest_index: number;
+  note: string;
 }
 
 export interface BacktestCalibrationPoint {
@@ -477,6 +514,14 @@ export function simulateContract(req: SimulatorRequest, signal?: AbortSignal): P
   return apiFetch<SimulatorResponse>('/simulate/contract', {
     method: 'POST',
     body: JSON.stringify(req),
+    signal,
+  });
+}
+
+export function compareContracts(scenarios: SimulatorRequest[], signal?: AbortSignal): Promise<CompareResponse> {
+  return apiFetch<CompareResponse>('/simulate/compare', {
+    method: 'POST',
+    body: JSON.stringify({ scenarios }),
     signal,
   });
 }

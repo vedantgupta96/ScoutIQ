@@ -35,6 +35,50 @@ SIMULATOR_ASSUMPTIONS = {
 }
 
 
+# Payroll tiers, ordered from cheapest to most restrictive.
+TIER_BELOW_TAX = "below-tax"
+TIER_TAXPAYER = "taxpayer"
+TIER_FIRST_APRON = "first-apron"
+TIER_SECOND_APRON = "second-apron"
+TIER_ORDER = [TIER_BELOW_TAX, TIER_TAXPAYER, TIER_FIRST_APRON, TIER_SECOND_APRON]
+
+# The roster-building tools each tier costs you under the 2023 CBA. Phrased as the
+# consequences of *being in* that tier, most-cited restrictions first.
+APRON_CONSEQUENCES: dict[str, list[str]] = {
+    TIER_BELOW_TAX: [],
+    TIER_TAXPAYER: [
+        "Owes luxury tax on every dollar above the tax line (escalating brackets).",
+        "Repeater-tax rates apply if taxed in 3 of the prior 4 seasons.",
+    ],
+    TIER_FIRST_APRON: [
+        "Hard-capped at the first apron once any apron tool is used.",
+        "Limited to the taxpayer mid-level exception; loses the full non-taxpayer MLE.",
+        "Cannot acquire a player via sign-and-trade.",
+        "Cannot use the bi-annual exception or send cash out in trades.",
+    ],
+    TIER_SECOND_APRON: [
+        "Hard-capped at the second apron.",
+        "Cannot aggregate two-plus salaries to match in a trade.",
+        "No mid-level exception of any kind.",
+        "Cannot take back more salary than is sent out in a trade.",
+        "Future first-round pick frozen, then moved to end of the round if it persists.",
+    ],
+}
+
+
+def classify_tier(
+    payroll: int, tax: int | None, first_apron: int | None, second_apron: int | None
+) -> str:
+    """Bucket a payroll into its cap tier; thresholds may be None (unknown)."""
+    if second_apron and payroll >= second_apron:
+        return TIER_SECOND_APRON
+    if first_apron and payroll >= first_apron:
+        return TIER_FIRST_APRON
+    if tax and payroll >= tax:
+        return TIER_TAXPAYER
+    return TIER_BELOW_TAX
+
+
 @dataclass
 class SeasonCapData:
     season: str
@@ -233,4 +277,65 @@ def simulate(
         value_gap_pct=gap,
         model_version=valuation.get("model_version") if valuation else None,
         years=contract_years_out,
+    )
+
+
+@dataclass
+class ApronOutlook:
+    """Where a proposed first-year cap hit lands a real team against the tax/apron lines.
+
+    Lifts the simulation out of the standalone-contract abstraction: it adds the new
+    cap hit to the team's existing payroll (netting out the player's current figure on
+    a re-sign) and reports the resulting tier plus the CBA tools that tier costs.
+    """
+    team_id: int
+    team_name: str | None
+    season: str
+    existing_payroll_usd: int
+    replaces_existing_usd: int      # the player's current hit, netted out on a re-sign
+    proposed_cap_hit_usd: int
+    payroll_after_usd: int
+    tier_before: str
+    tier_after: str
+    crosses_a_line: bool            # did adding the contract push into a stricter tier?
+    room_to_tax_after: int | None           # signed; negative = over the line
+    room_to_first_apron_after: int | None
+    room_to_second_apron_after: int | None
+    consequences: list[str]         # CBA restrictions that bind at tier_after
+
+
+def apron_outlook(
+    *,
+    team_id: int,
+    team_name: str | None,
+    season: str,
+    existing_payroll_usd: int,
+    replaces_existing_usd: int,
+    proposed_cap_hit_usd: int,
+    cap_data: SeasonCapData,
+) -> ApronOutlook:
+    """Overlay a proposed first-year cap hit onto a team's existing payroll."""
+    base = existing_payroll_usd - replaces_existing_usd
+    payroll_after = base + proposed_cap_hit_usd
+    tax, ap1, ap2 = cap_data.tax_line or None, cap_data.first_apron or None, cap_data.second_apron or None
+
+    tier_before = classify_tier(existing_payroll_usd, tax, ap1, ap2)
+    tier_after = classify_tier(payroll_after, tax, ap1, ap2)
+    crosses = TIER_ORDER.index(tier_after) > TIER_ORDER.index(tier_before)
+
+    return ApronOutlook(
+        team_id=team_id,
+        team_name=team_name,
+        season=season,
+        existing_payroll_usd=existing_payroll_usd,
+        replaces_existing_usd=replaces_existing_usd,
+        proposed_cap_hit_usd=proposed_cap_hit_usd,
+        payroll_after_usd=payroll_after,
+        tier_before=tier_before,
+        tier_after=tier_after,
+        crosses_a_line=crosses,
+        room_to_tax_after=(tax - payroll_after) if tax else None,
+        room_to_first_apron_after=(ap1 - payroll_after) if ap1 else None,
+        room_to_second_apron_after=(ap2 - payroll_after) if ap2 else None,
+        consequences=list(APRON_CONSEQUENCES.get(tier_after, [])),
     )
