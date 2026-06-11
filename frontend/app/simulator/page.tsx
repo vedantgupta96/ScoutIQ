@@ -35,6 +35,13 @@ function DSSlider({
   const disabled = max <= min;
   const pct = max === min ? 0 : ((clamped - min) / (max - min)) * 100;
 
+  // Whole-step controls with few stops get detent dots — countable instrument
+  // stops under the track. Positions are corrected for thumb radius (9px) so
+  // each dot sits exactly under the thumb center at that stop.
+  const detents = !disabled && step >= 1 && (max - min) / step <= 8
+    ? Array.from({ length: Math.round((max - min) / step) + 1 }, (_, idx) => min + idx * step)
+    : null;
+
   return (
     <div className="siq-control-slab" style={{ opacity: disabled ? 0.6 : 1 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -54,6 +61,24 @@ function DSSlider({
           cursor: disabled ? 'not-allowed' : 'pointer',
         } as CSSProperties}
       />
+      {detents && (
+        <div className="siq-slider-detents" aria-hidden="true">
+          {detents.map((d) => {
+            const frac = (d - min) / (max - min);
+            return (
+              <span
+                key={d}
+                className={
+                  'siq-slider-detent' +
+                  (d <= clamped ? ' siq-slider-detent--passed' : '') +
+                  (d === clamped ? ' siq-slider-detent--at' : '')
+                }
+                style={{ left: `calc(${frac * 100}% + ${9 - frac * 18}px)` }}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -639,6 +664,7 @@ function SimulatorContent() {
                         unit={` · ${fmtPct(displayResult.proposed_aav_pct)}`}
                         sub={`${displayResult.years.length}-yr · ${fmtM(totalValue)} total`}
                         size="md"
+                        live
                       />
                       {displayResult.value_pct != null && (
                         <StatTile
@@ -648,6 +674,7 @@ function SimulatorContent() {
                           valueTone={simTone}
                           delta={undefined}
                           size="md"
+                          live
                         />
                       )}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

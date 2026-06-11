@@ -462,7 +462,33 @@ function PlayersContent() {
       </div>
 
       {loading && (
-        <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
+        // Ghost board: skeleton case cards deal in with the same stagger as the
+        // real ones, breathing in a wave while the watchlist loads.
+        <div role="status" aria-label="Loading players">
+          <div className="siq-pressure-board" aria-hidden="true">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div
+                key={i}
+                className="siq-case-card siq-case-skel siq-enter"
+                style={{ ['--i' as string]: Math.min(i, 11), ['--enter-base' as string]: '40ms' }}
+              >
+                <div className="siq-case-skel__head">
+                  <span className="siq-skel siq-case-skel__avatar" />
+                  <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                    <span className="siq-skel" style={{ height: 13, width: '62%' }} />
+                    <span className="siq-skel" style={{ height: 10, width: '38%' }} />
+                  </span>
+                </div>
+                <span className="siq-skel" style={{ height: 24, width: '46%' }} />
+                <span className="siq-skel" style={{ height: 12 }} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 'auto' }}>
+                  <span className="siq-skel" style={{ height: 32 }} />
+                  <span className="siq-skel" style={{ height: 32 }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {error && (

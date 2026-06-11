@@ -11,6 +11,8 @@ interface StatTileProps {
   labelIcon?: ReactNode;
   /** Color the value by verdict; glides on change (live readouts). */
   valueTone?: 'positive' | 'negative' | 'neutral' | 'warning';
+  /** Live readout: each value change replays a brief repricing glint. */
+  live?: boolean;
 }
 
 const SIZE = {
@@ -26,7 +28,7 @@ const TONE_COLOR = {
   neutral: 'var(--text-primary)',
 };
 
-export function StatTile({ label, value, unit, sub, delta, deltaDir, size = 'md', labelIcon, valueTone }: StatTileProps) {
+export function StatTile({ label, value, unit, sub, delta, deltaDir, size = 'md', labelIcon, valueTone, live = false }: StatTileProps) {
   const s = SIZE[size];
 
   return (
@@ -36,13 +38,18 @@ export function StatTile({ label, value, unit, sub, delta, deltaDir, size = 'md'
         <span className="ds-eyebrow">{label}</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-        <span className="ds-tnum" style={{
-          fontSize: s.value, fontWeight: 700,
-          color: valueTone ? TONE_COLOR[valueTone] : 'var(--text-primary)',
-          lineHeight: 1.1,
-          fontFamily: 'var(--font-display)',
-          transition: 'color var(--duration-slow) var(--ease-out)',
-        }}>
+        <span
+          // Keyed by value when live: a change remounts the span, replaying the
+          // glint. currentColor keeps the flash in the figure's own tone.
+          key={live ? String(value) : undefined}
+          className={live ? 'ds-tnum siq-reprice' : 'ds-tnum'}
+          style={{
+            fontSize: s.value, fontWeight: 700,
+            color: valueTone ? TONE_COLOR[valueTone] : 'var(--text-primary)',
+            lineHeight: 1.1,
+            fontFamily: 'var(--font-display)',
+            transition: 'color var(--duration-slow) var(--ease-out)',
+          }}>
           {value}
         </span>
         {unit && (
