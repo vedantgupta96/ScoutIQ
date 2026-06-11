@@ -4,11 +4,12 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from scoutiq.api.cap_simulator import SeasonCapData, simulate
 from scoutiq.api.deps import DB
+from scoutiq.api.season import is_valid_season
 from scoutiq.model.predict import build_features_from_season, predict_from_features
 from scoutiq.models import CapConstants, Player, PlayerSeason
 
@@ -34,6 +35,13 @@ class SimulatorRequest(BaseModel):
     team_option_years: int = Field(0, ge=0, description="Team option years (at end of contract)")
     start_season: str = Field("2025-26", description="First season of the contract (YYYY-YY)")
     valuation_season: str | None = Field(None, description="Season to use for model valuation (defaults to latest)")
+
+    @field_validator("start_season", "valuation_season")
+    @classmethod
+    def _check_season(cls, v: str | None) -> str | None:
+        if v is not None and not is_valid_season(v):
+            raise ValueError("must be a 'YYYY-YY' season label, e.g. '2025-26'")
+        return v
 
 
 class ContractYearResponse(BaseModel):

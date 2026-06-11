@@ -11,6 +11,7 @@ from sqlalchemy import and_, desc, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from scoutiq.api.deps import DB
+from scoutiq.api.season import next_season
 from scoutiq.config import settings
 from scoutiq.llm import generate
 from scoutiq.llm.pricing import Usage
@@ -160,10 +161,7 @@ def _team_summary(team: Team | None) -> TeamSummary | None:
 
 
 def _next_season(season: str) -> str | None:
-    if not re.match(r"^\d{4}-\d{2}$", season):
-        return None
-    y1, y2 = int(season[:4]), int(season[5:])
-    return f"{y1 + 1}-{str(y2 + 1).zfill(2)}"
+    return next_season(season)
 
 
 def _pct_from_contract_year(year: ContractYear, cap_row: CapConstants | None) -> float | None:

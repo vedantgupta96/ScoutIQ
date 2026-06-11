@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from scoutiq.api.deps import DB
+from scoutiq.api.season import is_valid_season
 from scoutiq.api.routers.players import (
     LATEST_SEASON,
     PlayerSummary,
@@ -173,6 +174,10 @@ def list_teams(db: DB = None):
 @router.get("/{team_id}/cap-sheet", response_model=TeamCapSheetResponse)
 def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     """Roster cap sheet: payroll vs tax/apron + per-player value-vs-pay."""
+    if season is not None and not is_valid_season(season):
+        raise HTTPException(
+            status_code=422, detail="season must be a 'YYYY-YY' label, e.g. '2025-26'."
+        )
     team = db.get(Team, team_id)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found.")

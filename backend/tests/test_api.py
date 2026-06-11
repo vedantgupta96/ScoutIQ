@@ -338,6 +338,36 @@ def test_simulator_missing_player_returns_404():
     assert response.status_code == 404
 
 
+def test_simulator_malformed_start_season_returns_422_not_500():
+    client = _client(FakeDB())
+
+    response = client.post(
+        "/simulate/contract",
+        json={"player_id": 1630217, "aav_pct": 20.0, "years": 1, "start_season": "banana"},
+    )
+
+    assert response.status_code == 422
+    # Clean validation message, not a leaked int() ValueError.
+    assert "literal" not in response.text.lower()
+
+
+def test_simulator_malformed_valuation_season_returns_422():
+    client = _client(FakeDB())
+
+    response = client.post(
+        "/simulate/contract",
+        json={
+            "player_id": 1630217,
+            "aav_pct": 20.0,
+            "years": 1,
+            "start_season": "2024-25",
+            "valuation_season": "2024-99",
+        },
+    )
+
+    assert response.status_code == 422
+
+
 def test_player_search_and_profile_shapes():
     client = _client(FakeDB())
 

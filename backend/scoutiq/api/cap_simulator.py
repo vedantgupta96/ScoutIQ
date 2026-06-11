@@ -16,6 +16,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from scoutiq.api.season import next_season as _next_season
+from scoutiq.api.season import validate_season
+
 CAP_GROWTH_RATE = 0.045  # 4.5% annual cap escalator for projection
 SIMULATOR_ASSUMPTIONS = {
     "standalone_contract_only": True,
@@ -97,10 +100,7 @@ def build_season_sequence(
     Uses DB data when available; projects forward otherwise.
     Season format: 'YYYY-YY' (e.g. '2025-26').
     """
-
-    def _next_season(s: str) -> str:
-        y1, y2 = int(s[:4]), int(s[5:])
-        return f"{y1 + 1}-{str(y2 + 1).zfill(2)}"
+    validate_season(start_season)
 
     # find last known base for projection
     all_known = sorted(cap_by_season.keys())

@@ -32,6 +32,7 @@ Thumbs.db
 # --- Local agent config ---
 .claude/
 .agents/skills/
+skills-lock.json
 .codex/*.local.toml
 .codex/config.local.toml
 .codex/secrets.toml
