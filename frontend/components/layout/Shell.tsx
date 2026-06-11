@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Users, SlidersHorizontal, Target, Shield, Moon, Sun, Bell, Search, Menu } from 'lucide-react';
@@ -64,8 +64,19 @@ function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) 
         })}
       </nav>
 
-      {/* Footer */}
+      {/* Footer — a quiet half-court etched into the dead space above the
+          model-version badge: structure the data sits on, not décor. */}
       <div className="siq-sidebar-footer">
+        <svg className="siq-sidebar-court" viewBox="0 0 200 122" aria-hidden="true">
+          <g fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M2 121 H198" />
+            <rect x="68" y="45" width="64" height="76" />
+            <circle cx="100" cy="45" r="24" />
+            <path d="M86 96 H114" />
+            <circle cx="100" cy="103" r="4.5" />
+            <path d="M14 121 V68 A108 108 0 0 1 186 68 V121" />
+          </g>
+        </svg>
         <Badge tone="confidence" variant="outline" size="sm" dot>v0-gbm-conformal</Badge>
       </div>
     </aside>
@@ -105,11 +116,39 @@ function TopBar({
     return () => controller.abort();
   }, []);
 
-  const toggleTheme = () => {
+  // Arena lights: the new theme sweeps across the floor as a circle expanding
+  // from the toggle (View Transitions). The DOM attribute flip inside the
+  // callback is synchronous, so the snapshot pair is always consistent; without
+  // browser support or with reduced motion it falls back to an instant switch.
+  const toggleTheme = (e: ReactMouseEvent<HTMLButtonElement>) => {
     const next = !dark;
-    setDark(next);
-    document.documentElement.setAttribute('data-theme', next ? 'dark' : '');
-    try { localStorage.setItem('siq-theme', next ? 'dark' : 'light'); } catch {}
+    const apply = () => {
+      setDark(next);
+      document.documentElement.setAttribute('data-theme', next ? 'dark' : '');
+      try { localStorage.setItem('siq-theme', next ? 'dark' : 'light'); } catch {}
+    };
+
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => { ready: Promise<void> } };
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!doc.startViewTransition || reduceMotion) {
+      apply();
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const radius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y),
+    );
+
+    doc.startViewTransition(apply).ready.then(() => {
+      document.documentElement.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+        { duration: 520, easing: 'cubic-bezier(0.22,1,0.36,1)', pseudoElement: '::view-transition-new(root)' },
+      );
+    }).catch(() => {});
   };
 
   useEffect(() => {

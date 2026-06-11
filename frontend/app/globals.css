@@ -457,7 +457,8 @@ textarea::placeholder {
   transition:
     border-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out);
+    background var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
 }
 
 .siq-icon-button:hover {
@@ -1451,16 +1452,23 @@ textarea::placeholder {
   background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--siq-slider-pct), var(--ink-500) var(--siq-slider-pct), var(--ink-500) 100%);
 }
 
+/* The thumb is the ball. Seam lines are drawn into the thumb itself (data-URI,
+   theme-independent — the ball is orange in both themes), and the grip answers
+   the hand: it swells slightly under hover and more while dragging. */
 .siq-slider::-webkit-slider-thumb {
   appearance: none;
-  width: 16px;
-  height: 16px;
-  margin-top: -4.5px;
+  width: 18px;
+  height: 18px;
+  margin-top: -5.5px;
   border-radius: var(--radius-pill);
   border: 2px solid var(--bg-panel);
-  background: var(--accent);
+  background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Ccircle cx='9' cy='9' r='9' fill='%23FF5A1F'/%3E%3Cg fill='none' stroke='rgba(73,22,5,0.48)' stroke-width='1.1'%3E%3Cpath d='M9 0v18'/%3E%3Cpath d='M0 9h18'/%3E%3Cpath d='M3.1 2.7c2.9 3.3 2.9 9.3 0 12.6'/%3E%3Cpath d='M14.9 2.7c-2.9 3.3-2.9 9.3 0 12.6'/%3E%3C/g%3E%3C/svg%3E") center / cover no-repeat;
   box-shadow: 0 1px 4px rgba(16,24,40,0.18);
+  transition: transform 160ms var(--ease-out), box-shadow 420ms var(--ease-out);
 }
+
+.siq-slider:hover::-webkit-slider-thumb { transform: scale(1.12); }
+.siq-slider:active::-webkit-slider-thumb { transform: scale(1.24); }
 
 .siq-slider::-moz-range-track {
   height: 7px;
@@ -1475,12 +1483,50 @@ textarea::placeholder {
 }
 
 .siq-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: var(--radius-pill);
   border: 2px solid var(--bg-panel);
-  background: var(--accent);
+  background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Ccircle cx='9' cy='9' r='9' fill='%23FF5A1F'/%3E%3Cg fill='none' stroke='rgba(73,22,5,0.48)' stroke-width='1.1'%3E%3Cpath d='M9 0v18'/%3E%3Cpath d='M0 9h18'/%3E%3Cpath d='M3.1 2.7c2.9 3.3 2.9 9.3 0 12.6'/%3E%3Cpath d='M14.9 2.7c-2.9 3.3-2.9 9.3 0 12.6'/%3E%3C/g%3E%3C/svg%3E") center / cover no-repeat;
   box-shadow: 0 1px 4px rgba(16,24,40,0.18);
+  transition: transform 160ms var(--ease-out), box-shadow 420ms var(--ease-out);
+}
+
+.siq-slider:hover::-moz-range-thumb { transform: scale(1.12); }
+.siq-slider:active::-moz-range-thumb { transform: scale(1.24); }
+
+/* Detent dots under stepped sliders — instrument stops you can count.
+   Passed stops warm toward the accent; the engaged stop swells. */
+.siq-slider-detents {
+  position: relative;
+  height: 6px;
+  margin-top: 1px;
+}
+
+.siq-slider-detent {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  transform: translate(-50%, -50%);
+  background: var(--border-strong);
+  opacity: 0.65;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.siq-slider-detent--passed {
+  background: color-mix(in srgb, var(--accent) 68%, var(--border-strong));
+  opacity: 0.9;
+}
+
+.siq-slider-detent--at {
+  transform: translate(-50%, -50%) scale(1.7);
+  background: var(--accent);
+  opacity: 1;
 }
 
 /* ============================================================
@@ -1490,6 +1536,7 @@ textarea::placeholder {
   --court-line:        rgba(24,31,24,0.06);
   --court-line-strong: rgba(24,31,24,0.11);
   --court-felt:        rgba(255,90,31,0.06);
+  --bezel-light:       rgba(255,255,255,0.6);
   /* Top-of-the-key court field (NBA proportions, basket bled off the top edge):
      the painted lane rising toward the hoop, the free-throw circle on its line,
      the restricted-area arc, and the three-point wings sweeping in from the
@@ -1502,6 +1549,7 @@ textarea::placeholder {
   --court-line:        rgba(223,232,214,0.045);
   --court-line-strong: rgba(255,90,31,0.18);
   --court-felt:        rgba(255,90,31,0.07);
+  --bezel-light:       rgba(223,232,214,0.05);
   --court-art: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 300'%3E%3Cdefs%3E%3ClinearGradient id='c' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='rgba(216,228,208,0.5)'/%3E%3Cstop offset='0.74' stop-color='rgba(216,228,208,0.42)'/%3E%3Cstop offset='1' stop-color='rgba(216,228,208,0)'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg fill='none' stroke='url(%23c)' stroke-width='2'%3E%3Cpath d='M0 1 H500'/%3E%3Crect x='170' y='1' width='160' height='189'/%3E%3Ccircle cx='250' cy='190' r='60'/%3E%3Cpath d='M218 40 H282'/%3E%3Ccircle cx='250' cy='54' r='9'/%3E%3Cpath d='M211 54 A39 39 0 0 0 289 54'/%3E%3Cpath d='M30 1 V143'/%3E%3Cpath d='M470 1 V143'/%3E%3Cpath d='M30 143 A237.5 237.5 0 0 0 470 143'/%3E%3C/g%3E%3C/svg%3E");
 }
 
@@ -1577,10 +1625,17 @@ textarea::placeholder {
 
 /* ---- Instrument panel: the Decision Brief reads like a console readout ---- */
 .siq-surface--instrument {
+  /* Registration marks (the two corner L-ticks) brand the panel as a calibrated
+     plate; the inset top light is the instrument bezel catching the room. */
   background:
     linear-gradient(110deg, color-mix(in srgb, var(--confidence) 6%, transparent), transparent 36%),
     linear-gradient(180deg, color-mix(in srgb, var(--surface-accent, var(--accent)) 6%, transparent), transparent 140px),
+    linear-gradient(var(--court-line-strong), var(--court-line-strong)) right 10px top 10px / 9px 1px no-repeat,
+    linear-gradient(var(--court-line-strong), var(--court-line-strong)) right 10px top 10px / 1px 9px no-repeat,
+    linear-gradient(var(--court-line-strong), var(--court-line-strong)) left 10px bottom 12px / 9px 1px no-repeat,
+    linear-gradient(var(--court-line-strong), var(--court-line-strong)) left 10px bottom 12px / 1px 9px no-repeat,
     var(--bg-panel);
+  box-shadow: inset 0 1px 0 var(--bezel-light);
 }
 
 /* Baseline tick strip along the bottom edge — the panel's "instrument" footer */
@@ -2271,6 +2326,83 @@ textarea::placeholder {
   display: inline-flex;
   border-radius: var(--radius-pill);
   animation: siq-verdict-pulse 420ms var(--ease-expo);
+}
+
+/* ============================================================
+   Console craft — repricing flash, skeleton board, arena lights
+   ============================================================ */
+
+/* Live readout repricing: when a figure changes, it glints in its own color
+   (currentColor keeps it harmonious — neutral figures flash gray, toned
+   verdict figures flash green/red) and fades as the number settles. */
+@keyframes siq-reprice {
+  0%   { background-color: color-mix(in srgb, currentColor 15%, transparent); }
+  100% { background-color: transparent; }
+}
+
+.siq-reprice {
+  border-radius: 5px;
+  padding: 0 4px;
+  margin: 0 -4px;
+  animation: siq-reprice 640ms var(--ease-out);
+}
+
+/* Skeleton case cards — the watchlist deals in ghost cards that breathe in a
+   wave (delay rides the card's --i) instead of announcing "Loading…". The
+   reduced-motion clamp caps iterations, so the breathe degrades to a still. */
+.siq-case-skel {
+  pointer-events: none;
+}
+
+.siq-case-skel__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.siq-case-skel__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+
+.siq-skel {
+  display: block;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  animation: siq-skel-breathe 1.15s ease-in-out calc(var(--i, 0) * 90ms) infinite alternate;
+}
+
+@keyframes siq-skel-breathe {
+  from { opacity: 0.5; }
+  to   { opacity: 1; }
+}
+
+/* Arena lights — theme switches sweep across the floor as an expanding circle
+   from the toggle (View Transitions; the clip-path is animated from JS).
+   Default cross-fade is disabled so the wipe is the whole story. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) { z-index: 2; }
+
+/* Quiet half-court etched into the sidebar's dead space — structure, not décor */
+.siq-sidebar-court {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+  opacity: 0.09;
+}
+
+.siq-icon-button:active {
+  transform: translateY(1px);
 }
 
 @media (prefers-reduced-motion: reduce) {
