@@ -340,9 +340,26 @@ export interface ScoutRatingEvalExample {
   ratings: ScoutRatingRow[];
 }
 
+export interface ScoutRatingEvalMeta {
+  mode: string;
+  model: string | null;
+  gold: string;
+  generated_at: string;
+}
+
+export interface ScoutCorpusStats {
+  report_count: number;
+  cited_report_count: number;
+  rated_player_count: number;
+  rating_count: number;
+  latest_fetched_at: string | null;
+}
+
 export interface ScoutRatingEvalResponse {
-  mode: 'offline_fixture';
+  mode: 'live_artifact' | 'offline_fixture';
   report: ScoutRatingEvalReport;
+  meta: ScoutRatingEvalMeta | null;
+  corpus: ScoutCorpusStats | null;
   traits: ScoutTrait[];
   gold_count: number;
   fixture_prediction_count: number;

@@ -1,0 +1,17 @@
+{
+  "evidence_hit_rate": 1.0,
+  "exact_score_agreement": 0.6389,
+  "expected_trait_count": 72,
+  "invalid_output_count": 0,
+  "meta": {
+    "generated_at": "2026-06-12T02:48:16+00:00",
+    "gold": "scout_ratings_gold.jsonl",
+    "mode": "live",
+    "model": "claude-sonnet-4-6"
+  },
+  "predicted_trait_count": 72,
+  "total_notes": 12,
+  "trait_coverage": 1.0,
+  "validation_errors": [],
+  "within_one_score_agreement": 1.0
+}
