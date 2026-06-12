@@ -59,6 +59,7 @@ artifacts, start FastAPI, then run the Next.js frontend.
 - [Progress log](docs/03-progress-log.md) — what's built, results, problems faced, decisions
 - [Technical design](docs/02-technical-design.md) — schema, locked feature set, model plan
 - [Data-source spike](docs/01-data-source-spike.md) — what data is actually available, and the gotchas
+- [Deployment](docs/04-deployment.md) — hosting the cockpit (Vercel + Railway/Render + Neon)
 - [Project brief](ScoutIQ.md) — full vision
 
 ---

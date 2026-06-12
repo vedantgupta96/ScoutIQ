@@ -19,8 +19,11 @@ env/
 # --- Cached BBRef scrape HTML (regenerable; thousands of files) ---
 backend/scoutiq/data/raw/
 
-# --- Trained model binary (regenerable; keep report/plots/metrics) ---
+# --- Trained model binaries (regenerable; keep report/plots/metrics) ---
 backend/scoutiq/model/artifacts/*.joblib
+# The canonical serving model ships with the repo (1.8 MB) so the API can
+# deploy without a training step; ad-hoc/experimental joblibs stay ignored.
+!backend/scoutiq/model/artifacts/model.joblib
 
 # --- OS / editor cruft ---
 .DS_Store

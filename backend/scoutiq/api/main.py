@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from scoutiq.api.routers import backtest, headshots, health, llm_eval, players, simulator, teams
+from scoutiq.config import settings
 
 app = FastAPI(
     title="ScoutIQ API",
@@ -16,7 +17,9 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js dev server
+    # Local Next.js dev by default; production sets CORS_ORIGINS to the
+    # deployed frontend origin(s), comma-separated.
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
