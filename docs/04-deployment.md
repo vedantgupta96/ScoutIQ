@@ -14,16 +14,20 @@ runtime dependency.
 
 ## What ships with the repo (no build-time surprises)
 
+- `backend/Dockerfile` builds the API image: `pip install .` from `pyproject.toml`, then
+  uvicorn on `$PORT`. Railway and Render both use a Dockerfile automatically when present —
+  important because their language auto-detection does **not** install a bare setuptools
+  pyproject (the symptom is a green build followed by `uvicorn: command not found` at boot).
 - `backend/scoutiq/model/artifacts/model.joblib` (1.8 MB) is committed — the API serves
   valuations without a training step. After a retrain, commit the new artifact and redeploy.
-- `backend/Procfile` declares the web process; `backend/.python-version` pins Python 3.10.
-- All serving dependencies are declared in `backend/pyproject.toml` (`pip install .`).
+- `backend/.dockerignore` keeps `.env`, the venv, and scrape caches out of the image.
+- `backend/Procfile` + `backend/.python-version` remain for Procfile-based environments.
 
 ## Backend — Railway (or Render)
 
 1. New project → **Deploy from GitHub repo**.
-2. Set **root directory** to `backend`. The Procfile supplies the start command:
-   `uvicorn scoutiq.api.main:app --host 0.0.0.0 --port $PORT`.
+2. Service → Settings → **Source** → set **Root Directory** to `backend`. The Dockerfile is
+   picked up automatically; no custom start command is needed (the image's CMD runs uvicorn).
 3. Environment variables:
 
    | var | value |
