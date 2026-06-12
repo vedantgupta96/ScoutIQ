@@ -1,0 +1,8 @@
+# Never bake secrets or local state into the image.
+.env
+.venv
+__pycache__
+*.pyc
+*.egg-info
+scoutiq/data/raw
+tests
