@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useRef, useState, Suspense, type PointerEvent as ReactPointerEvent } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
@@ -120,6 +120,18 @@ function MetricCell({
   );
 }
 
+// Trading-card tilt is pointer-candy only: skip it for touch (no hover) and
+// for anyone asking for reduced motion. Evaluated once, lazily, client-side.
+let tiltCapable: boolean | null = null;
+function canTilt(): boolean {
+  if (tiltCapable == null) {
+    tiltCapable = typeof window !== 'undefined'
+      && window.matchMedia('(pointer: fine)').matches
+      && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+  return tiltCapable;
+}
+
 function RosterCard({ player, index = 0 }: { player: PlayerCardResponse; index?: number }) {
   const team = player.current_team ?? player.latest_stats_team;
   const valuation = player.valuation_status === 'ready' ? player.valuation : undefined;
@@ -130,9 +142,39 @@ function RosterCard({ player, index = 0 }: { player: PlayerCardResponse; index?:
     ? (valuation.value_pct / 100) * valuation.salary_cap
     : null;
 
+  // Holo-card tilt: pointer position drives the rotation (--rx/--ry) and the
+  // sheen spot (--mx/--my) directly on the element — no re-render per frame.
+  const cardRef = useRef<HTMLAnchorElement>(null);
+  const frame = useRef(0);
+  const onPointerMove = (e: ReactPointerEvent<HTMLAnchorElement>) => {
+    if (!canTilt()) return;
+    const el = cardRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width;
+    const py = (e.clientY - r.top) / r.height;
+    cancelAnimationFrame(frame.current);
+    frame.current = requestAnimationFrame(() => {
+      el.style.setProperty('--rx', `${((0.5 - py) * 4).toFixed(2)}deg`);
+      el.style.setProperty('--ry', `${((px - 0.5) * 5).toFixed(2)}deg`);
+      el.style.setProperty('--mx', `${(px * 100).toFixed(1)}%`);
+      el.style.setProperty('--my', `${(py * 100).toFixed(1)}%`);
+    });
+  };
+  const onPointerLeave = () => {
+    const el = cardRef.current;
+    if (!el) return;
+    cancelAnimationFrame(frame.current);
+    el.style.removeProperty('--rx');
+    el.style.removeProperty('--ry');
+  };
+
   return (
     <Link
       href={`/players/${player.player_id}`}
+      ref={cardRef}
+      onPointerMove={onPointerMove}
+      onPointerLeave={onPointerLeave}
       className="siq-case-card siq-enter"
       style={{
         '--case-accent': accent,
@@ -142,6 +184,9 @@ function RosterCard({ player, index = 0 }: { player: PlayerCardResponse; index?:
         ['--enter-base' as string]: '40ms',
       } as React.CSSProperties}
     >
+        {/* Holo sheen — verdict-tinted glint riding the pointer */}
+        <span className="siq-case-card__sheen" aria-hidden="true" />
+
         {/* Header row */}
         <div className="siq-case-card__head">
           <Avatar name={player.full_name} size="lg" position={player.position} playerId={player.player_id} />
