@@ -29,17 +29,12 @@ Thumbs.db
 .idea/
 .vscode/
 
-# --- Local agent config ---
+# --- Local AI-tool state (dev-machine working files, never part of the product) ---
 .claude/
 .agents/skills/
 skills-lock.json
-.codex/*.local.toml
-.codex/config.local.toml
-.codex/secrets.toml
-.codex/cache/
-.codex/logs/
-
-# --- Graphify: keep outputs, skip regenerable cache + working files ---
-graphify-out/.graphify_*
-graphify-out/.graphify_chunk_*.json
-graphify-out/cache/
+.codex/
+.impeccable/
+graphify-out/
+AGENTS.md
+CLAUDE.md

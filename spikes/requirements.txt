@@ -1,5 +1,0 @@
-# ScoutIQ data-source spike — throwaway deps (not the project's real requirements)
-nba_api>=1.4.1
-pandas>=2.0
-requests>=2.31
-lxml>=5.0

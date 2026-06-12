@@ -41,7 +41,6 @@ per-player valuations: [`model/artifacts/report.md`](backend/scoutiq/model/artif
 docs/      design, data-source spike, progress log (start here)
 backend/   data layer, ETL, model, FastAPI, simulator
 frontend/  Next.js cockpit
-spikes/    throwaway data-source probes
 ```
 
 ## Roadmap (build order: data-first)
