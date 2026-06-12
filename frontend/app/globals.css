@@ -2051,6 +2051,11 @@ textarea::placeholder {
   100% { background-position: -120% 0; }
 }
 
+/* Sheen spot: the moving glint a card sleeve catches. Paper-soft graphite in
+   the light theme, arena light in the dark one. Local to the holo cards. */
+:root { --sheen-spot: rgba(26,32,26,0.055); }
+[data-theme="dark"] { --sheen-spot: rgba(255,255,255,0.10); }
+
 .siq-case-card {
   --case-accent: var(--accent);
   width: 100%;
@@ -2074,10 +2079,14 @@ textarea::placeholder {
   position: relative;
   overflow: hidden;
   clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+  /* Trading-card tilt: --rx/--ry are written per-frame by the pointer handler;
+     the transition keeps the follow damped so it reads as card stock, not jelly. */
+  transform: perspective(950px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
   transition:
     border-color var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out),
+    transform 200ms var(--ease-out),
+    clip-path var(--duration-fast) var(--ease-out),
     background var(--duration-fast) var(--ease-out);
 }
 
@@ -2092,6 +2101,8 @@ textarea::placeholder {
   background: linear-gradient(90deg, var(--case-accent), color-mix(in srgb, var(--case-accent) 25%, var(--confidence)));
 }
 
+/* Folded ticket corner — the crease line makes it read as paper, and the fold
+   deepens slightly while the card is held (hover). */
 .siq-case-card::after {
   content: '';
   position: absolute;
@@ -2099,15 +2110,42 @@ textarea::placeholder {
   top: 0;
   width: 18px;
   height: 18px;
-  background: color-mix(in srgb, var(--case-accent) 22%, var(--bg-inset));
+  background:
+    linear-gradient(135deg, transparent 44%, rgba(16,22,16,0.12) 49%, transparent 56%),
+    color-mix(in srgb, var(--case-accent) 22%, var(--bg-inset));
   border-left: 1px solid color-mix(in srgb, var(--case-accent) 26%, var(--border-subtle));
   border-bottom: 1px solid color-mix(in srgb, var(--case-accent) 26%, var(--border-subtle));
+  transition: width var(--duration-fast) var(--ease-out), height var(--duration-fast) var(--ease-out);
 }
 
 .siq-case-card:hover {
   border-color: color-mix(in srgb, var(--case-accent) 62%, var(--border-strong));
   box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+  transform: perspective(950px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-2px);
+  clip-path: polygon(0 0, calc(100% - 23px) 0, 100% 23px, 100% 100%, 0 100%);
+}
+
+.siq-case-card:hover::after {
+  width: 23px;
+  height: 23px;
+}
+
+/* Verdict-tinted holo glint riding the pointer (--mx/--my). It sits above the
+   print like light on a card sleeve — green cards glint green, overpays red. */
+.siq-case-card__sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(300px circle at var(--mx, 75%) var(--my, 18%), var(--sheen-spot), transparent 62%),
+    radial-gradient(190px circle at var(--mx, 75%) var(--my, 18%), color-mix(in srgb, var(--case-accent) 9%, transparent), transparent 70%);
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.siq-case-card:hover .siq-case-card__sheen {
+  opacity: 1;
 }
 
 .siq-case-card__head {
@@ -2245,20 +2283,25 @@ textarea::placeholder {
   100%    { transform: translateX(130%) skewX(-18deg); opacity: 0; }
 }
 
+/* Entrance fills are `backwards`, not `both`: every entrance ends at the
+   element's natural state anyway, and a finished forwards-fill can keep
+   overriding cascade transforms in some engines (Safari notably), which would
+   pin entered cards and block their hover lift/tilt. `backwards` still hides
+   the element through its stagger delay, then returns control to the sheet. */
 .siq-enter {
-  animation: siq-rise var(--duration-slow) var(--ease-expo) both;
+  animation: siq-rise var(--duration-slow) var(--ease-expo) backwards;
   animation-delay: calc(var(--enter-base, 60ms) + var(--i, 0) * 55ms);
 }
 
 .siq-enter-x {
-  animation: siq-slide-in var(--duration-base) var(--ease-out) both;
+  animation: siq-slide-in var(--duration-base) var(--ease-out) backwards;
   animation-delay: calc(var(--enter-base, 90ms) + var(--i, 0) * 48ms);
 }
 
 /* Inherits --i / --enter-base from an ancestor card so the verdict number
    pops just as its card finishes landing — the decision state hits last. */
 .siq-enter-pop {
-  animation: siq-pop-in var(--duration-slow) var(--ease-expo) both;
+  animation: siq-pop-in var(--duration-slow) var(--ease-expo) backwards;
   animation-delay: calc(var(--enter-base, 0ms) + var(--i, 0) * 55ms + 120ms);
   transform-origin: right center;
 }
@@ -2272,7 +2315,7 @@ textarea::placeholder {
    page settles in rather than snapping. Fade only: inner elements (board
    cards, hero verdict) carry their own rise/pop so nothing double-moves. */
 .siq-route-enter {
-  animation: siq-fade-in var(--duration-base) var(--ease-out) both;
+  animation: siq-fade-in var(--duration-base) var(--ease-out) backwards;
 }
 
 /* Brand mark boot sweep */
