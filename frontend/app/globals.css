@@ -2056,6 +2056,38 @@ textarea::placeholder {
 :root { --sheen-spot: rgba(26,32,26,0.055); }
 [data-theme="dark"] { --sheen-spot: rgba(255,255,255,0.10); }
 
+/* Case-card lift: the cards were sitting too close to the canvas (dark: card
+   floor #111510 on #080A08; light: #FBFCFA on #F0F2F0 with a whisper shadow).
+   Card stock gets its own surface step above the panel scale, a border seated
+   on border-default instead of subtle, and a theme-true shadow — paper drops a
+   real soft shadow in daylight; in the cockpit, depth is ambient darkness
+   under the card plus a hairline top light. Scoped to the cards only. */
+:root {
+  --case-surface:      #FFFFFF;
+  --case-surface-2:    #FCFDFC;
+  --case-shadow:
+    0 1px 0 rgba(24,31,24,0.08),
+    0 3px 7px -4px rgba(24,31,24,0.18),
+    0 14px 26px -16px rgba(24,31,24,0.42);
+  --case-shadow-hover:
+    0 1px 0 rgba(24,31,24,0.10),
+    0 5px 10px -5px rgba(24,31,24,0.22),
+    0 20px 34px -18px rgba(24,31,24,0.48);
+}
+
+[data-theme="dark"] {
+  --case-surface:      #1C221B;
+  --case-surface-2:    #151A13;
+  --case-shadow:
+    0 1px 0 rgba(255,255,255,0.055),
+    0 3px 10px -4px rgba(0,0,0,0.55),
+    0 16px 32px -16px rgba(0,0,0,0.9);
+  --case-shadow-hover:
+    0 1px 0 rgba(255,255,255,0.07),
+    0 5px 14px -5px rgba(0,0,0,0.6),
+    0 22px 40px -18px rgba(0,0,0,0.95);
+}
+
 .siq-case-card {
   --case-accent: var(--accent);
   width: 100%;
@@ -2063,7 +2095,7 @@ textarea::placeholder {
   content-visibility: auto;
   contain-intrinsic-size: 234px;
   text-align: left;
-  border: 1px solid color-mix(in srgb, var(--case-accent) 24%, var(--border-subtle));
+  border: 1px solid color-mix(in srgb, var(--case-accent) 28%, var(--border-default));
   border-radius: var(--radius-lg);
   padding: 16px;
   cursor: pointer;
@@ -2074,8 +2106,8 @@ textarea::placeholder {
   color: var(--text-primary);
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--case-accent) 14%, transparent), transparent 36%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 84%, var(--case-accent) 5%), var(--bg-panel));
-  box-shadow: var(--shadow-card);
+    linear-gradient(180deg, color-mix(in srgb, var(--case-surface) 95%, var(--case-accent) 5%), var(--case-surface-2));
+  box-shadow: var(--case-shadow);
   position: relative;
   overflow: hidden;
   clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
@@ -2120,7 +2152,7 @@ textarea::placeholder {
 
 .siq-case-card:hover {
   border-color: color-mix(in srgb, var(--case-accent) 62%, var(--border-strong));
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--case-shadow-hover);
   transform: perspective(950px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-2px);
   clip-path: polygon(0 0, calc(100% - 23px) 0, 100% 23px, 100% 100%, 0 100%);
 }
