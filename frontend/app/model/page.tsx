@@ -129,21 +129,63 @@ function RatingPill({ rating }: { rating: ScoutRatingRow }) {
 
 function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | null }) {
   const report = scoutEval?.report;
+  const meta = scoutEval?.meta ?? null;
+  const corpus = scoutEval?.corpus ?? null;
+  const live = scoutEval?.mode === 'live_artifact';
   const metrics = [
-    { label: 'Trait coverage', value: fmtRate(report?.trait_coverage), sub: report ? `${report.predicted_trait_count}/${report.expected_trait_count} traits` : 'Loading fixture' },
+    { label: 'Trait coverage', value: fmtRate(report?.trait_coverage), sub: report ? `${report.predicted_trait_count}/${report.expected_trait_count} traits` : 'Loading' },
     { label: 'Exact agreement', value: fmtRate(report?.exact_score_agreement), sub: 'Score match' },
     { label: 'Within-1', value: fmtRate(report?.within_one_score_agreement), sub: 'Tolerant score match' },
     { label: 'Evidence hit', value: fmtRate(report?.evidence_hit_rate), sub: 'Span appears in note' },
   ];
+  const fmtDay = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
     <Surface
       variant="dossier"
       eyebrow="AI extraction eval"
       icon={<ClipboardCheck size={15} />}
-      action={<Badge tone="confidence" size="sm" dot>{scoutEval?.mode.replace('_', ' ') ?? 'loading'}</Badge>}
+      action={
+        !scoutEval ? <Badge tone="neutral" size="sm">loading</Badge>
+        : live ? <Badge tone="confidence" size="sm" dot>live eval · {meta?.model ?? 'model'}</Badge>
+        : <Badge tone="warning" size="sm" dot>offline fixture</Badge>
+      }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Receipts for the real pipeline: what Sonar fetched and Claude
+            extracted, served from Postgres — distinct from the gold-set eval. */}
+        {corpus && (
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '6px 16px',
+            border: '1px solid color-mix(in srgb, var(--confidence) 26%, var(--border-subtle))',
+            borderRadius: 'var(--radius-md)',
+            padding: '10px 14px',
+            background: 'color-mix(in srgb, var(--confidence) 5%, var(--bg-inset))',
+          }}>
+            <span className="ds-eyebrow" style={{ color: 'var(--confidence-text)' }}>
+              Live corpus · Sonar → Claude → Postgres
+            </span>
+            <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {corpus.rated_player_count} players
+            </span>
+            <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {corpus.cited_report_count} cited reports
+            </span>
+            <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {corpus.rating_count} extracted ratings
+            </span>
+            {corpus.latest_fetched_at && (
+              <span className="ds-tnum" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                refreshed {fmtDay(corpus.latest_fetched_at)}
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="ds-eyebrow" style={{ marginBottom: -8 }}>
+          Gold-set eval{live && meta ? ` — ${meta.model}, ${fmtDay(meta.generated_at)}` : ''}
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 10 }}>
           {metrics.map((metric) => (
             <div key={metric.label} style={{
@@ -196,7 +238,10 @@ function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | nu
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{example.player_name}</span>
-                <span className="ds-tnum" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{example.note_id}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <Badge tone="neutral" variant="outline" size="sm">synthetic gold note</Badge>
+                  <span className="ds-tnum" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{example.note_id}</span>
+                </span>
               </div>
               <p style={{ margin: '0 0 10px', fontSize: 12, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
                 {example.source_text}
@@ -209,9 +254,8 @@ function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | nu
         </div>
 
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-          {scoutEval?.caveat ?? 'Offline fixture metrics are loading from the FastAPI eval endpoint.'}
-          {' '}This is model-quality metadata for the scout-text extractor, not player-profile data yet.
-          {scoutEval ? ` CLI artifact target: ${scoutEval.artifact_path}.` : ''}
+          {scoutEval?.caveat ?? 'Eval metrics are loading from the FastAPI eval endpoint.'}
+          {scoutEval ? ` CLI artifact: ${scoutEval.artifact_path}.` : ''}
         </p>
       </div>
     </Surface>

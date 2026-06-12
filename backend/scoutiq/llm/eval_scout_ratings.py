@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +80,15 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:
         print(f"scout-ratings eval failed: {exc}")
         return 2
+
+    # Provenance travels with the artifact so consumers (the model-page API)
+    # can tell a live-model eval from a fixture replay without guessing.
+    report["meta"] = {
+        "mode": "live" if args.live else "fixture",
+        "model": os.environ.get("SCOUTIQ_LLM_MODEL") if args.live else None,
+        "gold": args.gold.name,
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")

@@ -769,7 +769,31 @@ def test_player_headshot_negative_caches_missing_image(monkeypatch, tmp_path):
     assert (tmp_path / "999999.missing").exists()
 
 
-def test_scout_ratings_eval_returns_offline_fixture_report():
+def test_scout_ratings_eval_serves_live_artifact_when_present():
+    # The committed artifact is a live-model run (meta.mode == "live"), so the
+    # endpoint should surface it rather than re-scoring the synthetic fixture.
+    client = _client(FakeDB())
+
+    response = client.get("/llm/scout-ratings/eval")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "live_artifact"
+    assert body["meta"]["mode"] == "live"
+    assert body["meta"]["model"]
+    assert body["gold_count"] == 12
+    assert body["report"]["expected_trait_count"] == 72
+    assert 0 < body["report"]["within_one_score_agreement"] <= 1.0
+    assert "basketball_iq" in body["traits"]
+    assert body["examples"][0]["ratings"][0]["evidence_span"]
+    # FakeDB has no scout corpus rows -> stats degrade to null, not an error.
+    assert body["corpus"] is None
+
+
+def test_scout_ratings_eval_falls_back_to_offline_fixture(monkeypatch, tmp_path):
+    import scoutiq.api.routers.llm_eval as llm_eval_module
+
+    monkeypatch.setattr(llm_eval_module, "ARTIFACT_PATH", tmp_path / "missing_eval.json")
     client = _client(FakeDB())
 
     response = client.get("/llm/scout-ratings/eval")
@@ -777,13 +801,28 @@ def test_scout_ratings_eval_returns_offline_fixture_report():
     assert response.status_code == 200
     body = response.json()
     assert body["mode"] == "offline_fixture"
-    assert body["gold_count"] == 12
+    assert body["meta"] is None
     assert body["fixture_prediction_count"] == 12
-    assert body["report"]["expected_trait_count"] == 72
     assert body["report"]["trait_coverage"] == 1.0
     assert body["report"]["invalid_output_count"] == 0
-    assert "basketball_iq" in body["traits"]
-    assert body["examples"][0]["ratings"][0]["evidence_span"]
+
+
+def test_scout_ratings_eval_ignores_artifact_without_live_meta(monkeypatch, tmp_path):
+    import json as json_mod
+
+    import scoutiq.api.routers.llm_eval as llm_eval_module
+
+    # An artifact from a fixture replay (or a pre-meta run) is not evidence of
+    # live-model quality — the endpoint must not present it as such.
+    stale = tmp_path / "stale_eval.json"
+    stale.write_text(json_mod.dumps({"trait_coverage": 1.0}), encoding="utf-8")
+    monkeypatch.setattr(llm_eval_module, "ARTIFACT_PATH", stale)
+    client = _client(FakeDB())
+
+    response = client.get("/llm/scout-ratings/eval")
+
+    assert response.status_code == 200
+    assert response.json()["mode"] == "offline_fixture"
 
 
 def test_player_scout_ratings_returns_fixture_aggregate():

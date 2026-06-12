@@ -5,3 +5,6 @@ __pycache__/
 scoutiq/data/raw/
 *.egg-info/
 scoutiq/llm/artifacts/*.json
+# The canonical eval report is committed model-quality metadata (same as
+# model/artifacts/metrics.json); ad-hoc eval outputs above stay ignored.
+!scoutiq/llm/artifacts/scout_ratings_eval.json
