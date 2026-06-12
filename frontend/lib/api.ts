@@ -1,4 +1,14 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+// Normalize NEXT_PUBLIC_API_URL so common misconfigurations still work:
+// a schemeless host ("api.example.com") would otherwise be fetched as a
+// RELATIVE path against the frontend origin, and a trailing slash would
+// produce double-slash paths. Assume https when no scheme is given.
+function normalizeBase(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  if (!trimmed) return 'http://localhost:8000';
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+const BASE = normalizeBase(process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000');
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
