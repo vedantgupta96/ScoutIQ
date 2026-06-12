@@ -15,6 +15,10 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = ""
 
+    # Comma-separated browser origins allowed by CORS. Local dev by default;
+    # production sets this to the deployed frontend URL(s).
+    CORS_ORIGINS: str = "http://localhost:3000"
+
     # Seasons to ETL: 2012-13 .. 2025-26 (enough history for a 2015–22 / 2023–25 backtest).
     SEASON_START_YEAR: int = 2012
     SEASON_END_YEAR: int = 2025
@@ -44,6 +48,11 @@ class Settings(BaseSettings):
             f"{y}-{str(y + 1)[-2:]}"
             for y in range(self.SEASON_START_YEAR, self.SEASON_END_YEAR + 1)
         ]
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """CORS_ORIGINS parsed into a clean origin list (empty entries dropped)."""
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     @property
     def DATA_DIR(self):  # noqa: N802 — expose module path constants via settings

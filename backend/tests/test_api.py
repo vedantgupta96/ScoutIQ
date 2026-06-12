@@ -769,6 +769,21 @@ def test_player_headshot_negative_caches_missing_image(monkeypatch, tmp_path):
     assert (tmp_path / "999999.missing").exists()
 
 
+def test_cors_preflight_allows_configured_origin():
+    from scoutiq.config import settings as app_settings
+
+    origin = app_settings.cors_origins[0]
+    client = _client(FakeDB())
+
+    response = client.options("/health", headers={
+        "Origin": origin,
+        "Access-Control-Request-Method": "GET",
+    })
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+
+
 def test_scout_ratings_eval_serves_live_artifact_when_present():
     # The committed artifact is a live-model run (meta.mode == "live"), so the
     # endpoint should surface it rather than re-scoring the synthetic fixture.
