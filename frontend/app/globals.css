@@ -999,6 +999,23 @@ textarea::placeholder {
   min-width: 0;
 }
 
+/* Free-agency option-decision rows: player · value-vs-option gauge · verdict */
+.siq-fa-option-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(220px, 1.6fr) minmax(128px, auto);
+  gap: 14px;
+  align-items: center;
+  padding: 12px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.siq-fa-option-row:first-child { border-top: none; }
+.siq-fa-option-gauge { min-width: 0; }
+
+@media (max-width: 720px) {
+  .siq-fa-option-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .siq-fa-option-gauge { grid-column: 1 / -1; }
+}
+
 /* Selected-player identity links to the full profile */
 .siq-sim-player-link:hover .siq-sim-player-name {
   text-decoration: underline;

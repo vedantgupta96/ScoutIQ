@@ -3,13 +3,14 @@
 import { ReactNode, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Users, SlidersHorizontal, Target, Shield, Moon, Sun, Bell, Search, Menu } from 'lucide-react';
+import { Users, SlidersHorizontal, Target, Shield, Handshake, Moon, Sun, Bell, Search, Menu } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { getHealth } from '@/lib/api';
 
 const NAV = [
   { id: 'players',   href: '/players',   label: 'Players',      Icon: Users },
   { id: 'teams',     href: '/teams',     label: 'Team war room', Icon: Shield },
+  { id: 'free-agency', href: '/free-agency', label: 'Free agency', Icon: Handshake },
   { id: 'simulator', href: '/simulator', label: 'Cap simulator', Icon: SlidersHorizontal },
   { id: 'model',     href: '/model',     label: 'Model & backtest', Icon: Target },
 ];
@@ -17,6 +18,7 @@ const NAV = [
 const TITLES: Record<string, string> = {
   '/players':   'Players',
   '/teams':     'Team war room',
+  '/free-agency': 'Free agency',
   '/simulator': 'Cap simulator',
   '/model':     'Model & backtest',
 };

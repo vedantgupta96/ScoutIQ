@@ -69,6 +69,9 @@ curl 'http://127.0.0.1:8000/players/1630217/valuation?season=2024-25'
 curl 'http://127.0.0.1:8000/players/1630217/headshot'
 curl 'http://127.0.0.1:8000/players/1630217/scout-ratings'
 curl 'http://127.0.0.1:8000/players/1630217/rationale?consensus=fusion'   # LIVE Claude (cached after); ?consensus=multi_source for cross-source
+curl 'http://127.0.0.1:8000/free-agency/board?season=2026-27&limit=25'
+curl 'http://127.0.0.1:8000/free-agency/options?season=2026-27'
+curl 'http://127.0.0.1:8000/free-agency/teams/1610612747/targets?season=2026-27'
 curl 'http://127.0.0.1:8000/backtest'
 curl 'http://127.0.0.1:8000/llm/scout-ratings/eval'
 curl -X POST 'http://127.0.0.1:8000/simulate/contract' \
@@ -89,6 +92,12 @@ network. Run `load_current_rosters` separately when you want current roster/team
 
 Player headshots are served through a backend proxy/cache at `GET /players/{player_id}/headshot`; missing
 images are negative-cached and the frontend falls back to initials.
+
+Free-agency endpoints derive status from the current contract structure, not an official league feed.
+The board ranks pending free agents by production-implied model value; the options endpoint compares
+player/team option salary to model value; team targets combine projected room with the same value lens.
+UFA/RFA labels are service-time estimates, and projected room intentionally excludes cap holds, Bird
+rights, exceptions, incomplete-roster charges, and dead money.
 
 The v0 simulator is intentionally narrow: it models a standalone proposed contract against cap constants
 and the valuation model, not full team payroll, luxury tax owed, Bird rights, MLE/BAE, repeater tax, or
@@ -156,7 +165,8 @@ scoutiq/
   sources/   nba.py  bbref.py  crosswalk.py
   etl/       load_cap_constants.py  load_stats.py  load_bbref.py  load_current_rosters.py
              repair_team_history.py  load_contracts.py  bridge_contract_salaries.py  check_coverage.py
-  api/       main.py  routers/players.py  routers/simulator.py  routers/backtest.py  routers/headshots.py
+  api/       main.py  free_agency.py  routers/players.py  routers/simulator.py
+             routers/backtest.py  routers/free_agency.py  routers/headshots.py
   model/     train.py  predict.py  artifacts/
   llm/       schemas.py  scoring.py  eval_scout_ratings.py  eval_data/  artifacts/
   data/      cap_constants_seed.csv   raw/ (cached HTML, gitignored)

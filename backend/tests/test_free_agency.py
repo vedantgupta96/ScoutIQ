@@ -1,0 +1,213 @@
+"""Tests for the free-agency logic module and router.
+
+Pure season/verdict logic is tested directly. The endpoints are tested with the router's
+DB-touching helpers monkeypatched — the SQL assembly itself is exercised end-to-end against a
+live DB in the smoke script, so these focus on response shaping, sorting, verdict wiring, and
+the projected-room / fits-room math.
+"""
+import scoutiq.api.routers.free_agency as far
+from fastapi.testclient import TestClient
+
+from scoutiq.api import free_agency as fa
+from scoutiq.api.cap_simulator import SeasonCapData
+from scoutiq.api.deps import get_db
+from scoutiq.api.main import app
+from scoutiq.api.routers.players import PlayerSummary
+from scoutiq.models import ContractYear, Player, PlayerSeason, Team
+
+LAL_ID = 1610612747
+
+
+# --------------------------------------------------------------------------- pure logic
+def test_prev_and_expiry_and_entering_season():
+    assert fa.prev_season("2026-27") == "2025-26"
+    assert fa.prev_season("2000-01") == "1999-00"
+    assert fa.prev_season("bogus") is None
+    assert fa.expiry_season("2024-25", 4) == "2027-28"
+    assert fa.expiry_season("2025-26", 1) == "2025-26"
+    assert fa.expiry_season("2025-26", 0) is None
+    assert fa.entering_season("2027-28") == "2028-29"
+
+
+def test_free_agent_type_and_rfa_estimate():
+    assert fa.free_agent_type(True, False) == fa.FA_PLAYER_OPTION
+    assert fa.free_agent_type(False, True) == fa.FA_TEAM_OPTION
+    assert fa.free_agent_type(False, False) == fa.FA_EXPIRING
+    assert fa.rfa_estimate(2) is True
+    assert fa.rfa_estimate(4) is False
+
+
+def test_option_decision_player_option_directions():
+    # worth more than the option → decline and test the market
+    v = fa.option_decision(30.0, 20.0, fa.FA_PLAYER_OPTION)
+    assert v.deciding_party == "player" and v.verdict == "Decline (opt out)" and v.tone == "positive"
+    assert v.gap_pct == 10.0
+    # worth less → opt in for the guaranteed money
+    v = fa.option_decision(10.0, 25.0, fa.FA_PLAYER_OPTION)
+    assert v.verdict == "Opt in" and v.tone == "negative"
+    # within a cap-point → toss-up
+    v = fa.option_decision(20.4, 20.0, fa.FA_PLAYER_OPTION)
+    assert v.tone == "neutral" and "Toss-up" in v.verdict
+
+
+def test_option_decision_team_option_directions():
+    v = fa.option_decision(30.0, 20.0, fa.FA_TEAM_OPTION)
+    assert v.deciding_party == "team" and v.verdict == "Exercise" and v.tone == "positive"
+    v = fa.option_decision(10.0, 25.0, fa.FA_TEAM_OPTION)
+    assert v.verdict == "Decline" and v.tone == "negative"
+
+
+def test_option_decision_handles_missing_value():
+    v = fa.option_decision(None, 20.0, fa.FA_TEAM_OPTION)
+    assert v.verdict == "No model value" and v.tone == "neutral" and v.gap_pct is None
+
+
+# --------------------------------------------------------------------------- endpoint fixtures
+def _summary(player_id: int, name: str, position: str) -> PlayerSummary:
+    return PlayerSummary(
+        player_id=player_id, full_name=name, position=position, latest_season="2025-26",
+        latest_stats_team=None, current_team=None, current_team_source=None, team_data_note=None,
+    )
+
+
+def _pool_entry(player_id, name, position, fa_type, last_season, *, cap_pct, aav, seasons_played, age):
+    return far._PoolEntry(
+        player=Player(player_id=player_id, full_name=name, position=position),
+        last_year=ContractYear(contract_id=player_id, season=last_season, aav=aav, cap_pct=cap_pct,
+                               is_player_option=(fa_type == fa.FA_PLAYER_OPTION),
+                               is_team_option=(fa_type == fa.FA_TEAM_OPTION)),
+        expiring_season=last_season,
+        entering_season="2026-27",
+        fa_type=fa_type,
+        seasons_played=seasons_played,
+        latest_season_row=PlayerSeason(player_id=player_id, season="2025-26", age=age),
+    )
+
+
+CAPS = {
+    "2025-26": SeasonCapData("2025-26", 154_647_000, 187_895_000, 195_945_000, 207_824_000),
+    "2026-27": SeasonCapData("2026-27", 161_606_000, 196_350_000, 204_762_000, 217_176_000),
+}
+
+# Expiring veteran (UFA), then a rising player option — B outvalues A to test sorting.
+POOL = [
+    _pool_entry(100, "Expiring Vet", "SF", fa.FA_EXPIRING, "2025-26",
+                cap_pct=None, aav=40_000_000, seasons_played=8, age=31),
+    _pool_entry(200, "Option Kid", "PG", fa.FA_PLAYER_OPTION, "2026-27",
+                cap_pct=0.10, aav=16_000_000, seasons_played=2, age=23),
+]
+SUMMARIES = {100: _summary(100, "Expiring Vet", "SF"), 200: _summary(200, "Option Kid", "PG")}
+PREDS = {
+    100: {"value_pct": 15.0, "lo_pct": 11.0, "hi_pct": 19.0, "model_version": "test"},
+    200: {"value_pct": 18.0, "lo_pct": 14.0, "hi_pct": 22.0, "model_version": "test"},
+}
+
+
+def _patch_common(monkeypatch, pool=POOL):
+    monkeypatch.setattr(far, "_assemble_pool", lambda db, entering, **kw: list(pool))
+    monkeypatch.setattr(far, "_season_caps", lambda db: dict(CAPS))
+    monkeypatch.setattr(far, "_batched_summaries", lambda players, db: dict(SUMMARIES))
+    # value by player_id so filtering (e.g. options-only) can't misalign predictions
+    monkeypatch.setattr(
+        far, "_value_pool",
+        lambda pool: {e.player.player_id: PREDS[e.player.player_id]
+                      for e in pool if e.latest_season_row is not None},
+    )
+
+
+class _FakeDB:
+    def __init__(self, *, team=None, roster=()):
+        self._team = team
+        self._roster = list(roster)
+
+    def get(self, model, key):
+        return self._team if (model is Team and self._team and key == self._team.team_id) else None
+
+    def scalars(self, stmt):
+        class _R:
+            def __init__(self, v): self.v = v
+            def all(self_inner): return self_inner.v
+            def first(self_inner): return self_inner.v[0] if self_inner.v else None
+        return _R(self._roster if "current_team_id" in str(stmt) else [])
+
+
+def _client(fake_db):
+    app.dependency_overrides[get_db] = lambda: fake_db
+    return TestClient(app)
+
+
+def teardown_function():
+    app.dependency_overrides.clear()
+
+
+# --------------------------------------------------------------------------- board
+def test_board_ranks_by_value_and_flags_rfa(monkeypatch):
+    _patch_common(monkeypatch)
+    body = _client(_FakeDB()).get("/free-agency/board", params={"season": "2026-27"}).json()
+
+    assert body["entering_season"] == "2026-27"
+    assert body["total"] == 2
+    names = [it["full_name"] for it in body["items"]]
+    assert names == ["Option Kid", "Expiring Vet"]  # 18% before 15%
+
+    by_name = {it["full_name"]: it for it in body["items"]}
+    assert by_name["Option Kid"]["fa_type"] == "player-option"
+    assert by_name["Option Kid"]["rfa_estimate"] is True      # 2 seasons
+    assert by_name["Expiring Vet"]["fa_type"] == "expiring"
+    assert by_name["Expiring Vet"]["rfa_estimate"] is False   # 8 seasons
+    # expiring cap % derived from AAV / expiry-season cap; value_usd applied at entering cap
+    assert by_name["Expiring Vet"]["expiring_cap_pct"] == round(40_000_000 / 154_647_000 * 100, 2)
+    assert by_name["Option Kid"]["value_usd"] == round(0.18 * 161_606_000)
+    assert body["items"][0]["option"] is None  # board omits the verdict block
+
+
+def test_board_rejects_bad_season(monkeypatch):
+    _patch_common(monkeypatch)
+    resp = _client(_FakeDB()).get("/free-agency/board", params={"season": "20xx"})
+    assert resp.status_code == 422
+
+
+def test_board_rejects_bad_type(monkeypatch):
+    _patch_common(monkeypatch)
+    resp = _client(_FakeDB()).get("/free-agency/board", params={"type": "waived"})
+    assert resp.status_code == 422
+
+
+# --------------------------------------------------------------------------- options
+def test_options_attaches_verdict(monkeypatch):
+    _patch_common(monkeypatch)
+    body = _client(_FakeDB()).get("/free-agency/options", params={"season": "2026-27"}).json()
+
+    # only the option year survives; the straight-expiring vet is filtered out
+    assert body["total"] == 1
+    kid = body["items"][0]
+    assert kid["full_name"] == "Option Kid"
+    opt = kid["option"]
+    # value 18% vs option 10% → player worth more → decline
+    assert opt["deciding_party"] == "player"
+    assert opt["verdict"] == "Decline (opt out)"
+    assert opt["gap_pct"] == 8.0
+
+
+# --------------------------------------------------------------------------- team targets
+def test_team_targets_room_and_fit(monkeypatch):
+    _patch_common(monkeypatch)
+    monkeypatch.setattr(far, "team_cap_hits", lambda db, ids, season: ({1: 50_000_000, 2: 30_000_000}, {}))
+    team = Team(team_id=LAL_ID, abbreviation="LAL", name="Los Angeles Lakers")
+    fake = _FakeDB(team=team, roster=[Player(player_id=1, current_team_id=LAL_ID)])
+
+    body = _client(fake).get(f"/free-agency/teams/{LAL_ID}/targets", params={"season": "2026-27"}).json()
+
+    assert body["team"]["abbreviation"] == "LAL"
+    ctx = body["cap_context"]
+    assert ctx["committed_payroll_usd"] == 80_000_000
+    assert ctx["room_to_cap"] == 161_606_000 - 80_000_000
+    # both targets' model value is well under the ~$81M of room → both fit
+    assert all(t["fits_room"] is True for t in body["targets"])
+    assert body["committed_player_count"] == 2
+
+
+def test_team_targets_unknown_team_404(monkeypatch):
+    _patch_common(monkeypatch)
+    resp = _client(_FakeDB(team=None)).get(f"/free-agency/teams/{LAL_ID}/targets")
+    assert resp.status_code == 404
