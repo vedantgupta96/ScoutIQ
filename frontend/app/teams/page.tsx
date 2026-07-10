@@ -163,7 +163,14 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
     >
       {/* Payroll hero */}
       <Surface variant="instrument" teamAccent eyebrow="Team payroll vs cap" icon={<Shield size={15} />}
-        action={<Badge tone="confidence" variant="outline" size="sm">{sheet.season}</Badge>}>
+        action={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Link href={`/free-agency?tab=targets&team=${sheet.team.team_id}`} style={{ textDecoration: 'none' }}>
+              <Badge tone="accent" variant="outline" size="sm">FA targets →</Badge>
+            </Link>
+            <Badge tone="confidence" variant="outline" size="sm">{sheet.season}</Badge>
+          </div>
+        }>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
             <TeamLogo

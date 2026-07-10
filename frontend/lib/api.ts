@@ -474,6 +474,87 @@ export interface TeamCapSheetResponse {
   caveat: string;
 }
 
+// ---- Free agency ---------------------------------------------
+
+export type FaType = 'expiring' | 'player-option' | 'team-option';
+
+export interface OptionDecision {
+  fa_type: FaType;
+  deciding_party: 'player' | 'team';
+  option_cap_pct: number;
+  value_pct: number | null;
+  gap_pct: number | null;
+  verdict: string;
+  tone: 'positive' | 'negative' | 'neutral';
+  rationale: string;
+}
+
+export interface FreeAgentEntry extends PlayerSummary {
+  age: number | null;
+  fa_type: FaType;
+  rfa_estimate: boolean;
+  seasons_played: number;
+  expiring_season: string;
+  entering_season: string;
+  expiring_aav_usd: number | null;
+  expiring_cap_pct: number | null;
+  value_pct: number | null;
+  lo_pct: number | null;
+  hi_pct: number | null;
+  value_usd: number | null;
+  valuation_season: string | null;
+  valuation_status: ValuationStatus;
+  option: OptionDecision | null;
+}
+
+export interface FreeAgencyBoardResponse {
+  entering_season: string;
+  type: string;
+  items: FreeAgentEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+  caveat: string;
+}
+
+export interface FreeAgencyOptionsResponse {
+  entering_season: string;
+  items: FreeAgentEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+  caveat: string;
+}
+
+export interface ProjectedCapContext {
+  season: string;
+  is_projected: boolean;
+  salary_cap: number | null;
+  tax_line: number | null;
+  first_apron: number | null;
+  second_apron: number | null;
+  committed_payroll_usd: number;
+  tier: CapTier;
+  room_to_cap: number | null;
+  room_to_tax: number | null;
+  room_to_first_apron: number | null;
+  room_to_second_apron: number | null;
+}
+
+export interface TeamFaTarget extends FreeAgentEntry {
+  fits_room: boolean | null;
+}
+
+export interface TeamFaTargetsResponse {
+  team: TeamSummary;
+  entering_season: string;
+  cap_context: ProjectedCapContext;
+  committed_player_count: number;
+  targets: TeamFaTarget[];
+  limit: number;
+  caveat: string;
+}
+
 // ---- API functions -------------------------------------------
 
 export function getTeams(signal?: AbortSignal): Promise<TeamListItem[]> {
@@ -482,6 +563,47 @@ export function getTeams(signal?: AbortSignal): Promise<TeamListItem[]> {
 
 export function getTeamCapSheet(teamId: number, season?: string, signal?: AbortSignal): Promise<TeamCapSheetResponse> {
   return apiFetch<TeamCapSheetResponse>(`/teams/${teamId}/cap-sheet${queryString({ season })}`, { signal });
+}
+
+export interface FreeAgencyBoardParams {
+  season?: string;
+  type?: FaType;
+  position?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export function getFreeAgencyBoard(params: FreeAgencyBoardParams = {}, signal?: AbortSignal): Promise<FreeAgencyBoardResponse> {
+  return apiFetch<FreeAgencyBoardResponse>(`/free-agency/board${queryString({
+    season: params.season,
+    type: params.type,
+    position: params.position,
+    limit: params.limit ?? 25,
+    offset: params.offset ?? 0,
+  })}`, { signal });
+}
+
+export function getFreeAgencyOptions(
+  params: { season?: string; limit?: number; offset?: number } = {},
+  signal?: AbortSignal,
+): Promise<FreeAgencyOptionsResponse> {
+  return apiFetch<FreeAgencyOptionsResponse>(`/free-agency/options${queryString({
+    season: params.season,
+    limit: params.limit ?? 25,
+    offset: params.offset ?? 0,
+  })}`, { signal });
+}
+
+export function getTeamFaTargets(
+  teamId: number,
+  params: { season?: string; position?: string; limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<TeamFaTargetsResponse> {
+  return apiFetch<TeamFaTargetsResponse>(`/free-agency/teams/${teamId}/targets${queryString({
+    season: params.season,
+    position: params.position,
+    limit: params.limit ?? 15,
+  })}`, { signal });
 }
 
 export function searchPlayers(query?: string, limit = 20, signal?: AbortSignal): Promise<PlayerSummary[]> {

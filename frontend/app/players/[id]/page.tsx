@@ -297,7 +297,18 @@ function ContractCard({
       teamAccent
       eyebrow="Current contract"
       icon={<FileText size={15} />}
-      action={contract ? <Badge tone="neutral" variant="outline" size="sm">{contract.source}</Badge> : undefined}
+      action={
+        contract ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {contract.years_detail.some((y) => y.is_player_option || y.is_team_option) && (
+              <Link href="/free-agency?tab=options" style={{ textDecoration: 'none' }}>
+                <Badge tone="warning" variant="outline" size="sm">Option decision →</Badge>
+              </Link>
+            )}
+            <Badge tone="neutral" variant="outline" size="sm">{contract.source}</Badge>
+          </div>
+        ) : undefined
+      }
     >
       {contract == null ? (
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading contract…</p>

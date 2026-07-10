@@ -1,6 +1,6 @@
 # ScoutIQ — Progress Log
 
-_Last updated: 2026-06-07. Snapshot of what's built, what works, what broke, and what's next._
+_Last updated: 2026-07-10. Snapshot of what's built, what works, what broke, and what's next._
 
 ## Status at a glance
 | Phase | Scope | Status |
@@ -8,10 +8,11 @@ _Last updated: 2026-06-07. Snapshot of what's built, what works, what broke, and
 | 1 | Data layer (schema, ETL, dataset) | ✅ complete |
 | 2 | Valuation model + backtest | ✅ complete |
 | 3 | Cap simulator + FastAPI + dashboard | ✅ core complete |
+| 3.5 | Free-agency board + option decisions | ✅ complete |
 | 4 | Contract timeline, comps, grounded rationale | ⏳ next |
 
-Twenty PRs are merged to `main`, with the current work adding player headshots. Workflow is feature
-branch → PR → squash-merge per phase. Database is a live hosted **Neon** Postgres.
+Twenty PRs are merged to `main`; the current unmerged work adds the free-agency cockpit. Workflow is
+feature branch → PR → squash-merge per phase. Database is a live hosted **Neon** Postgres.
 
 ---
 
@@ -51,9 +52,10 @@ Spotrac-sourced per-season cap hits as evaluation/pay comparison data.
 The core product cockpit is now working.
 
 - **FastAPI:** health/current-season, player search/profile, valuation, batched player cards, contract
-  watchlist, simulator, backtest metadata/valuations, scout-rating eval, player scout-rating fixture
-  aggregation, and cached player headshots.
-- **Dashboard:** Next.js app with players/watchlist, player profile, simulator, and model/backtest views.
+  watchlist, free-agency board, option decisions, team FA targets, simulator, backtest metadata/
+  valuations, scout-rating eval, player scout-rating fixture aggregation, and cached player headshots.
+- **Dashboard:** Next.js app with players/watchlist, player profile, teams, free agency, simulator, and
+  model/backtest views.
 - **Simulator:** simplified-but-explicit CBA subset, 2025-26 default contract start, actual loaded
   2025-26 cap constants, future cap projection, option/guarantee sliders, and assumption flags.
 - **Watchlist:** bucket/sort/position/search filters; valuation pinned to the displayed season so
@@ -90,6 +92,7 @@ Most were caught by actually running the pipeline, not by reading code:
 | Spotrac pages shifted columns / extension tables | fixed-index first-table parser missed cap-hit rows | header-driven parser scans all cap-hit tables |
 | Contract re-scrapes left stale duplicates | dedup key changed when parser/source shifted `season_start` | clean-replace existing player contracts before insert |
 | Missing headshots could repeatedly hit the CDN | no negative cache for players without NBA CDN images | cache missing-image sentinels and fall back to initials |
+| Free-agency pool double-counted option semantics | option years can either be past decisions or future opt-outs depending on class year | class of season S now includes prior-season expirings plus option final years in S; prior-season options are treated as expiring |
 
 ---
 
@@ -113,10 +116,13 @@ Most were caught by actually running the pipeline, not by reading code:
 - **Salary stickiness:** persistence beats the model on mid-contract players (expected; we exclude salary
   on purpose). The fix is forward contract data (Spotrac) to evaluate at contract-decision points.
 - **Forward contract structure is present but not yet fully surfaced.** `contracts`/`contract_years`
-  exist and feed 2025-26 salary bridging; the next product step is a visible current-contract timeline
-  and extension simulation flow.
+  exist, feed 2025-26 salary bridging, and now power the free-agency board. The next product step is a
+  visible current-contract timeline and extension simulation flow.
 - **Name matching:** ~15 `mismatch` / ~106 `not_found` players remain (accents, Jr./Sr., no BBRef page).
 - **Cap rules** are a simplified subset of the CBA (no Bird rights / exceptions / repeater tax yet).
+- **Free-agency labels are inferred:** UFA/RFA is estimated from loaded stat seasons, not official service
+  time or qualifying-offer state. Team-target room excludes cap holds, incomplete-roster charges, Bird
+  rights, exceptions, dead money, and market-price negotiation dynamics.
 
 ---
 
@@ -182,8 +188,28 @@ reports no issues. One latent note: API tests run on SQLite where `DISTINCT ON` 
 
 ---
 
+## Free-agency cockpit (2026-07-10)
+
+A contract-decision surface now sits on top of the refreshed Spotrac/BBRef contract dataset without a
+schema change.
+
+- **Data refresh:** contract ETL was re-run against live sources and bridged into current-season salary
+  coverage: 580 contracts / 1,730 contract-years, clean 2025-26 contract coverage for loaded players.
+- **Backend:** new pure `scoutiq.api.free_agency` helpers and `GET /free-agency/board`,
+  `GET /free-agency/options`, and `GET /free-agency/teams/{team_id}/targets` endpoints. The pool is
+  derived from final contract years, with option years included only when declining the option opens the
+  selected class year.
+- **Frontend:** new `/free-agency` cockpit with Board, Options, and Team targets tabs, shareable
+  `tab`/`season` URL state, a position filter, cross-links from team and player surfaces, and assumption
+  flags that state the inferred-status and simplified-room caveats.
+- **Testing:** free-agency unit/API tests cover season math, RFA inference, option verdict direction,
+  ranking, pagination, and team fit math. Full backend suite and frontend build remain the gate.
+
+---
+
 ## Next
 The highest-leverage next feature is **current contract timeline + one-click extension simulation**:
 show what the player is owed, compare it to production-implied value, and let the user launch a proposed
-extension from the current deal. After that, similar-player/contract comps and grounded rationale
-generation are the most natural additions.
+extension from the current deal. After that: persist official Spotrac FA/UFA/RFA rows, add RFA offer-sheet
+simulation/cap holds/Bird-rights nuance, then similar-player contract comps and grounded rationale
+generation.
