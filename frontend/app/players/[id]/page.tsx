@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, use, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useState, use, type CSSProperties, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -38,6 +38,8 @@ import {
 import { Card } from '@/components/ui/Card';
 import { Surface } from '@/components/ui/Surface';
 import { Badge } from '@/components/ui/Badge';
+import { Button, ButtonLink } from '@/components/ui/Button';
+import { Tabs } from '@/components/ui/Tabs';
 import { StatTile } from '@/components/ui/StatTile';
 import { VerdictPill } from '@/components/ui/VerdictPill';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
@@ -332,10 +334,9 @@ function ContractCard({
             {contract.years_detail.map((year) => <ContractYearRow key={year.season} year={year} />)}
           </div>
           <div className="siq-compact-action-row">
-            <button onClick={onSimulateExtension} className="siq-primary-button" disabled={!contract.extension_start_season}>
-              <SlidersHorizontal size={15} />
+            <Button variant="primary" icon={<SlidersHorizontal size={15} />} onClick={onSimulateExtension} disabled={!contract.extension_start_season}>
               Simulate extension
-            </button>
+            </Button>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5, flex: '1 1 220px' }}>
               {contract.caveat}
             </p>
@@ -405,10 +406,9 @@ function SimilarPlayerRow({ result }: { result: SimilarPlayerResult }) {
         </div>
         <Link
           href={simHref}
-          className="siq-secondary-button"
+          className="siq-secondary-button siq-similar-sim-link"
           aria-label={`Simulate ${result.player.full_name}`}
           title={`Simulate ${result.player.full_name}`}
-          style={{ width: 30, minWidth: 30, padding: 5, fontSize: 0, gap: 0, textDecoration: 'none' }}
         >
           <SlidersHorizontal size={13} />
         </Link>
@@ -600,14 +600,12 @@ function DecisionHero({
 
       <div className="siq-decision-actions">
         <VerdictPill gapPct={val.gap_pct} label={val.verdict_label} tone={val.verdict_tone} size="lg" />
-        <button onClick={onSimulate} className="siq-primary-button">
-          <SlidersHorizontal size={15} />
+        <Button variant="primary" icon={<SlidersHorizontal size={15} />} onClick={onSimulate}>
           Run simulation
-        </button>
-        <Link href={extensionHref} className="siq-secondary-button" style={{ textDecoration: 'none' }}>
-          <DollarSign size={15} />
+        </Button>
+        <ButtonLink href={extensionHref} icon={<DollarSign size={15} />}>
           Price deal
-        </Link>
+        </ButtonLink>
       </div>
     </section>
   );
@@ -620,42 +618,16 @@ function WorkspaceTabs({
   active: WorkspaceTab;
   onChange: (tab: WorkspaceTab) => void;
 }) {
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
-
-  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    let nextIndex = index;
-    if (event.key === 'ArrowRight') nextIndex = (index + 1) % WORKSPACE_TABS.length;
-    else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + WORKSPACE_TABS.length) % WORKSPACE_TABS.length;
-    else if (event.key === 'Home') nextIndex = 0;
-    else if (event.key === 'End') nextIndex = WORKSPACE_TABS.length - 1;
-    else return;
-
-    event.preventDefault();
-    onChange(WORKSPACE_TABS[nextIndex].key);
-    tabRefs.current[nextIndex]?.focus();
-  };
-
   return (
-    <div className="siq-workspace-tabs" role="tablist" aria-label="Player case sections">
-      {WORKSPACE_TABS.map((tab, index) => (
-        <button
-          key={tab.key}
-          id={`player-tab-${tab.key}`}
-          ref={(el) => { tabRefs.current[index] = el; }}
-          type="button"
-          role="tab"
-          aria-selected={active === tab.key}
-          aria-controls="player-workspace-panel"
-          tabIndex={active === tab.key ? 0 : -1}
-          onClick={() => onChange(tab.key)}
-          onKeyDown={(event) => onKeyDown(event, index)}
-          className={active === tab.key ? 'is-active' : undefined}
-        >
-          {tab.icon}
-          {tab.label}
-        </button>
-      ))}
-    </div>
+    <Tabs
+      tabs={WORKSPACE_TABS}
+      active={active}
+      onChange={onChange}
+      ariaLabel="Player case sections"
+      idPrefix="player"
+      panelId="player-workspace-panel"
+      className="siq-workspace-tabs"
+    />
   );
 }
 
@@ -921,22 +893,18 @@ function ActionRail({
     <aside className="siq-action-rail">
       <Card eyebrow="Action rail" icon={<SlidersHorizontal size={15} />}>
         <div className="siq-action-stack">
-          <button onClick={onSimulate} className="siq-primary-button">
-            <SlidersHorizontal size={15} />
+          <Button variant="primary" icon={<SlidersHorizontal size={15} />} onClick={onSimulate}>
             Simulate extension
-          </button>
-          <Link href={extensionHref} className="siq-secondary-button" style={{ textDecoration: 'none' }}>
-            <DollarSign size={15} />
+          </Button>
+          <ButtonLink href={extensionHref} icon={<DollarSign size={15} />}>
             Open contract pricer
-          </Link>
-          <button onClick={() => onTab('market')} className="siq-secondary-button">
-            <Users size={15} />
+          </ButtonLink>
+          <Button icon={<Users size={15} />} onClick={() => onTab('market')}>
             Review comps
-          </button>
-          <button onClick={() => onTab('model')} className="siq-secondary-button">
-            <BarChart3 size={15} />
+          </Button>
+          <Button icon={<BarChart3 size={15} />} onClick={() => onTab('model')}>
             Inspect model inputs
-          </button>
+          </Button>
         </div>
       </Card>
 

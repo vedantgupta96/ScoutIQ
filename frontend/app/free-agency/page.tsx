@@ -19,6 +19,10 @@ import {
 import { Card } from '@/components/ui/Card';
 import { Surface } from '@/components/ui/Surface';
 import { Badge } from '@/components/ui/Badge';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Select';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { StatTile } from '@/components/ui/StatTile';
 import { Avatar } from '@/components/ui/Avatar';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
@@ -89,30 +93,11 @@ function PlayerCell({ entry, extra }: { entry: FreeAgentEntry; extra?: ReactNode
   );
 }
 
-function SelectBox({ value, onChange, ariaLabel, children }: {
-  value: string; onChange: (v: string) => void; ariaLabel: string; children: ReactNode;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label={ariaLabel}
-      style={{
-        height: 34, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)',
-        background: 'var(--bg-panel)', color: 'var(--text-primary)', padding: '0 10px',
-        fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 600,
-      }}
-    >
-      {children}
-    </select>
-  );
-}
-
 function ErrorNote({ message }: { message: string }) {
   return (
-    <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-lg)', background: 'var(--negative-soft)', color: 'var(--negative-text)', fontSize: 13 }}>
+    <Alert tone="negative">
       {message} — is the FastAPI server running at localhost:8000?
-    </div>
+    </Alert>
   );
 }
 
@@ -157,26 +142,16 @@ function BoardTab({ season }: { season: string }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span className="ds-eyebrow">Filter</span>
-        {TYPE_FILTERS.map((f) => (
-          <button
-            key={f.value}
-            onClick={() => setType(f.value)}
-            aria-pressed={type === f.value}
-            style={{
-              height: 30, padding: '0 12px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
-              border: `1px solid ${type === f.value ? 'transparent' : 'var(--border-subtle)'}`,
-              background: type === f.value ? 'var(--accent-soft)' : 'transparent',
-              color: type === f.value ? 'var(--accent-text)' : 'var(--text-secondary)',
-              fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-sans)',
-            }}
-          >
-            {f.label}
-          </button>
-        ))}
-        <SelectBox value={position} onChange={setPosition} ariaLabel="Filter by position">
+        <SegmentedControl
+          options={TYPE_FILTERS}
+          value={type}
+          onChange={setType}
+          ariaLabel="Filter by contract type"
+        />
+        <Select selectSize="sm" value={position} onChange={(e) => setPosition(e.target.value)} aria-label="Filter by position">
           <option value="all">All positions</option>
           {POSITION_FILTERS.map((p) => <option key={p} value={p}>{p}</option>)}
-        </SelectBox>
+        </Select>
       </div>
 
       {error && <ErrorNote message={error} />}
@@ -380,15 +355,15 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span className="ds-eyebrow">Team</span>
-        <SelectBox value={selectedId != null ? String(selectedId) : ''} onChange={setTeam} ariaLabel="Select team">
+        <Select value={selectedId != null ? String(selectedId) : ''} onChange={(e) => setTeam(e.target.value)} aria-label="Select team">
           {teams.length === 0 && <option value="">Loading teams…</option>}
           {teams.map((t) => <option key={t.team_id} value={t.team_id}>{t.name ?? t.abbreviation}</option>)}
-        </SelectBox>
+        </Select>
         <span className="ds-eyebrow" style={{ marginLeft: 4 }}>Rank by</span>
-        <SelectBox value={sort} onChange={(value) => setSort(value as 'fit' | 'value')} ariaLabel="Rank targets by">
+        <Select value={sort} onChange={(e) => setSort(e.target.value as 'fit' | 'value')} aria-label="Rank targets by">
           <option value="fit">Roster need fit</option>
           <option value="value">Model value</option>
-        </SelectBox>
+        </Select>
       </div>
 
       {error && <ErrorNote message={error} />}
@@ -489,18 +464,12 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
 function Pager({ offset, total, onPrev, onNext }: { offset: number; total: number; onPrev: () => void; onNext: () => void }) {
   const from = offset + 1;
   const to = Math.min(offset + PAGE_SIZE, total);
-  const btn = (disabled: boolean): React.CSSProperties => ({
-    display: 'inline-flex', alignItems: 'center', gap: 4, height: 32, padding: '0 12px',
-    borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-    background: 'var(--bg-panel)', color: disabled ? 'var(--text-muted)' : 'var(--text-primary)',
-    fontSize: 12, fontWeight: 600, cursor: disabled ? 'default' : 'pointer',
-  });
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
       <span className="ds-tnum" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{from}–{to} of {total}</span>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={onPrev} disabled={offset === 0} style={btn(offset === 0)}><ChevronLeft size={14} /> Prev</button>
-        <button onClick={onNext} disabled={to >= total} style={btn(to >= total)}>Next <ChevronRight size={14} /></button>
+        <Button size="sm" icon={<ChevronLeft size={14} />} onClick={onPrev} disabled={offset === 0}>Prev</Button>
+        <Button size="sm" onClick={onNext} disabled={to >= total}>Next <ChevronRight size={14} /></Button>
       </div>
     </div>
   );
@@ -534,33 +503,17 @@ function FreeAgencyContent() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {TABS.map(({ id, label, Icon }) => {
-            const active = tab === id;
-            return (
-              <button
-                key={id}
-                onClick={() => setTab(id)}
-                aria-pressed={active}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6, height: 36, padding: '0 14px',
-                  borderRadius: 'var(--radius-pill)', cursor: 'pointer',
-                  border: `1px solid ${active ? 'transparent' : 'var(--border-subtle)'}`,
-                  background: active ? 'var(--accent-soft)' : 'transparent',
-                  color: active ? 'var(--accent-text)' : 'var(--text-secondary)',
-                  fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-sans)',
-                }}
-              >
-                <Icon size={15} /> {label}
-              </button>
-            );
-          })}
-        </div>
+        <SegmentedControl
+          options={TABS.map(({ id, label, Icon }) => ({ value: id, label, icon: <Icon size={15} /> }))}
+          value={tab}
+          onChange={setTab}
+          ariaLabel="Free-agency view"
+        />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className="ds-eyebrow">Class of</span>
-          <SelectBox value={season} onChange={setSeason} ariaLabel="Free-agency season">
+          <Select value={season} onChange={(e) => setSeason(e.target.value)} aria-label="Free-agency season">
             {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
-          </SelectBox>
+          </Select>
         </div>
       </div>
 

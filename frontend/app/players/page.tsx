@@ -14,6 +14,12 @@ import {
 } from '@/lib/api';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Select } from '@/components/ui/Select';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { fmtM, fmtPct, gapLabel, gapTone, signed } from '@/lib/utils';
 
 type GapTone = 'positive' | 'negative' | 'neutral' | 'warning';
@@ -228,14 +234,6 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
   );
 }
 
-function EmptyState({ query }: { query: string }) {
-  return (
-    <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
-      {query ? `No players match "${query}".` : 'No players found.'}
-    </div>
-  );
-}
-
 const PAGE_SIZE = 24;
 const BUCKETS: Array<{ value: WatchlistBucket; label: string }> = [
   { value: 'all', label: 'All mismatches' },
@@ -250,18 +248,6 @@ const SORTS: Array<{ value: WatchlistSort; label: string }> = [
   { value: 'pay', label: 'Highest pay' },
   { value: 'name', label: 'Name (A–Z)' },
 ];
-
-const SELECT_STYLE: React.CSSProperties = {
-  height: 34,
-  borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-panel)',
-  color: 'var(--text-primary)',
-  padding: '0 10px',
-  fontFamily: 'var(--font-sans)',
-  fontSize: 12,
-  fontWeight: 600,
-};
 
 function PlayersContent() {
   const searchParams = useSearchParams();
@@ -399,79 +385,40 @@ function PlayersContent() {
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-          <div style={{
-            display: 'inline-flex',
-            padding: 3,
-            gap: 3,
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            background: 'var(--bg-panel)',
-          }}>
-            {BUCKETS.map((b) => {
-              const active = bucket === b.value;
-              return (
-                <button
-                  key={b.value}
-                  type="button"
-                  onClick={() => setBucket(b.value)}
-                  aria-pressed={active}
-                  style={{
-                    border: 'none',
-                    borderRadius: 'calc(var(--radius-md) - 3px)',
-                    padding: '7px 10px',
-                    background: active ? 'var(--accent-soft)' : 'transparent',
-                    color: active ? 'var(--accent-text)' : 'var(--text-secondary)',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {b.label}
-                </button>
-              );
-            })}
-          </div>
+          <SegmentedControl
+            options={BUCKETS}
+            value={bucket}
+            onChange={setBucket}
+            ariaLabel="Filter by mismatch type"
+          />
 
-          <select
+          <Select
+            selectSize="sm"
             value={position}
             onChange={(e) => setPosition(e.target.value)}
             aria-label="Filter by position"
-            style={SELECT_STYLE}
           >
             {POSITIONS.map((p) => (
               <option key={p || 'all'} value={p}>{p || 'All positions'}</option>
             ))}
-          </select>
+          </Select>
 
-          <select
+          <Select
+            selectSize="sm"
             value={sort}
             onChange={(e) => setSort(e.target.value as WatchlistSort)}
             aria-label="Sort players"
-            style={SELECT_STYLE}
           >
             {SORTS.map((s) => (
               <option key={s.value} value={s.value}>Sort: {s.label}</option>
             ))}
-          </select>
+          </Select>
 
-          <label style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 7,
-            height: 34,
-            padding: '0 10px',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            background: 'var(--bg-panel)',
-            color: 'var(--text-secondary)',
-            fontSize: 12,
-            fontWeight: 600,
-          }}>
+          <label className="siq-check">
             <input
               type="checkbox"
               checked={qualifiedOnly}
               onChange={(e) => setQualifiedOnly(e.target.checked)}
-              style={{ accentColor: 'var(--accent)' }}
             />
             Qualified only
           </label>
@@ -488,17 +435,17 @@ function PlayersContent() {
                 style={{ ['--i' as string]: Math.min(i, 11) }}
               >
                 <div className="siq-case-skel__head">
-                  <span className="siq-skel siq-case-skel__avatar" />
+                  <Skeleton className="siq-case-skel__avatar" />
                   <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
-                    <span className="siq-skel" style={{ height: 13, width: '62%' }} />
-                    <span className="siq-skel" style={{ height: 10, width: '38%' }} />
+                    <Skeleton height={13} width="62%" />
+                    <Skeleton height={10} width="38%" />
                   </span>
                 </div>
-                <span className="siq-skel" style={{ height: 24, width: '46%' }} />
-                <span className="siq-skel" style={{ height: 12 }} />
+                <Skeleton height={24} width="46%" />
+                <Skeleton height={12} />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 'auto' }}>
-                  <span className="siq-skel" style={{ height: 32 }} />
-                  <span className="siq-skel" style={{ height: 32 }} />
+                  <Skeleton height={32} />
+                  <Skeleton height={32} />
                 </div>
               </div>
             ))}
@@ -507,16 +454,17 @@ function PlayersContent() {
       )}
 
       {error && (
-        <div style={{
-          padding: '12px 16px', borderRadius: 'var(--radius-lg)',
-          background: 'var(--negative-soft)', color: 'var(--negative-text)',
-          border: '1px solid var(--red-500)30', fontSize: 13, marginBottom: 16,
-        }}>
+        <Alert tone="negative">
           {error} — is the FastAPI server running at localhost:8000?
-        </div>
+        </Alert>
       )}
 
-      {!loading && !error && players.length === 0 && <EmptyState query={q} />}
+      {!loading && !error && players.length === 0 && (
+        <EmptyState
+          title={q ? `No players match "${q}".` : 'No players found.'}
+          description={q ? 'Try a shorter name or clear the search.' : undefined}
+        />
+      )}
 
       {!loading && players.length > 0 && (
         <>
@@ -551,40 +499,17 @@ function PlayersContent() {
               Showing {pageStart}-{pageEnd} of {total}
             </span>
             <div className="siq-pagination" style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                disabled={!canPageBack}
-                onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-subtle)',
-                  background: 'var(--bg-panel)',
-                  color: canPageBack ? 'var(--text-primary)' : 'var(--text-muted)',
-                  cursor: canPageBack ? 'pointer' : 'not-allowed',
-                  fontSize: 12,
-                  fontWeight: 700,
-                }}
-              >
+              <Button size="sm" disabled={!canPageBack} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
                 Previous
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                size="sm"
+                variant={canPageForward ? 'primary' : 'secondary'}
                 disabled={!canPageForward}
                 onClick={() => setOffset(offset + PAGE_SIZE)}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-subtle)',
-                  background: canPageForward ? 'var(--accent)' : 'var(--bg-panel)',
-                  color: canPageForward ? 'var(--text-on-accent)' : 'var(--text-muted)',
-                  cursor: canPageForward ? 'pointer' : 'not-allowed',
-                  fontSize: 12,
-                  fontWeight: 700,
-                }}
               >
                 Next
-              </button>
+              </Button>
             </div>
           </div>
         </>

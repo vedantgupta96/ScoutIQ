@@ -14,6 +14,8 @@ import {
 import { Card } from '@/components/ui/Card';
 import { Surface } from '@/components/ui/Surface';
 import { Badge } from '@/components/ui/Badge';
+import { Alert } from '@/components/ui/Alert';
+import { Select } from '@/components/ui/Select';
 import { StatTile } from '@/components/ui/StatTile';
 import { Avatar } from '@/components/ui/Avatar';
 import { TeamLogo } from '@/components/ui/TeamLogo';
@@ -238,18 +240,14 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
         eyebrow={`Roster · ${totals.roster_size} players`}
         icon={<Users size={15} />}
         action={
-          <select
+          <Select
+            selectSize="sm"
             value={sort}
             onChange={(e) => setSort(e.target.value as RosterSort)}
             aria-label="Sort roster"
-            style={{
-              height: 32, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-              background: 'var(--bg-panel)', color: 'var(--text-primary)', padding: '0 10px',
-              fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600,
-            }}
           >
             {SORTS.map((s) => <option key={s.value} value={s.value}>Sort: {s.label}</option>)}
-          </select>
+          </Select>
         }
       >
         {sheet.top_bargain && sheet.top_overpay && (
@@ -322,25 +320,21 @@ function TeamsContent() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <span className="ds-eyebrow">Team war room</span>
-        <select
+        <Select
           value={effectiveSelectedId ?? ''}
           onChange={(e) => router.replace(`/teams?team=${e.target.value}`)}
           aria-label="Select team"
-          style={{
-            height: 36, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-default)',
-            background: 'var(--bg-panel)', color: 'var(--text-primary)', padding: '0 12px',
-            fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 600, minWidth: 220,
-          }}
+          style={{ minWidth: 220 }}
         >
           {teams.length === 0 && <option value="">Loading teams…</option>}
           {teams.map((t) => <option key={t.team_id} value={t.team_id}>{t.name ?? t.abbreviation}</option>)}
-        </select>
+        </Select>
       </div>
 
       {error && (
-        <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-lg)', background: 'var(--negative-soft)', color: 'var(--negative-text)', fontSize: 13 }}>
+        <Alert tone="negative">
           {error} — is the FastAPI server running at localhost:8000?
-        </div>
+        </Alert>
       )}
       {loading && !sheet && (
         <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading cap sheet…</div>
