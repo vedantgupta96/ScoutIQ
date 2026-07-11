@@ -20,6 +20,7 @@ import { Card } from '@/components/ui/Card';
 import { Surface } from '@/components/ui/Surface';
 import { Badge } from '@/components/ui/Badge';
 import { DecisionStrip } from '@/components/ui/DecisionStrip';
+import { LoadingNote } from '@/components/ui/LoadingNote';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
 import { fmtPct, signed } from '@/lib/utils';
@@ -575,7 +576,7 @@ export default function ModelPage() {
                 ? <Badge tone="accent" size="sm" dot>{scatterPoints.length} test-set rows</Badge>
                 : <Badge tone="accent" size="sm" dot>loading…</Badge>}>
           {scatterPoints.length === 0
-            ? <div style={{ height: 240, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+            ? <LoadingNote className="siq-loading-note--tall">Loading…</LoadingNote>
             : <ScatterPlot points={scatterPoints} highlight={highlightNames} />
           }
         </Surface>
@@ -598,8 +599,8 @@ export default function ModelPage() {
             <tbody>
               {calibration.length === 0 ? (
                 <tr>
-                  <td colSpan={3} style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>
-                    Loading calibration artifact…
+                  <td colSpan={3}>
+                    <LoadingNote className="siq-loading-note--row">Loading calibration artifact…</LoadingNote>
                   </td>
                 </tr>
               ) : (

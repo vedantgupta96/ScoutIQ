@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import { Select } from '@/components/ui/Select';
 import { DecisionStrip } from '@/components/ui/DecisionStrip';
+import { LoadingNote } from '@/components/ui/LoadingNote';
 import { Avatar } from '@/components/ui/Avatar';
 import { TeamLogo } from '@/components/ui/TeamLogo';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
@@ -334,9 +335,7 @@ function TeamsContent() {
           {error} — is the FastAPI server running at localhost:8000?
         </Alert>
       )}
-      {loading && !sheet && (
-        <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading cap sheet…</div>
-      )}
+      {loading && !sheet && <LoadingNote>Loading cap sheet…</LoadingNote>}
       {sheet && <WarRoom sheet={sheet} />}
     </div>
   );
@@ -344,7 +343,7 @@ function TeamsContent() {
 
 export default function TeamsPage() {
   return (
-    <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>}>
+    <Suspense fallback={<LoadingNote>Loading…</LoadingNote>}>
       <TeamsContent />
     </Suspense>
   );

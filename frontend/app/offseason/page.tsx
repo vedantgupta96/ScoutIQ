@@ -37,6 +37,8 @@ import { Select } from '@/components/ui/Select';
 import { Card } from '@/components/ui/Card';
 import { CapBar, CAP_TIER_LABEL, CapTierKey, capTierBadgeTone } from '@/components/cap/CapBar';
 import { DecisionStrip } from '@/components/ui/DecisionStrip';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingNote } from '@/components/ui/LoadingNote';
 import { Surface } from '@/components/ui/Surface';
 import { TeamLogo } from '@/components/ui/TeamLogo';
 import { RosterNeeds } from '@/components/teams/RosterNeeds';
@@ -500,7 +502,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
           />
         </Surface>
       ) : (
-        <div className="siq-offseason-loading">Pricing baseline…</div>
+        <LoadingNote>Pricing baseline…</LoadingNote>
       )}
 
       {plan ? (
@@ -518,18 +520,18 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
         <div className="siq-offseason-market">
           <Surface variant="instrument" eyebrow="Free-agent targets" icon={<UserRoundPlus size={15} />}
             action={<Badge tone="neutral" variant="outline" size="sm">{market?.targets.length ?? 0} ranked</Badge>}>
-            {marketLoading && !market ? <div className="siq-offseason-empty">Loading market…</div> : market?.targets.length ? (
+            {marketLoading && !market ? <LoadingNote>Loading market…</LoadingNote> : market?.targets.length ? (
               <div className="siq-offseason-targets">
                 {market.targets.map((target) => (
                   <TargetRow key={target.player_id} target={target} added={stagedIds.has(target.player_id)} onAdd={() => addTarget(target)} />
                 ))}
               </div>
-            ) : <div className="siq-offseason-empty">No targets available for this class.</div>}
+            ) : <EmptyState title="No targets available for this class." />}
           </Surface>
 
           <Surface variant="instrument" eyebrow="Option decisions" icon={<CircleDollarSign size={15} />}
             action={<Badge tone="neutral" variant="outline" size="sm">{teamOptions.length}</Badge>}>
-            {optionsLoading ? <div className="siq-offseason-empty">Loading options…</div> : teamOptions.length ? (
+            {optionsLoading ? <LoadingNote>Loading options…</LoadingNote> : teamOptions.length ? (
               <div className="siq-offseason-options">
                 {teamOptions.map((player) => (
                   <OptionRow
@@ -540,7 +542,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
                   />
                 ))}
               </div>
-            ) : <div className="siq-offseason-empty">No option decisions for this team and season.</div>}
+            ) : <EmptyState title="No option decisions for this team and season." />}
           </Surface>
         </div>
 
@@ -550,10 +552,11 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
               <IconButton onClick={resetPlan} label="Reset offseason plan" title="Reset plan"><RotateCcw size={15} /></IconButton>
             ) : undefined}>
             {contracts.length === 0 && declines.length === 0 ? (
-              <div className="siq-offseason-empty siq-offseason-empty--plan">
-                <CalendarRange size={22} />
-                <span>No moves staged.</span>
-              </div>
+              <EmptyState
+                icon={<CalendarRange size={22} />}
+                title="No moves staged"
+                description="Add a signing from Free-agent targets or decline an option to see the cap and roster impact."
+              />
             ) : (
               <div className="siq-offseason-moves">
                 {contracts.map((draft) => (
@@ -643,14 +646,14 @@ function OffseasonContent() {
           Free-agency board
         </ButtonLink>
       </div>
-      {teamId ? <PlannerWorkspace key={`${teamId}-${season}`} teamId={teamId} season={season} /> : <div className="siq-offseason-loading">Loading teams…</div>}
+      {teamId ? <PlannerWorkspace key={`${teamId}-${season}`} teamId={teamId} season={season} /> : <LoadingNote>Loading teams…</LoadingNote>}
     </div>
   );
 }
 
 export default function OffseasonPage() {
   return (
-    <Suspense fallback={<div className="siq-offseason-loading">Loading offseason plan…</div>}>
+    <Suspense fallback={<LoadingNote>Loading offseason plan…</LoadingNote>}>
       <OffseasonContent />
     </Suspense>
   );

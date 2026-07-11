@@ -22,7 +22,10 @@ import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
+import { Field } from '@/components/ui/Field';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingNote } from '@/components/ui/LoadingNote';
 import { DecisionStrip } from '@/components/ui/DecisionStrip';
 import { Avatar } from '@/components/ui/Avatar';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
@@ -168,13 +171,9 @@ function BoardTab({ season }: { season: string }) {
           <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Model value</span>
         </div>
 
-        {loading && !data && (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Loading free agents…</div>
-        )}
+        {loading && !data && <LoadingNote>Loading free agents…</LoadingNote>}
         {data && data.items.length === 0 && (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
-            No free agents match this filter for {data.entering_season}.
-          </div>
+          <EmptyState title={`No free agents match this filter for ${data.entering_season}.`} />
         )}
 
         {data?.items.map((entry) => (
@@ -248,9 +247,9 @@ function OptionsTab({ season }: { season: string }) {
       {error && <ErrorNote message={error} />}
 
       <Card eyebrow={data ? `${data.total} option decisions · entering ${data.entering_season}` : 'Option decisions'} icon={<Scale size={15} />}>
-        {loading && !data && <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Loading option decisions…</div>}
+        {loading && !data && <LoadingNote>Loading option decisions…</LoadingNote>}
         {data && data.items.length === 0 && (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>No player/team options for {data.entering_season}.</div>
+          <EmptyState title={`No player/team options for ${data.entering_season}.`} />
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -353,21 +352,23 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span className="ds-eyebrow">Team</span>
-        <Select value={selectedId != null ? String(selectedId) : ''} onChange={(e) => setTeam(e.target.value)} aria-label="Select team">
-          {teams.length === 0 && <option value="">Loading teams…</option>}
-          {teams.map((t) => <option key={t.team_id} value={t.team_id}>{t.name ?? t.abbreviation}</option>)}
-        </Select>
-        <span className="ds-eyebrow" style={{ marginLeft: 4 }}>Rank by</span>
-        <Select value={sort} onChange={(e) => setSort(e.target.value as 'fit' | 'value')} aria-label="Rank targets by">
-          <option value="fit">Roster need fit</option>
-          <option value="value">Model value</option>
-        </Select>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <Field label="Team" htmlFor="fa-team-select" inline>
+          <Select id="fa-team-select" value={selectedId != null ? String(selectedId) : ''} onChange={(e) => setTeam(e.target.value)}>
+            {teams.length === 0 && <option value="">Loading teams…</option>}
+            {teams.map((t) => <option key={t.team_id} value={t.team_id}>{t.name ?? t.abbreviation}</option>)}
+          </Select>
+        </Field>
+        <Field label="Rank by" htmlFor="fa-rank-select" inline>
+          <Select id="fa-rank-select" value={sort} onChange={(e) => setSort(e.target.value as 'fit' | 'value')}>
+            <option value="fit">Roster need fit</option>
+            <option value="value">Model value</option>
+          </Select>
+        </Field>
       </div>
 
       {error && <ErrorNote message={error} />}
-      {loading && !data && <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading projected room…</div>}
+      {loading && !data && <LoadingNote>Loading projected room…</LoadingNote>}
 
       {data && ctx && (
         <>
@@ -532,12 +533,11 @@ function FreeAgencyContent() {
           onChange={setTab}
           ariaLabel="Free-agency view"
         />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="ds-eyebrow">Class of</span>
-          <Select value={season} onChange={(e) => setSeason(e.target.value)} aria-label="Free-agency season">
+        <Field label="Class of" htmlFor="fa-class-select" inline>
+          <Select id="fa-class-select" value={season} onChange={(e) => setSeason(e.target.value)}>
             {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
           </Select>
-        </div>
+        </Field>
       </div>
 
       {tab === 'board' && <BoardTab season={season} />}
@@ -549,7 +549,7 @@ function FreeAgencyContent() {
 
 export default function FreeAgencyPage() {
   return (
-    <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>}>
+    <Suspense fallback={<LoadingNote>Loading…</LoadingNote>}>
       <FreeAgencyContent />
     </Suspense>
   );

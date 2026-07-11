@@ -6,7 +6,7 @@ interface PlayerCutoutProps {
   variant?: 'hero' | 'card';
 }
 
-export function PlayerCutout({ playerId, name, variant = 'hero' }: PlayerCutoutProps) {
+export function PlayerCutout({ playerId, variant = 'hero' }: PlayerCutoutProps) {
   if (playerId == null) return null;
 
   return (
@@ -17,7 +17,6 @@ export function PlayerCutout({ playerId, name, variant = 'hero' }: PlayerCutoutP
       loading="lazy"
       className={`siq-player-cutout siq-player-cutout-${variant}`}
       onError={(e) => { e.currentTarget.style.display = 'none'; }}
-      title={name}
     />
   );
 }
