@@ -31,6 +31,9 @@ import {
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
+import { Button, ButtonLink } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Select } from '@/components/ui/Select';
 import { Card } from '@/components/ui/Card';
 import { CapBar, CAP_TIER_LABEL, CapTierKey, capTierBadgeTone } from '@/components/cap/CapBar';
 import { StatTile } from '@/components/ui/StatTile';
@@ -107,16 +110,15 @@ function TargetRow({
         <strong>{target.value_pct != null ? fmtPct(target.value_pct) : '—'}</strong>
         <span>{target.lo_pct != null && target.hi_pct != null ? `${target.lo_pct.toFixed(1)}–${target.hi_pct.toFixed(1)}%` : 'No interval'}</span>
       </div>
-      <button
-        type="button"
-        className="siq-icon-button siq-offseason-add"
+      <IconButton
+        className="siq-offseason-add"
         onClick={onAdd}
         disabled={added}
-        aria-label={added ? `${target.full_name} is in the plan` : `Add ${target.full_name} to plan`}
+        label={added ? `${target.full_name} is in the plan` : `Add ${target.full_name} to plan`}
         title={added ? 'Already in plan' : 'Add to plan'}
       >
         <Plus size={16} />
-      </button>
+      </IconButton>
     </div>
   );
 }
@@ -145,16 +147,16 @@ function OptionRow({
           <Badge tone={player.option.tone} variant="outline" size="sm">{player.option.verdict}</Badge>
         </span>
       ) : null}
-      <button
-        type="button"
-        className={selected ? 'siq-secondary-button' : 'siq-primary-button'}
+      <Button
+        size="sm"
+        variant={selected ? 'secondary' : 'primary'}
         onClick={onToggle}
         aria-pressed={selected}
-        style={{ padding: '6px 9px', fontSize: 12, whiteSpace: 'nowrap' }}
+        icon={selected ? <RotateCcw size={14} /> : <Trash2 size={14} />}
+        style={{ whiteSpace: 'nowrap' }}
       >
-        {selected ? <RotateCcw size={14} /> : <Trash2 size={14} />}
         {selected ? 'Restore' : isTeamOption ? 'Decline' : 'Assume opt out'}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -188,15 +190,13 @@ function ContractEditor({
             </Badge>
           </span>
         ) : null}
-        <button
-          type="button"
-          className="siq-icon-button"
+        <IconButton
           onClick={onRemove}
-          aria-label={`Remove ${draft.player.full_name} from plan`}
+          label={`Remove ${draft.player.full_name} from plan`}
           title="Remove from plan"
         >
           <Trash2 size={15} />
-        </button>
+        </IconButton>
       </div>
 
       <div className="siq-offseason-controls">
@@ -216,17 +216,19 @@ function ContractEditor({
         </label>
         <label>
           <span>Years</span>
-          <select
+          <Select
+            selectSize="sm"
             value={draft.years}
             onChange={(event) => onChange({ years: Number(event.target.value) })}
             aria-label={`${draft.player.full_name} contract years`}
           >
             {[1, 2, 3, 4].map((year) => <option key={year} value={year}>{year}</option>)}
-          </select>
+          </Select>
         </label>
         <label>
           <span>Final year</span>
-          <select
+          <Select
+            selectSize="sm"
             value={draft.finalYearOption}
             onChange={(event) => onChange({ finalYearOption: event.target.value as FinalYearOption })}
             aria-label={`${draft.player.full_name} final year structure`}
@@ -234,7 +236,7 @@ function ContractEditor({
             <option value="none">Guaranteed</option>
             <option value="team">Team option</option>
             <option value="player">Player option</option>
-          </select>
+          </Select>
         </label>
       </div>
     </div>
@@ -522,7 +524,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
         <div className="siq-offseason-plan-column">
           <Surface variant="instrument" eyebrow="Staged moves" icon={<CalendarRange size={15} />}
             action={(contracts.length || declines.length) ? (
-              <button type="button" className="siq-icon-button" onClick={resetPlan} aria-label="Reset offseason plan" title="Reset plan"><RotateCcw size={15} /></button>
+              <IconButton onClick={resetPlan} label="Reset offseason plan" title="Reset plan"><RotateCcw size={15} /></IconButton>
             ) : undefined}>
             {contracts.length === 0 && declines.length === 0 ? (
               <div className="siq-offseason-empty siq-offseason-empty--plan">
@@ -554,7 +556,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
                       <span className="ds-tnum" style={{ color: 'var(--positive-text)', fontWeight: 700 }}>
                         {move ? `−${fmtM(move.removed_existing_usd)}` : '—'}
                       </span>
-                      <button type="button" className="siq-icon-button" onClick={() => toggleDecline(playerId, true)} aria-label={`Restore ${player.full_name} option`} title="Restore option"><RotateCcw size={15} /></button>
+                      <IconButton onClick={() => toggleDecline(playerId, true)} label={`Restore ${player.full_name} option`} title="Restore option"><RotateCcw size={15} /></IconButton>
                     </div>
                   );
                 })}
@@ -604,16 +606,19 @@ function OffseasonContent() {
     <div className="siq-offseason-page">
       <div className="siq-offseason-toolbar">
         <span className="ds-eyebrow">Offseason plan</span>
-        <select value={teamId ?? ''} onChange={(event) => updateRoute(Number(event.target.value), season)} aria-label="Select team">
+        <Select value={teamId ?? ''} onChange={(event) => updateRoute(Number(event.target.value), season)} aria-label="Select team">
           {teams.length === 0 ? <option value="">Loading teams…</option> : null}
           {teams.map((team) => <option key={team.team_id} value={team.team_id}>{team.name ?? team.abbreviation}</option>)}
-        </select>
-        <select value={season} onChange={(event) => teamId && updateRoute(teamId, event.target.value)} aria-label="Select offseason">
+        </Select>
+        <Select value={season} onChange={(event) => teamId && updateRoute(teamId, event.target.value)} aria-label="Select offseason">
           {SEASONS.map((item) => <option key={item} value={item}>{item} offseason</option>)}
-        </select>
-        <Link href={`/free-agency?tab=targets&team=${teamId ?? ''}&season=${encodeURIComponent(season)}`} className="siq-secondary-button" style={{ textDecoration: 'none', marginLeft: 'auto' }}>
+        </Select>
+        <ButtonLink
+          href={`/free-agency?tab=targets&team=${teamId ?? ''}&season=${encodeURIComponent(season)}`}
+          className="siq-offseason-toolbar__link"
+        >
           Free-agency board
-        </Link>
+        </ButtonLink>
       </div>
       {teamId ? <PlannerWorkspace key={`${teamId}-${season}`} teamId={teamId} season={season} /> : <div className="siq-offseason-loading">Loading teams…</div>}
     </div>

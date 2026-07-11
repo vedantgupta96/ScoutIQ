@@ -12,6 +12,7 @@ import {
 import { Card } from '@/components/ui/Card';
 import { Surface } from '@/components/ui/Surface';
 import { Badge } from '@/components/ui/Badge';
+import { Button, ButtonLink } from '@/components/ui/Button';
 import { StatTile } from '@/components/ui/StatTile';
 import { VerdictPill } from '@/components/ui/VerdictPill';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
@@ -548,17 +549,12 @@ function SimulatorContent() {
                 Updating
               </Badge>
             )}
-            <Link href={`/players/${player.player_id}`} className="siq-secondary-button">
-              <ArrowUpRight size={15} />
+            <ButtonLink href={`/players/${player.player_id}`} icon={<ArrowUpRight size={15} />}>
               View profile
-            </Link>
-            <button
-              type="button"
-              className="siq-secondary-button"
-              onClick={() => { setPlayer(null); setResult(null); router.push('/simulator'); }}
-            >
+            </ButtonLink>
+            <Button onClick={() => { setPlayer(null); setResult(null); router.push('/simulator'); }}>
               Change player
-            </button>
+            </Button>
           </div>
 
           <div className="siq-simulator-grid">
