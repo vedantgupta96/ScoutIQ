@@ -44,9 +44,9 @@ function RoomLine({ label, room }: { label: string; room: number | null }) {
   if (room == null) return null;
   const over = room < 0;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
-      <span className="ds-eyebrow" style={{ letterSpacing: '0.06em' }}>{label}</span>
-      <span className="ds-tnum" style={{ fontWeight: 700, color: over ? 'var(--negative-text)' : 'var(--positive-text)' }}>
+    <span className="siq-teams-room-line">
+      <span className="ds-eyebrow siq-teams-room-label">{label}</span>
+      <span className="ds-tnum siq-teams-room-value" style={{ color: over ? 'var(--negative-text)' : 'var(--positive-text)' }}>
         {over ? `−${fmtM(Math.abs(room))} over` : `${fmtM(room)} under`}
       </span>
     </span>
@@ -57,28 +57,25 @@ function RosterRow({ player, gaugeDomainMaxPct }: { player: TeamCapSheetPlayer; 
   const team = player.current_team ?? player.latest_stats_team;
   return (
     <div className="siq-roster-ledger-row">
-      <Link href={`/players/${player.player_id}`} style={{ textDecoration: 'none', minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+      <Link href={`/players/${player.player_id}`} className="siq-plain-link siq-min0">
+        <div className="siq-row siq-row--10 siq-min0">
           <Avatar name={player.full_name} size="md" position={player.position} playerId={player.player_id} />
-          <div style={{ minWidth: 0 }}>
-            <div style={{
-              fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>
+          <div className="siq-min0">
+            <div className="siq-teams-player-name">
               {player.full_name}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            <div className="ds-note">
               {player.position ?? '—'}{player.age != null ? ` · age ${player.age}` : ''}{team?.abbreviation ? ` · ${team.abbreviation}` : ''}
             </div>
           </div>
         </div>
       </Link>
 
-      <div style={{ textAlign: 'right' }}>
-        <div className="ds-tnum" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+      <div className="ds-right">
+        <div className="ds-tnum siq-teams-cap-value">
           {player.cap_hit_usd != null ? fmtM(player.cap_hit_usd) : '—'}
         </div>
-        <div className="ds-tnum" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+        <div className="ds-tnum ds-note">
           {player.salary_pct != null ? `${fmtPct(player.salary_pct)} cap` : (player.pay_source == null ? 'no cap data' : '—')}
         </div>
       </div>
@@ -92,11 +89,11 @@ function RosterRow({ player, gaugeDomainMaxPct }: { player: TeamCapSheetPlayer; 
             domainMaxPct={gaugeDomainMaxPct}
           />
         ) : (
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No model value</span>
+          <span className="ds-note">No model value</span>
         )}
       </div>
 
-      <div className="ds-tnum" style={{ textAlign: 'right', fontSize: 14, fontWeight: 800, color: gapColor(player.gap_pct) }}>
+      <div className="ds-tnum ds-right siq-teams-gap-value" style={{ color: gapColor(player.gap_pct) }}>
         {player.gap_pct != null ? `${signed(player.gap_pct)}%` : '—'}
       </div>
     </div>
@@ -131,10 +128,8 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
 
   return (
     <div
+      className="siq-stack"
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--panel-gap)',
         '--team-primary': visual.primary,
         '--team-secondary': visual.secondary,
         '--team-wash': visual.wash,
@@ -143,36 +138,36 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
       {/* Payroll hero */}
       <Panel variant="instrument" teamAccent eyebrow="Team payroll vs cap" icon={<Shield size={15} />}
         action={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Link href={`/offseason?team=${sheet.team.team_id}`} style={{ textDecoration: 'none' }}>
+          <div className="siq-row">
+            <Link href={`/offseason?team=${sheet.team.team_id}`} className="siq-plain-link">
               <Badge tone="accent" size="sm">Build plan →</Badge>
             </Link>
-            <Link href={`/free-agency?tab=targets&team=${sheet.team.team_id}`} style={{ textDecoration: 'none' }}>
+            <Link href={`/free-agency?tab=targets&team=${sheet.team.team_id}`} className="siq-plain-link">
               <Badge tone="neutral" variant="outline" size="sm">FA targets →</Badge>
             </Link>
             <Badge tone="confidence" variant="outline" size="sm">{sheet.season}</Badge>
           </div>
         }>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        <div className="siq-teams-hero-head">
+          <div className="siq-row siq-row--12 siq-min0">
             <TeamLogo
               teamId={sheet.team.team_id}
               abbreviation={sheet.team.abbreviation}
               name={sheet.team.name}
               size="lg"
             />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', minWidth: 0 }}>
-              <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <div className="siq-row siq-row--12 siq-teams-row-wrap-fit">
+              <h1 className="siq-teams-title">
                 {sheet.team.name ?? sheet.team.abbreviation ?? 'Team'}
               </h1>
               <Badge tone={capTierBadgeTone(tier)} size="md">{CAP_TIER_LABEL[tier]}</Badge>
             </div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div className="ds-tnum" style={{ fontSize: 28, fontWeight: 700, fontFamily: 'var(--font-display)', color: 'var(--text-primary)', lineHeight: 1 }}>
+          <div className="ds-right">
+            <div className="ds-tnum siq-teams-payroll-value">
               {fmtM(totals.total_payroll_usd)}
             </div>
-            <div className="ds-tnum" style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
+            <div className="ds-tnum ds-note siq-teams-mt3">
               {totals.payroll_pct != null ? `${fmtPct(totals.payroll_pct)} of cap` : '—'}
             </div>
           </div>
@@ -189,14 +184,14 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
               showLabels
               valueLabel="Payroll"
             />
-            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 14 }}>
+            <div className="siq-teams-room-lines">
               <RoomLine label="To tax" room={ctx.room_to_tax} />
               <RoomLine label="To 1st apron" room={ctx.room_to_first_apron} />
               <RoomLine label="To 2nd apron" room={ctx.room_to_second_apron} />
             </div>
           </>
         ) : (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+          <p className="ds-note ds-note--13 ds-m0">
             Cap thresholds unavailable for {sheet.season}.
           </p>
         )}
@@ -249,7 +244,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
         }
       >
         {sheet.top_bargain && sheet.top_overpay && (
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+          <div className="siq-teams-badge-row">
             <Badge tone="positive" variant="outline" size="sm">
               Top bargain: {sheet.top_bargain.full_name} {sheet.top_bargain.gap_pct != null ? signed(sheet.top_bargain.gap_pct) + '%' : ''}
             </Badge>
@@ -260,9 +255,9 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
         )}
         <div className="siq-roster-ledger-head">
           <span className="ds-eyebrow">Player</span>
-          <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Cap hit</span>
+          <span className="ds-eyebrow ds-right">Cap hit</span>
           <span className="ds-eyebrow">Value vs pay</span>
-          <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Gap</span>
+          <span className="ds-eyebrow ds-right">Gap</span>
         </div>
         {players.map((p) => <RosterRow key={p.player_id} player={p} gaugeDomainMaxPct={gaugeDomainMaxPct} />)}
       </Panel>
@@ -315,14 +310,14 @@ function TeamsContent() {
   }, [effectiveSelectedId]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+    <div className="siq-stack">
+      <div className="siq-row siq-row--12 siq-teams-row-wrap">
         <span className="ds-eyebrow">Team war room</span>
         <Select
           value={effectiveSelectedId ?? ''}
           onChange={(e) => router.replace(`/teams?team=${e.target.value}`)}
           aria-label="Select team"
-          style={{ minWidth: 220 }}
+          className="siq-teams-select-wide"
         >
           {teams.length === 0 && <option value="">Loading teams…</option>}
           {teams.map((t) => <option key={t.team_id} value={t.team_id}>{t.name ?? t.abbreviation}</option>)}

@@ -72,30 +72,20 @@ export function CapBar({
 
   return (
     <div
-      style={{ position: 'relative' }}
+      className="siq-cap-bar-root"
       onMouseLeave={() => setHover(null)}
     >
       {showLabels && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+        <div className="siq-cap-bar-labels">
           {markers.map((marker) => (
             <span
               key={marker.label}
               title={`${marker.label}: ${fmtM(marker.value)}`}
               onMouseEnter={() => setHover({ label: marker.label, value: marker.value, pct: marker.pct })}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                padding: 0,
-                border: 0,
-                background: 'transparent',
-                color: 'var(--text-muted)',
-                font: 'inherit',
-                cursor: 'default',
-              }}
+              className="siq-cap-bar-marker-trigger"
             >
-              <span style={{ width: 6, height: 6, borderRadius: 'var(--radius-pill)', background: marker.color, boxShadow: '0 0 0 2px var(--bg-panel)' }} />
-              <span className="ds-eyebrow" style={{ fontSize: 12, letterSpacing: '0.02em', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              <span className="siq-cap-bar-marker-swatch" style={{ background: marker.color }} />
+              <span className="ds-eyebrow siq-cap-bar-marker-text">
                 {marker.label}
               </span>
             </span>
@@ -103,19 +93,13 @@ export function CapBar({
         </div>
       )}
 
-      <div style={{ position: 'relative', paddingBottom: showLabels ? 18 : 0 }}>
-        <div style={{
-          height, background: 'var(--bg-inset)', borderRadius: 'var(--radius-pill)',
-          position: 'relative', overflow: 'hidden',
-        }}>
+      <div className="siq-cap-bar-plot" style={{ paddingBottom: showLabels ? 18 : 0 }}>
+        <div className="siq-cap-bar-track" style={{ height }}>
           {/* Tinted threshold zones */}
-          <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${taxPct}%`, width: `${Math.max(0, ap1Pct - taxPct)}%`, background: 'rgba(236,178,46,0.10)' }} />
-          <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${ap1Pct}%`, width: `${Math.max(0, ap2Pct - ap1Pct)}%`, background: 'rgba(236,178,46,0.18)' }} />
-          <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${ap2Pct}%`, right: 0, background: 'rgba(238,71,71,0.13)' }} />
-          <div style={{
-            width: `${pctOfMax}%`, height: '100%',
-            background: fill, borderRadius: 'var(--radius-pill)', boxShadow: glow,
-          }} />
+          <div className="siq-cap-bar-zone siq-cap-bar-zone--tax" style={{ left: `${taxPct}%`, width: `${Math.max(0, ap1Pct - taxPct)}%` }} />
+          <div className="siq-cap-bar-zone siq-cap-bar-zone--first-apron" style={{ left: `${ap1Pct}%`, width: `${Math.max(0, ap2Pct - ap1Pct)}%` }} />
+          <div className="siq-cap-bar-zone siq-cap-bar-zone--second-apron" style={{ left: `${ap2Pct}%` }} />
+          <div className="siq-cap-bar-fill" style={{ width: `${pctOfMax}%`, background: fill, boxShadow: glow }} />
         </div>
 
         {/* Threshold markers ride above the track so they read at the edges */}
@@ -124,18 +108,12 @@ export function CapBar({
             key={marker.label}
             title={`${marker.label}: ${fmtM(marker.value)}`}
             onMouseEnter={() => setHover({ label: marker.label, value: marker.value, pct: marker.pct })}
+            className="siq-cap-bar-threshold"
             style={{
-              position: 'absolute',
               left: `${marker.pct}%`,
               top: markerTop,
-              width: 2,
               height: markerHeight,
               background: marker.color,
-              opacity: 0.8,
-              transform: 'translateX(-50%)',
-              borderRadius: 'var(--radius-pill)',
-              cursor: 'help',
-              zIndex: 2,
             }}
           />
         ))}
@@ -143,34 +121,23 @@ export function CapBar({
         <div
           title={`${valueLabel}: ${fmtM(value)}`}
           onMouseEnter={() => setHover({ label: valueLabel, value, pct: pctOfMax })}
+          className="siq-cap-bar-current-dot"
           style={{
-            position: 'absolute',
             left: `${pctOfMax}%`,
             top: height / 2,
-            transform: 'translate(-50%, -50%)',
             width: height + 7,
             height: height + 7,
-            borderRadius: 'var(--radius-pill)',
             background: fill,
-            border: '2px solid var(--bg-panel)',
             boxShadow: glow === 'none' ? '0 1px 5px rgba(16,24,40,0.25)' : `${glow}, 0 1px 5px rgba(16,24,40,0.25)`,
-            cursor: 'help',
-            zIndex: 4,
           }}
         />
 
         {showLabels && (
           <div
-            className="ds-tnum"
+            className="ds-tnum siq-cap-bar-current-label"
             style={{
-              position: 'absolute',
               left: labelLeft,
               top: height + 7,
-              transform: 'translateX(-50%)',
-              fontSize: 12,
-              fontWeight: 700,
-              color: 'var(--text-primary)',
-              whiteSpace: 'nowrap',
             }}
           >
             {valueLabel} {fmtM(value)}
@@ -179,21 +146,10 @@ export function CapBar({
 
         {hover && (
           <div
+            className="siq-cap-bar-tooltip"
             style={{
-              position: 'absolute',
               left: hoverLeft,
               top: height + 25,
-              transform: 'translateX(-50%)',
-              padding: '5px 7px',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--ink-900)',
-              color: '#fff',
-              fontSize: 12,
-              fontWeight: 700,
-              whiteSpace: 'nowrap',
-              boxShadow: 'var(--shadow-md)',
-              zIndex: 20,
-              pointerEvents: 'none',
             }}
           >
             {hover.label}: {fmtM(hover.value)}

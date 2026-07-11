@@ -52,15 +52,12 @@ import { teamVisual } from '@/lib/teamVisuals';
 
 function StatRow({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-      padding: '8px 0', borderBottom: '1px solid var(--border-subtle)',
-    }}>
-      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{label}</span>
-      <span className="ds-tnum" style={{
-        fontSize: 14, fontWeight: 600,
-        color: warn ? 'var(--warning-text)' : 'var(--text-primary)',
-      }}>
+    <div className="siq-profile-stat-row">
+      <span className="siq-profile-stat-label">{label}</span>
+      <span
+        className="ds-tnum siq-profile-stat-value"
+        style={{ color: warn ? 'var(--warning-text)' : 'var(--text-primary)' }}
+      >
         {value}
       </span>
     </div>
@@ -127,28 +124,24 @@ function ScoutTraitRow({ trait }: { trait: PlayerScoutTraitRating }) {
   const scoreColor = score < 2.5 ? 'var(--negative-text)' : score < 3.75 ? 'var(--warning-text)' : 'var(--positive-text)';
   const topEvidence = trait.evidence[0];
   return (
-    <div style={{ padding: '9px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{traitLabel(trait.trait)}</span>
-        <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: scoreColor }}>
+    <div className="siq-profile-scout-trait">
+      <div className="siq-row siq-row--10 siq-profile-scout-heading">
+        <span className="siq-profile-scout-label">{traitLabel(trait.trait)}</span>
+        <span className="ds-tnum siq-profile-scout-score" style={{ color: scoreColor }}>
           {trait.average_score.toFixed(1)}/5
         </span>
       </div>
       {/* Full-width quality gradient; a dim overlay masks the unreached portion
           so the visible fill edge sits at the true score color. */}
-      <div style={{
-        position: 'relative', height: 8, marginTop: 7, borderRadius: 'var(--radius-pill)',
-        background: 'var(--grad-quality)', overflow: 'hidden',
-        boxShadow: 'inset 0 1px 2px rgba(16,24,40,0.06)',
-      }}>
-        <div style={{ position: 'absolute', top: 0, bottom: 0, left: width, right: 0, background: 'var(--bg-inset)' }} />
+      <div className="siq-profile-scout-track">
+        <div className="siq-profile-scout-mask" style={{ left: width }} />
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, minWidth: 0 }}>
+      <div className="siq-row siq-min0 siq-profile-scout-evidence-row">
         <Badge tone={trait.confidence_mix.high > 0 ? 'confidence' : 'neutral'} size="sm">
           {trait.report_count} report{trait.report_count === 1 ? '' : 's'}
         </Badge>
         {topEvidence && (
-          <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <span className="ds-note siq-profile-truncate">
             &quot;{topEvidence}&quot;
           </span>
         )}
@@ -172,39 +165,39 @@ function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsRespo
       }
     >
       {error ? (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+        <p className="siq-profile-state siq-profile-state--detail">
           Scout ratings unavailable: {error}
         </p>
       ) : ratings == null ? (
-        <p role="status" style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading scout ratings…</p>
+        <p role="status" className="siq-profile-state">Loading scout ratings…</p>
       ) : ratings.report_count === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+        <p className="siq-profile-state siq-profile-state--detail">
           No scout-report coverage for this player yet.
         </p>
       ) : (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
+          <div className="siq-row siq-profile-scout-summary">
+            <span className="siq-profile-scout-count">
               {ratings.report_count}
             </span>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            <span className="siq-profile-scout-summary-copy">
               {isReal ? 'sourced' : 'synthetic'} report{ratings.report_count === 1 ? '' : 's'} aggregated
             </span>
           </div>
           {ratings.traits.map((trait) => <ScoutTraitRow key={trait.trait} trait={trait} />)}
           {isReal && ratings.citations && ratings.citations.length > 0 && (
-            <div style={{ margin: '12px 0 0' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 5 }}>
+            <div className="siq-profile-sources">
+              <div className="siq-profile-sources-title">
                 Sources
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <div className="siq-profile-citation-list">
                 {ratings.citations.map((url, i) => (
                   <a
                     key={url}
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ fontSize: 12, color: 'var(--accent-text, var(--text-secondary))', textDecoration: 'underline' }}
+                    className="siq-profile-citation-link"
                   >
                     [{i + 1}] {citationHost(url)}
                   </a>
@@ -212,7 +205,7 @@ function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsRespo
               </div>
             </div>
           )}
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+          <p className="ds-note siq-profile-note-after">
             {ratings.caveat}
           </p>
         </>
@@ -241,38 +234,35 @@ function ContractYearRow({ year }: { year: PlayerContractYear }) {
 
   return (
     <div className="siq-contract-year-row">
-      <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+      <span className="ds-tnum siq-profile-contract-season">
         {year.season}
       </span>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-          <span className="ds-tnum" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+      <div className="siq-min0">
+        <div className="siq-profile-contract-head">
+          <span className="ds-tnum siq-profile-contract-amount">
             {year.cap_hit_usd != null ? fmtM(year.cap_hit_usd) : '—'}
           </span>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          <span className="ds-note">
             {year.cap_hit_pct != null ? fmtPct(year.cap_hit_pct) + ' of cap' : 'cap % unavailable'}
           </span>
           {optionLabel && <Badge tone="warning" variant="outline" size="sm">{optionLabel}</Badge>}
           {!year.is_guaranteed && !optionLabel && <Badge tone="neutral" variant="outline" size="sm">Non-gtd</Badge>}
         </div>
         {year.value_pct != null && (
-          <div style={{ marginTop: 2, fontSize: 12, color: 'var(--text-muted)' }}>
+          <div className="ds-note siq-profile-contract-model-value">
             Model value {fmtPct(year.value_pct)} of cap
           </div>
         )}
         {year.cap_hit_pct != null && (
-          <div style={{
-            position: 'relative', height: 4, marginTop: 5, borderRadius: 'var(--radius-pill)',
-            background: 'var(--bg-inset)', overflow: 'hidden',
-          }}>
-            <div style={{
-              width: `${pctPosition(year.cap_hit_pct, 35)}%`,
-              height: '100%', background: barFill,
-            }} />
+          <div className="siq-profile-contract-track">
+            <div
+              className="siq-profile-contract-fill"
+              style={{ width: `${pctPosition(year.cap_hit_pct, 35)}%`, background: barFill }}
+            />
           </div>
         )}
       </div>
-      <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: gapColor, textAlign: 'right' }}>
+      <span className="ds-tnum ds-right siq-profile-contract-gap" style={{ color: gapColor }}>
         {gap != null ? `${signed(gap)}%` : '—'}
       </span>
     </div>
@@ -300,9 +290,9 @@ function ContractCard({
       icon={<FileText size={15} />}
       action={
         contract ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="siq-row">
             {contract.years_detail.some((y) => y.is_player_option || y.is_team_option) && (
-              <Link href="/free-agency?tab=options" style={{ textDecoration: 'none' }}>
+              <Link href="/free-agency?tab=options" className="siq-plain-link">
                 <Badge tone="warning" variant="outline" size="sm">Option decision →</Badge>
               </Link>
             )}
@@ -312,7 +302,7 @@ function ContractCard({
       }
     >
       {contract == null ? (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading contract…</p>
+        <p className="siq-profile-state">Loading contract…</p>
       ) : (
         <>
           <div className="siq-contract-summary-strip">
@@ -336,7 +326,7 @@ function ContractCard({
             <Button variant="primary" icon={<SlidersHorizontal size={15} />} onClick={onSimulateExtension} disabled={!contract.extension_start_season}>
               Simulate extension
             </Button>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5, flex: '1 1 220px' }}>
+            <p className="ds-note ds-m0 siq-profile-contract-caveat">
               {contract.caveat}
             </p>
           </div>
@@ -363,18 +353,18 @@ function SimilarPlayerRow({ result }: { result: SimilarPlayerResult }) {
     <div className="siq-similar-dossier-row">
       <PlayerCutout playerId={result.player.player_id} name={result.player.full_name} variant="card" />
       <Link href={`/players/${result.player.player_id}`} className="siq-similar-identity-link">
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+        <div className="siq-row siq-row--10 siq-min0">
           <Avatar name={result.player.full_name} size="md" position={result.player.position} playerId={result.player.player_id} />
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <div className="siq-min0">
+            <div className="siq-profile-similar-name-row">
+              <span className="siq-profile-similar-name">
                 {result.player.full_name}
               </span>
               <Badge tone="neutral" variant="outline" size="sm">
                 {result.player.position ?? '—'}
               </Badge>
             </div>
-            <div style={{ marginTop: 3, fontSize: 12, color: 'var(--text-muted)' }}>
+            <div className="ds-note siq-profile-similar-meta">
               {result.player.current_team?.abbreviation ?? result.player.latest_stats_team?.abbreviation ?? '—'}
               {result.age != null ? ` · age ${result.age.toFixed(0)}` : ''}
             </div>
@@ -391,14 +381,14 @@ function SimilarPlayerRow({ result }: { result: SimilarPlayerResult }) {
         </div>
       )}
       <div className="siq-similar-metrics">
-        <span className="ds-tnum" style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent-text)' }}>
+        <span className="ds-tnum siq-profile-similar-score">
           {result.similarity_score.toFixed(1)}
         </span>
         <span className="ds-eyebrow">match</span>
-        <div className="siq-similar-gauge" style={{ width: 92, flex: '0 0 auto' }}>
+        <div className="siq-similar-gauge siq-profile-similar-gauge">
           <MiniValuePayGauge valuePct={result.value_pct} payPct={result.salary_pct} />
         </div>
-        <div className="siq-similar-value-strip" style={{ fontSize: 12 }}>
+        <div className="siq-similar-value-strip siq-profile-similar-value-strip">
           <div>V {result.value_pct != null ? fmtPct(result.value_pct) : '—'}</div>
           <div>P {result.salary_pct != null ? fmtPct(result.salary_pct) : '—'}</div>
           <div style={{ color: gapColor }}>G {gap != null ? `${signed(gap)}%` : '—'}</div>
@@ -440,8 +430,7 @@ function SimilarPlayersCard({
           <button
             key={key}
             onClick={() => onModeChange(key)}
-            className={key === mode ? 'siq-primary-button' : 'siq-secondary-button'}
-            style={{ padding: '6px 10px', fontSize: 12, width: 'auto' }}
+            className={`${key === mode ? 'siq-primary-button' : 'siq-secondary-button'} siq-profile-mode-button`}
           >
             {SIMILAR_MODE_LABELS[key]}
           </button>
@@ -449,18 +438,18 @@ function SimilarPlayersCard({
       </div>
 
       {error ? (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+        <p className="siq-profile-state siq-profile-state--detail">
           Similar-player market unavailable: {error}
         </p>
       ) : market == null ? (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading similar players…</p>
+        <p className="siq-profile-state">Loading similar players…</p>
       ) : market.results.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+        <p className="siq-profile-state siq-profile-state--detail">
           No qualified matches found for this mode.
         </p>
       ) : (
         <>
-          <div className="siq-compact-tags" style={{ marginBottom: 2 }}>
+          <div className="siq-compact-tags siq-profile-similar-basis">
             {market.basis.slice(0, 5).map((basis) => (
               <Badge key={basis} tone="neutral" variant="outline" size="sm">{basis}</Badge>
             ))}
@@ -468,7 +457,7 @@ function SimilarPlayersCard({
           {market.results.slice(0, 6).map((result) => (
             <SimilarPlayerRow key={result.player.player_id} result={result} />
           ))}
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+          <p className="ds-note siq-profile-note-after">
             {market.caveat}
           </p>
         </>
@@ -553,7 +542,7 @@ function DecisionHero({
       )}
       <div className="siq-decision-identity">
         <Avatar name={val.player_name} size="xl" position={val.position} playerId={val.player_id} />
-        <div style={{ minWidth: 0 }}>
+        <div className="siq-min0">
           <div className="siq-decision-kicker">
             <Badge tone="neutral" size="sm">{val.season}</Badge>
             {val.current_team && (
@@ -725,8 +714,8 @@ function ContractSpark({ contract }: { contract: PlayerContractResponse | null }
         )}
       </svg>
       <div className="siq-contract-spark__legend">
-        <span><i style={{ background: 'var(--confidence)' }} />Model value, % of cap</span>
-        <span><i style={{ background: 'var(--text-faint)' }} />Cap hit</span>
+        <span><i className="siq-profile-spark-swatch--value" />Model value, % of cap</span>
+        <span><i className="siq-profile-spark-swatch--pay" />Cap hit</span>
       </div>
     </div>
   );
@@ -853,13 +842,13 @@ function FrontOfficeRead({
       <Panel variant="board" teamAccent eyebrow="Market signal" icon={<GitCompare size={15} />}>
         {topMatch ? (
           <div className="siq-market-signal">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <div className="siq-row siq-row--10 siq-min0">
               <Avatar name={topMatch.player.full_name} size="md" position={topMatch.player.position} playerId={topMatch.player.player_id} />
-              <div style={{ minWidth: 0 }}>
+              <div className="siq-min0">
                 <Link href={`/players/${topMatch.player.player_id}`} className="siq-market-player-link">
                   {topMatch.player.full_name}
                 </Link>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                <div className="ds-note">
                   {topMatch.player.current_team?.abbreviation ?? '—'} · {topMatch.similarity_score.toFixed(1)} match
                 </div>
               </div>
@@ -880,7 +869,7 @@ function FrontOfficeRead({
             <RiskLine label="Comp gap" value={topMatch.gap_pct != null ? `${signed(topMatch.gap_pct)}%` : '—'} tone={topMatch.gap_pct != null && topMatch.gap_pct >= 0 ? 'positive' : 'negative'} />
           </div>
         ) : (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading market signal…</p>
+          <p className="siq-profile-state">Loading market signal…</p>
         )}
       </Panel>
 
@@ -892,7 +881,7 @@ function FrontOfficeRead({
             <RiskLine label="Top trait" value={scoutTop ? `${traitLabel(scoutTop.trait)} ${scoutTop.average_score.toFixed(1)}/5` : '—'} />
           </div>
         </div>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0 0', lineHeight: 1.5 }}>
+        <p className="ds-note siq-profile-confidence-note">
           Use the tabs to move from the executive read into the market, contract structure, scout context, and raw model inputs.
         </p>
       </Panel>
@@ -924,11 +913,11 @@ function RationaleCard({ playerId }: { playerId: number }) {
       action={cost ? <Badge tone="neutral" variant="outline" size="sm">${cost.est_cost_usd.toFixed(4)} · {Math.round((cost.input_tokens + cost.output_tokens) / 100) / 10}k tok</Badge> : undefined}
     >
       {!data && (
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.5 }}>
+        <p className="ds-note siq-profile-rationale-intro">
           Generate a cited rationale on demand. Cached responses show cost after completion.
         </p>
       )}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+      <div className="siq-profile-rationale-controls">
         {(['fusion', 'multi_source'] as RationaleMode[]).map((m) => (
           <button
             key={m}
@@ -936,40 +925,39 @@ function RationaleCard({ playerId }: { playerId: number }) {
             onClick={() => generate(m)}
             disabled={loading}
             aria-busy={loading && mode === m}
-            className={mode === m && (data || loading) ? 'siq-primary-button' : 'siq-secondary-button'}
-            style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
+            className={`${mode === m && (data || loading) ? 'siq-primary-button' : 'siq-secondary-button'} siq-profile-rationale-button`}
           >
             {m === 'fusion' ? 'Generate model vs scout' : 'Generate multi-source'}
           </button>
         ))}
       </div>
       {loading ? (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Generating rationale…</p>
+        <p className="siq-profile-state">Generating rationale…</p>
       ) : error ? (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{error}</p>
+        <p className="siq-profile-state siq-profile-state--detail">{error}</p>
       ) : !data ? (
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+        <p className="ds-note ds-m0 siq-profile-compact-copy">
           Pick a mode to generate a cited verdict fusing the value model with the scouting signal.
         </p>
       ) : (
         <>
-          <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: 0, lineHeight: 1.6 }}>{data.rationale.replace(/\*\*/g, '')}</p>
+          <p className="ds-m0 siq-profile-rationale-copy">{data.rationale.replace(/\*\*/g, '')}</p>
           {data.grounding_issues.length > 0 && (
-            <p style={{ fontSize: 12, color: 'var(--negative-text)', margin: '8px 0 0' }}>
+            <p className="siq-profile-grounding-warning">
               ⚠ grounding: {data.grounding_issues.join('; ')}
             </p>
           )}
           {data.citations.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '10px 0 0' }}>
+            <div className="siq-profile-citation-list siq-profile-citation-list--spaced">
               {data.citations.map((url, i) => (
                 <a key={url} href={url} target="_blank" rel="noopener noreferrer"
-                  style={{ fontSize: 12, color: 'var(--accent-text, var(--text-secondary))', textDecoration: 'underline' }}>
+                  className="siq-profile-citation-link">
                   [{i + 1}] {citationHost(url)}
                 </a>
               ))}
             </div>
           )}
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+          <p className="ds-note siq-profile-note-after">
             {data.cached ? 'Cached · ' : ''}{data.caveat}
           </p>
         </>
@@ -1049,7 +1037,7 @@ function ModelInputs({
         icon={<Scale size={15} />}
         action={<Badge tone="confidence" variant="outline" size="sm">80% interval</Badge>}
       >
-        <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div className="siq-profile-model-summary">
           <StatTile
             label="Model value"
             value={fmtM(valueUsd)}
@@ -1092,12 +1080,12 @@ function ModelInputs({
               const { label, formatted } = formatFeatureValue(key, value);
               return <StatRow key={key} label={label} value={formatted} />;
             })}
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+            <p className="ds-note siq-profile-note-after">
               Raw feature values fed to the model for this season.
             </p>
           </>
         ) : (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+          <p className="siq-profile-state">
             Feature data not available for this player-season.
           </p>
         )}
@@ -1116,7 +1104,7 @@ function ModelInputs({
           />
         )}
         {val.caution_flags.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingTop: 10 }}>
+          <div className="siq-profile-caution-list">
             {val.caution_flags.slice(0, 4).map((flag) => (
               <Badge key={flag} tone="warning" variant="outline" size="sm">{flag}</Badge>
             ))}
@@ -1189,16 +1177,16 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   }, [playerId, similarMode]);
 
   if (loading) {
-    return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>;
+    return <div className="siq-profile-loading">Loading…</div>;
   }
 
   if (error || !val) {
     return (
       <div>
-        <Link href="/players" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 16, textDecoration: 'none', fontSize: 13, color: 'var(--text-secondary)' }}>
+        <Link href="/players" className="siq-plain-link siq-profile-error-back-link">
           <ArrowLeft size={15} /> All players
         </Link>
-        <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-lg)', background: 'var(--negative-soft)', color: 'var(--negative-text)', fontSize: 13 }}>
+        <div className="siq-profile-error-box">
           {error ?? 'Player not found.'}
         </div>
       </div>
@@ -1279,7 +1267,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
               <div className="siq-read-grid">
                 <ScoutRatingsCard ratings={scoutRatings} error={scoutError} />
                 <Panel variant="card" eyebrow="How to read this" icon={<Info size={15} />}>
-                  <p style={{ font: '14px/1.6 var(--font-sans)', color: 'var(--text-primary)', margin: 0 }}>
+                  <p className="ds-m0 siq-profile-how-to-read">
                     Scout ratings are fixture-backed qualitative context for the portfolio demo. Treat them as
                     a separate lens from the deterministic model and cap math.
                   </p>

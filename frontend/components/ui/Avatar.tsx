@@ -27,27 +27,13 @@ export function Avatar({ name, size = 'md', position, playerId }: AvatarProps) {
       title={name}
       role="img"
       aria-label={name}
+      className="siq-avatar"
       style={{
         width: px,
         height: px,
-        borderRadius: '50%',
-        background: 'var(--accent-soft)',
-        border: '1.5px solid var(--accent)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-        position: 'relative',
       }}
     >
-      <span style={{
-        fontFamily: 'var(--font-display)',
-        fontWeight: 700,
-        fontSize: px * 0.36,
-        color: 'var(--accent-text)',
-        lineHeight: 1,
-        letterSpacing: '-0.01em',
-      }}>
+      <span className="siq-avatar__initials" style={{ fontSize: px * 0.36 }}>
         {abbrev}
       </span>
       {playerId != null && (
@@ -58,33 +44,11 @@ export function Avatar({ name, size = 'md', position, playerId }: AvatarProps) {
           aria-hidden="true"
           loading="lazy"
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            borderRadius: '50%',
-            objectFit: 'cover',
-            objectPosition: 'center 12%',
-            background: 'var(--bg-panel)',
-          }}
+          className="siq-avatar__image"
         />
       )}
       {position && (
-        <span style={{
-          position: 'absolute',
-          bottom: -2,
-          right: -2,
-          background: 'var(--bg-panel)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-sm)',
-          fontSize: 9,
-          fontWeight: 700,
-          fontFamily: 'var(--font-mono)',
-          color: 'var(--text-muted)',
-          padding: '0 3px',
-          lineHeight: '14px',
-        }}>
+        <span className="siq-avatar__position">
           {position}
         </span>
       )}

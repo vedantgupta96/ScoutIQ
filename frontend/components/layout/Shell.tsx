@@ -214,7 +214,7 @@ function TopBar({
       </div>
       )}
 
-      <div className="siq-topbar-spacer" style={{ flex: 1 }} />
+      <div className="siq-topbar-spacer" />
 
       {season && (
         <span className="siq-season-badge">

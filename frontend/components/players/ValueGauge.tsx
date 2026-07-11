@@ -63,53 +63,28 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
       role="img"
       aria-label={ariaLabel}
       onMouseLeave={() => setHover(null)}
-      style={{
-        userSelect: 'none',
-        paddingTop: overlap ? 42 : 30,
-        paddingBottom: 34,
-      }}
+      className="siq-value-gauge-root"
+      style={{ paddingTop: overlap ? 42 : 30 }}
     >
-      <div
-        style={{
-          position: 'relative',
-          height: 16,
-          borderRadius: 'var(--radius-pill)',
-          background: 'var(--bg-inset)',
-          border: '1px solid var(--border-subtle)',
-          boxShadow: 'inset 0 1px 2px rgba(16,24,40,0.06)',
-        }}
-      >
+      <div className="siq-value-gauge-track">
         {actualPct != null && actualPosition != null && (
           <div
             aria-hidden="true"
+            className="siq-value-gauge-connector"
             style={{
-              position: 'absolute',
               left: `${Math.min(valuePosition, actualPosition).toFixed(3)}%`,
               width: `${Math.abs(valuePosition - actualPosition).toFixed(3)}%`,
-              top: 4,
-              bottom: 4,
-              borderRadius: 'var(--radius-pill)',
               background: valuePct >= actualPct ? 'var(--grad-positive)' : 'var(--grad-negative)',
-              opacity: 0.62,
-              zIndex: 2,
             }}
           />
         )}
 
         <div
           title={`80% interval ${fmtPct(loPct)}–${fmtPct(hiPct)} — calibrated so roughly 8 in 10 true values land inside; see the backtest.`}
+          className="siq-value-gauge-band"
           style={{
-            position: 'absolute',
             left: `${bandStart.toFixed(3)}%`,
             width: `${Math.max(0, bandEnd - bandStart).toFixed(3)}%`,
-            top: 2,
-            bottom: 2,
-            borderRadius: 'var(--radius-pill)',
-            background: 'var(--grad-confidence)',
-            opacity: 0.85,
-            boxShadow: 'var(--glow-confidence)',
-            cursor: 'help',
-            zIndex: 3,
           }}
         />
         <span
@@ -127,15 +102,8 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
           <span
             key={`tick-${t}`}
             aria-hidden="true"
-            style={{
-              position: 'absolute',
-              left: toPct(t),
-              top: 3,
-              bottom: 3,
-              width: 1,
-              transform: 'translateX(-0.5px)',
-              background: 'var(--border-subtle)',
-            }}
+            className="siq-value-gauge-tick"
+            style={{ left: toPct(t) }}
           />
         ))}
 
@@ -144,52 +112,28 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
             <span
               aria-hidden="true"
               onMouseEnter={() => setHover({ label: 'Pay', value: actualPct, position: actualPosition ?? 0 })}
+              className="siq-value-gauge-pay-line"
               style={{
-                position: 'absolute',
                 left: toPct(actualPct),
-                top: -4,
-                bottom: -4,
-                width: 2,
-                transform: 'translateX(-1px)',
-                borderRadius: 'var(--radius-pill)',
                 background: payColor,
                 boxShadow: `0 0 0 1px color-mix(in srgb, ${payColor} 22%, transparent)`,
-                cursor: 'help',
               }}
             />
             <span
               aria-hidden="true"
               title={`Pay: ${fmtPct(actualPct)}`}
               onMouseEnter={() => setHover({ label: 'Pay', value: actualPct, position: actualPosition ?? 0 })}
+              className="siq-value-gauge-dot siq-value-gauge-dot--pay"
               style={{
-                position: 'absolute',
                 left: toPct(actualPct),
-                top: '50%',
-                width: 14,
-                height: 14,
-                transform: 'translate(-50%, -50%)',
-                borderRadius: 'var(--radius-pill)',
                 background: payColor,
-                border: '2px solid var(--bg-panel)',
-                boxShadow: '0 0 0 1px rgba(16,24,40,0.16)',
-                cursor: 'help',
-                zIndex: 3,
               }}
             />
             {!overlap && (
               <span
-                className="ds-tnum"
+                className="ds-tnum siq-value-gauge-label siq-value-gauge-label--pay"
                 style={{
-                  position: 'absolute',
-                  bottom: 'calc(100% + 8px)',
-                  maxWidth: 92,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  fontSize: 12,
-                  lineHeight: 1.1,
                   color: payColor,
-                  fontWeight: 700,
-                  whiteSpace: 'nowrap',
                   ...labelPlacement(actualPosition ?? 0),
                 }}
               >
@@ -203,34 +147,15 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
           aria-hidden="true"
           title={`Value: ${fmtPct(valuePct)}`}
           onMouseEnter={() => setHover({ label: 'Value', value: valuePct, position: valuePosition })}
-          style={{
-            position: 'absolute',
-            left: toPct(valuePct),
-            top: '50%',
-            width: 16,
-            height: 16,
-            transform: 'translate(-50%, -50%)',
-            borderRadius: 'var(--radius-pill)',
-            background: 'var(--confidence)',
-            border: '2px solid var(--bg-panel)',
-            boxShadow: 'var(--glow-confidence)',
-            cursor: 'help',
-            zIndex: 4,
-          }}
+          className="siq-value-gauge-dot siq-value-gauge-dot--value"
+          style={{ left: toPct(valuePct) }}
         />
         <span
-          className="ds-tnum"
+          className="ds-tnum siq-value-gauge-label siq-value-gauge-label--value"
           style={{
-            position: 'absolute',
-            bottom: 'calc(100% + 8px)',
             maxWidth: overlap ? 180 : 104,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
             fontSize: overlap ? 10 : 11,
-            lineHeight: 1.1,
             color: overlap ? 'var(--text-primary)' : 'var(--confidence-text)',
-            fontWeight: 600,
-            whiteSpace: 'nowrap',
             ...labelPlacement(overlap ? combinedLabelPosition : valuePosition),
           }}
         >
@@ -241,26 +166,15 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
 
         <div
           aria-hidden="true"
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 16px)',
-            left: 0,
-            right: 0,
-            height: 18,
-          }}
+          className="siq-value-gauge-axis"
         >
           {ticks.map((t) => (
             <span
               key={`label-${t}`}
-              className="ds-tnum"
+              className="ds-tnum siq-value-gauge-axis-label"
               style={{
-                position: 'absolute',
                 left: toPct(t),
                 transform: t === 0 ? 'translateX(0)' : t === MAX ? 'translateX(-100%)' : 'translateX(-50%)',
-                fontSize: 12,
-                lineHeight: 1,
-                color: 'var(--text-muted)',
-                whiteSpace: 'nowrap',
               }}
             >
               {t}%
@@ -270,22 +184,8 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
 
         {hover && (
           <div
-            style={{
-              position: 'absolute',
-              left: `${hover.position.toFixed(3)}%`,
-              top: 'calc(100% + 29px)',
-              transform: 'translateX(-50%)',
-              padding: '5px 7px',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--ink-900)',
-              color: '#fff',
-              fontSize: 12,
-              fontWeight: 700,
-              whiteSpace: 'nowrap',
-              boxShadow: 'var(--shadow-md)',
-              zIndex: 20,
-              pointerEvents: 'none',
-            }}
+            className="siq-value-gauge-tooltip"
+            style={{ left: `${hover.position.toFixed(3)}%` }}
           >
             {hover.label}: {fmtPct(hover.value)}
           </div>

@@ -37,16 +37,16 @@ function MiniSlider({ label, value, onChange, min, max, step, suffix }: {
 }) {
   const pct = max === min ? 0 : ((value - min) / (max - min)) * 100;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 200px', minWidth: 180 }}>
-      <span style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{label}</span>
+    <div className="siq-row siq-row--10 siq-model-slider-group">
+      <span className="siq-model-slider-label">{label}</span>
       <input
-        className="siq-slider"
+        className="siq-slider siq-model-slider-input"
         type="range" min={min} max={max} step={step} value={value}
         aria-label={label}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={{ '--siq-slider-pct': `${Math.min(100, Math.max(0, pct))}%`, flex: 1 } as CSSProperties}
+        style={{ '--siq-slider-pct': `${Math.min(100, Math.max(0, pct))}%` } as CSSProperties}
       />
-      <span className="ds-tnum" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', width: 52, textAlign: 'right', whiteSpace: 'nowrap' }}>
+      <span className="ds-tnum ds-right siq-model-slider-value">
         {value}{suffix}
       </span>
     </div>
@@ -64,24 +64,27 @@ function compactSeasonRange(seasons: string[] | undefined): string {
 function CalRow({ nominal, empirical, halfWidthPct }: { nominal: number; empirical: number; halfWidthPct: number }) {
   const ok = Math.abs(empirical - nominal) <= 0.05;
   return (
-    <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-      <td style={{ padding: '7px 8px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)' }}>
+    <tr className="siq-model-cal-row">
+      <td className="siq-model-cal-label">
         {(nominal * 100).toFixed(0)}%
       </td>
-      <td style={{ padding: '7px 8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ flex: 1, height: 6, background: 'var(--bg-inset)', borderRadius: 999, overflow: 'hidden', minWidth: 70 }}>
-            <div style={{
-              width: `${empirical * 100}%`, height: '100%',
-              background: ok ? 'var(--confidence)' : 'var(--warning)',
-            }} />
+      <td className="siq-model-cal-cell">
+        <div className="siq-row">
+          <div className="siq-model-cal-track">
+            <div
+              className="siq-model-cal-fill"
+              style={{
+                width: `${empirical * 100}%`,
+                background: ok ? 'var(--confidence)' : 'var(--warning)',
+              }}
+            />
           </div>
-          <span className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-primary)', width: 44, textAlign: 'right' }}>
+          <span className="ds-tnum ds-right siq-model-cal-empirical">
             {(empirical * 100).toFixed(1)}%
           </span>
         </div>
       </td>
-      <td className="ds-tnum" style={{ padding: '7px 8px', fontSize: 13, color: 'var(--text-muted)', textAlign: 'right' }}>
+      <td className="ds-tnum ds-note ds-note--13 ds-right siq-model-cal-half-width">
         ±{halfWidthPct.toFixed(1)}%
       </td>
     </tr>
@@ -102,24 +105,18 @@ function traitLabel(trait: string): string {
 
 function RatingPill({ rating }: { rating: ScoutRatingRow }) {
   return (
-    <div style={{
-      border: '1px solid var(--border-subtle)',
-      borderRadius: 'var(--radius-md)',
-      padding: '8px 10px',
-      background: 'var(--bg-inset)',
-      minWidth: 0,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between', marginBottom: 5 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{traitLabel(rating.trait)}</span>
-        <span className="ds-tnum" style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-text)' }}>
+    <div className="siq-min0 siq-model-rating-pill">
+      <div className="siq-row siq-model-rating-heading">
+        <span className="siq-model-rating-label">{traitLabel(rating.trait)}</span>
+        <span className="ds-tnum siq-model-rating-score">
           {rating.score}/5
         </span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      <div className="siq-row siq-min0">
         <Badge tone={rating.confidence === 'high' ? 'confidence' : rating.confidence === 'medium' ? 'neutral' : 'warning'} size="sm">
           {rating.confidence}
         </Badge>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span className="ds-note siq-model-rating-evidence">
           &quot;{rating.evidence_span}&quot;
         </span>
       </div>
@@ -152,108 +149,83 @@ function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | nu
         : <Badge tone="warning" size="sm" dot>offline fixture</Badge>
       }
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="siq-model-eval-stack">
         {/* Receipts for the real pipeline: what Sonar fetched and Claude
             extracted, served from Postgres — distinct from the gold-set eval. */}
         {corpus && (
-          <div style={{
-            display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '6px 16px',
-            border: '1px solid color-mix(in srgb, var(--confidence) 26%, var(--border-subtle))',
-            borderRadius: 'var(--radius-md)',
-            padding: '10px 14px',
-            background: 'color-mix(in srgb, var(--confidence) 5%, var(--bg-inset))',
-          }}>
-            <span className="ds-eyebrow" style={{ color: 'var(--confidence-text)' }}>
+          <div className="siq-model-corpus-receipt">
+            <span className="ds-eyebrow siq-model-corpus-eyebrow">
               Live corpus · Sonar → Claude → Postgres
             </span>
-            <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <span className="ds-tnum siq-model-corpus-count">
               {corpus.rated_player_count} players
             </span>
-            <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <span className="ds-tnum siq-model-corpus-count">
               {corpus.cited_report_count} cited reports
             </span>
-            <span className="ds-tnum" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <span className="ds-tnum siq-model-corpus-count">
               {corpus.rating_count} extracted ratings
             </span>
             {corpus.latest_fetched_at && (
-              <span className="ds-tnum" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <span className="ds-tnum ds-note">
                 refreshed {fmtDay(corpus.latest_fetched_at)}
               </span>
             )}
           </div>
         )}
 
-        <div className="ds-eyebrow" style={{ marginBottom: -8 }}>
+        <div className="ds-eyebrow siq-model-gold-label">
           Gold-set eval{live && meta ? ` — ${meta.model}, ${fmtDay(meta.generated_at)}` : ''}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 10 }}>
+        <div className="siq-model-metric-grid">
           {metrics.map((metric) => (
-            <div key={metric.label} style={{
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              padding: '10px 12px',
-              background: 'var(--bg-inset)',
-              minWidth: 0,
-            }}>
-              <div style={{ fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 5 }}>
+            <div key={metric.label} className="siq-min0 siq-model-metric-card">
+              <div className="ds-note siq-model-metric-label">
                 {metric.label}
               </div>
-              <div className="ds-tnum" style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
+              <div className="ds-tnum siq-model-metric-value">
                 {metric.value}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5 }}>{metric.sub}</div>
+              <div className="ds-note siq-model-metric-subtext">{metric.sub}</div>
             </div>
           ))}
-          <div style={{
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            padding: '10px 12px',
-            background: 'var(--bg-inset)',
-            minWidth: 0,
-          }}>
-            <div style={{ fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 5 }}>
+          <div className="siq-min0 siq-model-metric-card">
+            <div className="ds-note siq-model-metric-label">
               Invalid rows
             </div>
-            <div className="ds-tnum" style={{
-              fontSize: 22,
-              fontWeight: 800,
-              color: report?.invalid_output_count ? 'var(--negative-text)' : 'var(--confidence-text)',
-              lineHeight: 1,
-            }}>
+            <div
+              className="ds-tnum siq-model-metric-value"
+              style={{ color: report?.invalid_output_count ? 'var(--negative-text)' : 'var(--confidence-text)' }}
+            >
               {report?.invalid_output_count ?? '—'}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5 }}>
+            <div className="ds-note siq-model-metric-subtext">
               {scoutEval ? `${scoutEval.gold_count} synthetic notes` : 'Loading fixture'}
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+        <div className="siq-model-example-grid">
           {(scoutEval?.examples ?? []).map((example) => (
-            <div key={example.note_id} style={{
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              padding: 12,
-              minWidth: 0,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{example.player_name}</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <div key={example.note_id} className="siq-min0 siq-model-example-card">
+              <div className="siq-row siq-row--10 siq-model-example-header">
+                <span className="siq-model-example-player">{example.player_name}</span>
+                <span className="siq-model-inline-row">
                   <Badge tone="neutral" variant="outline" size="sm">synthetic gold note</Badge>
-                  <span className="ds-tnum" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{example.note_id}</span>
+                  <span className="ds-tnum ds-note">{example.note_id}</span>
                 </span>
               </div>
-              <p style={{ margin: '0 0 10px', fontSize: 12, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
+              <p className="siq-model-example-source">
                 {example.source_text}
               </p>
-              <div style={{ display: 'grid', gap: 8 }}>
+              <div className="siq-model-rating-list">
                 {example.ratings.slice(0, 3).map((rating) => <RatingPill key={rating.trait} rating={rating} />)}
               </div>
             </div>
           ))}
         </div>
 
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+        <p className="ds-note ds-m0 siq-model-eval-caveat">
           {scoutEval?.caveat ?? 'Eval metrics are loading from the FastAPI eval endpoint.'}
           {scoutEval ? ` CLI artifact: ${scoutEval.artifact_path}.` : ''}
         </p>
@@ -273,33 +245,29 @@ function LeaderRow({ row, summary, onPick }: {
   const team = summary?.current_team?.abbreviation ?? summary?.latest_stats_team?.abbreviation;
   return (
     <button
+      className="siq-row siq-row--12 siq-model-list-row"
       onClick={onPick}
       disabled={!clickable}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-        width: '100%', textAlign: 'left', background: 'transparent',
-        border: 'none', borderBottom: '1px solid var(--border-subtle)',
-        cursor: clickable ? 'pointer' : 'default', transition: 'background var(--duration-fast) var(--ease-out)',
-      }}
+      style={{ cursor: clickable ? 'pointer' : 'default' }}
       onMouseEnter={(e) => { if (clickable) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
     >
       <Avatar name={row.full_name} size="sm" position={summary?.position} playerId={summary?.player_id} />
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <div className="siq-min0 siq-model-player-cell">
+        <div className="siq-model-player-name">
           {row.full_name}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+        <div className="ds-note">
           {team ? `${team} · ` : ''}{row.next_season} · {row.min_per_g} MPG
         </div>
       </div>
-      <div className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
+      <div className="ds-tnum ds-right siq-model-comparison">
         {fmtPct(row.value_pct)} vs {fmtPct(row.actual_pct)}
       </div>
-      <span className="ds-tnum" style={{
-        fontSize: 14, fontWeight: 700, width: 64, textAlign: 'right',
-        color: row.gap_pct >= 0 ? 'var(--positive-text)' : 'var(--negative-text)',
-      }}>
+      <span
+        className="ds-tnum ds-right siq-model-gap"
+        style={{ color: row.gap_pct >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}
+      >
         {signed(row.gap_pct)}%
       </span>
     </button>
@@ -311,29 +279,24 @@ function CautionRow({ player, onPick }: { player: PlayerCardResponse; onPick: ()
   const team = player.current_team?.abbreviation ?? player.latest_stats_team?.abbreviation;
   return (
     <button
+      className="siq-row siq-row--12 siq-model-list-row siq-model-list-row--clickable"
       onClick={onPick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-        width: '100%', textAlign: 'left', background: 'transparent',
-        border: 'none', borderBottom: '1px solid var(--border-subtle)',
-        cursor: 'pointer', transition: 'background var(--duration-fast) var(--ease-out)',
-      }}
       onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
     >
       <Avatar name={player.full_name} size="sm" position={player.position} playerId={player.player_id} />
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <div className="siq-min0 siq-model-player-cell">
+        <div className="siq-model-player-name">
           {player.full_name}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div className="ds-note siq-model-player-meta--truncate">
           {team ? `${team} · ` : ''}{valuation?.caution_flags.slice(0, 2).join(' · ') || 'Model caution'}
         </div>
       </div>
-      <div className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'right' }}>
+      <div className="ds-tnum ds-right siq-model-comparison">
         {valuation ? `${fmtPct(valuation.value_pct)} vs ${valuation.actual_pct != null ? fmtPct(valuation.actual_pct) : '—'}` : '—'}
       </div>
-      <span className="ds-tnum" style={{ fontSize: 14, fontWeight: 700, width: 64, textAlign: 'right', color: 'var(--warning-text)' }}>
+      <span className="ds-tnum ds-right siq-model-gap siq-model-gap--warning">
         {valuation?.gap_pct != null ? `${signed(valuation.gap_pct)}%` : '—'}
       </span>
     </button>
@@ -360,15 +323,15 @@ function ScatterPlot({ points, highlight }: { points: ScatterPoint[]; highlight:
       fill={hot ? 'var(--accent)' : 'var(--text-muted)'}
       opacity={hot ? 0.95 : 0.4}
       stroke="var(--bg-panel)" strokeWidth={hot ? 1.5 : 0.75}
-      style={{ cursor: 'pointer', transition: 'r var(--duration-fast) var(--ease-out)' }}
+      className="siq-model-scatter-dot"
       onMouseEnter={() => setHover(i)}
       onMouseLeave={() => setHover((cur) => (cur === i ? null : cur))}
     />
   );
 
   return (
-    <div style={{ position: 'relative' }}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+    <div className="siq-model-scatter">
+      <svg className="siq-model-scatter-svg" viewBox={`0 0 ${W} ${H}`}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={sx(t)} y1={pad - 6} x2={sx(t)} y2={H - pad} stroke="var(--border-subtle)" />
@@ -392,34 +355,26 @@ function ScatterPlot({ points, highlight }: { points: ScatterPoint[]; highlight:
         </text>
       </svg>
       {hp && (
-        <div style={{
-          position: 'absolute',
-          left: `${(sx(hp.actual) / W) * 100}%`,
-          top: `${(sy(hp.value) / H) * 100}%`,
-          transform: 'translate(-50%, calc(-100% - 10px))',
-          pointerEvents: 'none',
-          background: 'var(--bg-elevated, var(--bg-panel))',
-          border: '1px solid var(--border-default, var(--border-subtle))',
-          borderRadius: 8,
-          padding: '6px 10px',
-          fontSize: 12,
-          whiteSpace: 'nowrap',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-          zIndex: 2,
-        }}>
-          <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>{hp.name}</div>
-          <div className="ds-tnum" style={{ color: 'var(--text-secondary)' }}>
+        <div
+          className="siq-model-scatter-tooltip"
+          style={{
+            left: `${(sx(hp.actual) / W) * 100}%`,
+            top: `${(sy(hp.value) / H) * 100}%`,
+          }}
+        >
+          <div className="siq-model-tooltip-name">{hp.name}</div>
+          <div className="ds-tnum siq-model-tooltip-detail">
             pay {fmtPct(hp.actual)} · value {fmtPct(hp.value)}
           </div>
         </div>
       )}
-      <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--accent)' }} />
+      <div className="ds-note siq-model-scatter-legend">
+        <span className="siq-model-scatter-legend-item">
+          <span className="siq-model-scatter-swatch siq-model-scatter-swatch--accent" />
           leaderboard player
         </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--text-muted)', opacity: 0.4 }} />
+        <span className="siq-model-scatter-legend-item">
+          <span className="siq-model-scatter-swatch siq-model-scatter-swatch--population" />
           test-set population
         </span>
       </div>
@@ -529,7 +484,7 @@ export default function ModelPage() {
   const seasonRange = compactSeasonRange(metrics?.test_seasons);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
+    <div className="siq-stack">
       <h1 className="siq-sr-only">Model performance</h1>
       {/* Headline metrics */}
       {backtestError && (
@@ -583,15 +538,15 @@ export default function ModelPage() {
         {/* Calibration table */}
         <Panel variant="board" eyebrow="Interval calibration" icon={<Target size={15} />}
               action={<Badge tone="confidence" variant="outline" size="sm">calibrated</Badge>}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table className="siq-model-cal-table">
             <thead>
               <tr>
                 {['Nominal', 'Empirical', '± width'].map((h, i) => (
-                  <th key={h} style={{
-                    textAlign: i === 2 ? 'right' : 'left', padding: '0 8px 8px',
-                    fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase',
-                    color: 'var(--text-muted)', fontWeight: 600,
-                  }}>{h}</th>
+                  <th
+                    key={h}
+                    className="siq-model-cal-heading"
+                    style={{ textAlign: i === 2 ? 'right' : 'left' }}
+                  >{h}</th>
                 ))}
               </tr>
             </thead>
@@ -614,7 +569,7 @@ export default function ModelPage() {
               )}
             </tbody>
           </table>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0 0', lineHeight: 1.5 }}>
+          <p className="ds-note siq-model-cal-note">
             The published 80% interval is calibrated on historical contract starts. Other levels are diagnostics, not separate production guarantees.
           </p>
         </Panel>
@@ -642,7 +597,7 @@ export default function ModelPage() {
         action={<Badge tone="warning" size="sm">{cautionRows.length || '—'} flagged</Badge>}
       >
         {cautionRows.length === 0
-          ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>Loading caution board…</div>
+          ? <div className="ds-note ds-note--13 siq-model-board-message">Loading caution board…</div>
           : cautionRows.map((player) => (
             <CautionRow
               key={player.player_id}
@@ -655,10 +610,10 @@ export default function ModelPage() {
 
       {/* Leaderboard qualification controls */}
       <Panel variant="card" padded>
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px 24px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto' }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Leaderboard qualification</span>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+        <div className="siq-row siq-model-qualification">
+          <div className="siq-model-qualification-copy">
+            <span className="siq-model-qualification-title">Leaderboard qualification</span>
+            <span className="ds-note">
               {loading ? 'Loading…' : `${qualifiedCount} players clear the floor`}
             </span>
           </div>
@@ -672,9 +627,9 @@ export default function ModelPage() {
         <Panel variant="board" eyebrow="Most underpaid" icon={<TrendingUp size={15} />} flush
               action={<Badge tone="positive" size="sm">test-set bargains</Badge>}>
           {loading
-            ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
+            ? <div className="ds-note ds-note--13 siq-model-board-message">Loading…</div>
             : bargains.length === 0
-              ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>No bargains in test set.</div>
+              ? <div className="ds-note ds-note--13 siq-model-board-message">No bargains in test set.</div>
               : bargains.map((p) => {
                 const s = lookup[p.full_name];
                 return (
@@ -688,9 +643,9 @@ export default function ModelPage() {
         <Panel variant="board" eyebrow="Most overpaid" icon={<TrendingDown size={15} />} flush
               action={<Badge tone="negative" size="sm">test-set overpays</Badge>}>
           {loading
-            ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
+            ? <div className="ds-note ds-note--13 siq-model-board-message">Loading…</div>
             : overpays.length === 0
-              ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>No overpays in test set.</div>
+              ? <div className="ds-note ds-note--13 siq-model-board-message">No overpays in test set.</div>
               : overpays.map((p) => {
                 const s = lookup[p.full_name];
                 return (

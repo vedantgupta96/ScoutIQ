@@ -26,16 +26,19 @@ export function VerdictPill({ gapPct, size = 'md', label, tone: toneOverride }: 
   }[tone];
 
   return (
-    <div style={{
-      display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
-      padding: s.pad,
-      borderRadius: 'var(--radius-pill)',
-      background: colors.bg,
-      gap: 1,
-    }}>
-      <span style={{ fontSize: s.label, fontWeight: 600, color: colors.text, lineHeight: 1 }}>{displayLabel}</span>
+    <div
+      className="siq-verdict-pill"
+      style={{ padding: s.pad, background: colors.bg }}
+    >
+      <span
+        className="siq-verdict-pill__label"
+        style={{ fontSize: s.label, color: colors.text }}
+      >{displayLabel}</span>
       {gapPct != null && (
-        <span className="ds-tnum" style={{ fontSize: s.value, fontWeight: 700, color: colors.text, lineHeight: 1.2 }}>
+        <span
+          className="ds-tnum siq-verdict-pill__value"
+          style={{ fontSize: s.value, color: colors.text }}
+        >
           {signed(gapPct)}%
         </span>
       )}

@@ -44,9 +44,9 @@ function DSSlider({
 
   return (
     <div className="siq-control-slab" style={{ opacity: disabled ? 0.6 : 1 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</span>
-        <span className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
+      <div className="siq-sim-control-label-row">
+        <span className="siq-sim-control-label">{label}</span>
+        <span className="ds-tnum siq-sim-control-value">
           {format(clamped)}
         </span>
       </div>
@@ -181,49 +181,37 @@ function PlayerSearch({ onPick }: { onPick: (p: PlayerSummary) => void }) {
   const showMenu = open && query.trim().length > 0 && (loading || error || results.length > 0);
 
   return (
-    <div style={{ position: 'relative' }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '8px 12px', background: 'var(--bg-panel)',
-        border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)',
-      }}>
+    <div className="siq-sim-search">
+      <div className="siq-row siq-sim-search-field">
         <Search size={15} color="var(--text-muted)" />
         <input
           type="text" placeholder="Search a player to simulate…" value={query}
           aria-label="Search players to simulate"
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
-          style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--text-primary)' }}
+          className="siq-sim-search-input"
         />
       </div>
       {showMenu && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-          background: 'var(--bg-panel)', border: '1px solid var(--border-default)',
-          borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)', marginTop: 4,
-          overflow: 'hidden',
-        }}>
+        <div className="siq-sim-search-menu">
           {loading ? (
-            <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>Searching…</div>
+            <div className="ds-note ds-note--13 siq-sim-search-status">Searching…</div>
           ) : error ? (
-            <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--negative-text)', lineHeight: 1.45 }}>
+            <div className="ds-note ds-note--13 siq-sim-search-status siq-sim-search-status--error">
               {error}
             </div>
           ) : results.length === 0 ? (
-            <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>No players found.</div>
+            <div className="ds-note ds-note--13 siq-sim-search-status">No players found.</div>
           ) : (
             results.map((p) => (
               <button key={p.player_id}
+                className="siq-row siq-row--10 siq-sim-search-result"
                 onClick={() => { onPick(p); setQuery(''); setResults([]); setOpen(false); }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                  padding: '10px 14px', background: 'transparent', border: 'none',
-                  borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer', textAlign: 'left',
-                }}>
+              >
                 <Avatar name={p.full_name} size="sm" position={p.position} playerId={p.player_id} />
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{p.full_name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  <div className="siq-sim-search-result-name">{p.full_name}</div>
+                  <div className="ds-note">
                     {p.current_team?.abbreviation ?? p.latest_stats_team?.abbreviation ?? '—'} · {p.position ?? '—'}
                   </div>
                 </div>
@@ -446,10 +434,8 @@ function SimulatorContent() {
 
   return (
     <div
+      className="siq-stack"
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--panel-gap)',
         '--team-primary': visual.primary,
         '--team-secondary': visual.secondary,
         '--team-wash': visual.wash,
@@ -465,7 +451,7 @@ function SimulatorContent() {
             variant="instrument"
             eyebrow="What-if contract & cap simulator"
             icon={<SlidersHorizontal size={15} />}
-            style={{ overflow: 'visible' }}
+            className="siq-sim-intro-panel"
           >
             <div className="siq-sim-intro__hero">
               <h2 className="siq-sim-intro__title">Model a contract before you offer it.</h2>
@@ -521,23 +507,22 @@ function SimulatorContent() {
         <>
           {/* Player chip — the identity links through to the full profile, with
               an explicit "View profile" action so the simulator isn't a dead end. */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div className="siq-row siq-row--12 siq-sim-player-bar">
             <Link
               href={`/players/${player.player_id}`}
-              className="siq-sim-player-link"
-              style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, textDecoration: 'none', color: 'inherit' }}
+              className="siq-sim-player-link siq-row siq-row--12 siq-min0 siq-plain-link siq-sim-player-link--layout"
             >
               <Avatar name={player.full_name} size="md" position={player.position} playerId={player.player_id} />
-              <div style={{ minWidth: 0 }}>
-                <div className="siq-sim-player-name" style={{ fontSize: 16, fontWeight: 600, fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>
+              <div className="siq-min0">
+                <div className="siq-sim-player-name siq-sim-player-name--selected">
                   {player.full_name}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                <div className="ds-note">
                   {player.position} · {player.current_team?.abbreviation ?? '—'} · proposed deal from {startSeason}
                 </div>
               </div>
             </Link>
-            <div style={{ flex: 1 }} />
+            <div className="siq-sim-player-spacer" />
             {result?.value_pct != null && (
               <Badge tone="confidence" variant="outline" size="sm">
                 Model value {fmtPct(result.value_pct)}
@@ -568,9 +553,9 @@ function SimulatorContent() {
                   verdict
                 />
                 <div className="siq-control-slab">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>Start season</span>
-                    <span className="ds-tnum" style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
+                  <div className="siq-sim-control-label-row">
+                    <span className="siq-sim-control-label">Start season</span>
+                    <span className="ds-tnum siq-sim-control-value">
                       {startSeason}
                     </span>
                   </div>
@@ -579,16 +564,7 @@ function SimulatorContent() {
                     onChange={(e) => setStartSeason(e.target.value)}
                     maxLength={7}
                     aria-label="Start season"
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      border: '1px solid var(--border-default)',
-                      borderRadius: 'var(--radius-md)',
-                      background: 'var(--bg-panel)',
-                      color: 'var(--text-primary)',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 13,
-                    }}
+                    className="siq-sim-start-season-input"
                   />
                 </div>
                 <DSSlider
@@ -622,7 +598,7 @@ function SimulatorContent() {
             </Panel>
 
             {/* Results */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
+            <div className="siq-stack">
               {loading && !result && (
                 <Panel variant="card" padded className="siq-sim-loading-card">
                   <div className="siq-sim-loading-head">
@@ -643,7 +619,7 @@ function SimulatorContent() {
               )}
 
               {error && (
-                <div style={{ padding: '10px 14px', background: 'var(--negative-soft)', borderRadius: 'var(--radius-md)', color: 'var(--negative-text)', fontSize: 13 }}>
+                <div className="ds-note ds-note--13 siq-sim-error">
                   {error}
                 </div>
               )}
@@ -672,7 +648,7 @@ function SimulatorContent() {
                           live
                         />
                       )}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div className="siq-sim-verdict-column">
                         <span className="ds-eyebrow">AAV vs. value</span>
                         {/* Keyed by tone: crossing a verdict threshold remounts
                             the wrapper, replaying the one-shot pulse. */}
@@ -682,9 +658,9 @@ function SimulatorContent() {
                       </div>
                     </div>
                     {displayResult.value_pct != null && (
-                      <div style={{ marginTop: 12 }}>
-                        <div className="ds-eyebrow" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <span style={{ color: 'var(--confidence-text)' }}>model value {fmtPct(displayResult.value_pct)}</span>
+                      <div className="siq-sim-gauge">
+                        <div className="ds-eyebrow siq-sim-gauge-header">
+                          <span className="siq-sim-gauge-value">model value {fmtPct(displayResult.value_pct)}</span>
                           <span>proposed AAV {fmtPct(displayResult.proposed_aav_pct)}</span>
                         </div>
                         <MiniValuePayGauge valuePct={displayResult.value_pct} payPct={displayResult.proposed_aav_pct} />
@@ -702,13 +678,13 @@ function SimulatorContent() {
                     icon={<SlidersHorizontal size={15} />}
                     action={<Badge tone={tierInfo.tone} size="sm">{tierInfo.label}</Badge>}
                   >
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
+                    <p className="ds-note siq-sim-share-copy">
                       This deal commits {fmtPct(displayResult.proposed_aav_pct)} of the cap. A single contract never
                       nears the team tax line, so it&apos;s read against the max-salary tiers that actually bind one player.
                     </p>
 
                     <CapShareBar sharePct={displayResult.proposed_aav_pct} />
-                    <p style={{ fontSize: 11.5, color: 'var(--text-faint)', margin: '9px 0 16px' }}>
+                    <p className="siq-sim-tier-copy">
                       Max-salary tiers — 25% (≤6 yrs service) · 30% (7–9 yrs) · 35% (10+ yrs)
                     </p>
 
@@ -738,7 +714,7 @@ function SimulatorContent() {
 
 export default function SimulatorPage() {
   return (
-    <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>}>
+    <Suspense fallback={<div className="siq-sim-suspense-fallback">Loading…</div>}>
       <SimulatorContent />
     </Suspense>
   );

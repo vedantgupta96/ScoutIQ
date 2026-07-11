@@ -116,7 +116,7 @@ export default function Home() {
         ) : (
           <div role="status" aria-label="Loading the board">
             <Skeleton height={12} width={180} />
-            <div style={{ height: 14 }} />
+            <div className="siq-home-loading-spacer" />
             <Skeleton height={44} width={220} />
           </div>
         )}
@@ -160,7 +160,7 @@ export default function Home() {
                   <span className="siq-home-mover__name">{p.full_name}</span>
                   <span className="siq-home-mover__team">{p.valuation?.caution_flags[0] ?? 'Flagged'}</span>
                 </span>
-                <span className="siq-home-mover__gap ds-tnum" style={{ color: 'var(--warning-text)' }}>
+                <span className="siq-home-mover__gap ds-tnum siq-home-mover__gap--warning">
                   {p.valuation?.gap_pct != null ? gapText(p.valuation.gap_pct) : '—'}
                 </span>
               </Link>
