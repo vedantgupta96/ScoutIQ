@@ -5,7 +5,7 @@ and salary-cap math into **explainable** valuations — not "what happened," but
 what a proposed contract does to the cap, and why* — with confidence intervals rather than false precision.
 
 > 🚧 **Work in progress.** The core cockpit is now live: data pipeline, 2025-26 valuation model,
-> FastAPI, cap simulator, free-agency board, dashboard, watchlist filters, offline scout-rating eval,
+> FastAPI, cap simulator, free-agency board, offseason planner, dashboard, watchlist filters, offline scout-rating eval,
 > and player headshots.
 > See the [progress log](docs/03-progress-log.md).
 
@@ -34,8 +34,8 @@ per-player valuations: [`model/artifacts/report.md`](backend/scoutiq/model/artif
 | Data | Postgres (Neon) + pgvector, SQLAlchemy 2.0, Alembic | ✅ |
 | ETL | Python · `nba_api` (stats) · Basketball-Reference (advanced + salary, cached) | ✅ |
 | Model | HistGradientBoosting valuation + split-conformal intervals + temporal backtest | ✅ |
-| API | FastAPI valuation, watchlist, free agency, simulator, backtest, scout-eval, headshots | ✅ |
-| UI | Next.js dashboard: players/watchlist, profiles, teams, free agency, simulator, model/backtest | ✅ |
+| API | FastAPI valuation, watchlist, free agency, offseason planning, simulator, backtest, scout-eval, headshots | ✅ |
+| UI | Next.js dashboard: players/watchlist, profiles, teams, free agency, offseason plan, simulator, model/backtest | ✅ |
 
 ## Repo structure
 ```
@@ -49,8 +49,9 @@ frontend/  Next.js cockpit
 - **Phase 2 — Valuation model** ✅ production-implied value, conformal intervals, calibrated backtest
 - **Phase 3 — Cap simulator + API + dashboard** ✅ signature what-if contract tool and dashboard
 - **Phase 3.5 — Free agency** ✅ derived FA board, option decisions, team targets
-- **Next** current contract timeline + one-click extension simulation; docs/demo polish
-- **Later** similar-player search, grounded LLM rationale, forecasting/injury/Monte Carlo experiments
+- **Phase 3.6 — Offseason planning** ✅ multi-move contracts/options with a four-season cap ledger
+- **Next** official FA/rights data, cap holds, qualifying offers, and plan comparison
+- **Later** backtested aging forecasts, injury indicators, and Monte Carlo cap scenarios
 
 ## Quickstart
 See [backend/README.md](backend/README.md) and [frontend/README.md](frontend/README.md) for setup. In

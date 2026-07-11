@@ -9,9 +9,10 @@ _Last updated: 2026-07-10. Snapshot of what's built, what works, what broke, and
 | 2 | Valuation model + backtest | ✅ complete |
 | 3 | Cap simulator + FastAPI + dashboard | ✅ core complete |
 | 3.5 | Free-agency board + option decisions | ✅ complete |
-| 4 | Contract timeline, comps, grounded rationale | ⏳ next |
+| 3.6 | Multi-move offseason planner | ✅ complete |
+| 4 | Official rights data + cap holds + plan comparison | ⏳ next |
 
-Twenty PRs are merged to `main`; the current unmerged work adds the free-agency cockpit. Workflow is
+Twenty-one PRs are merged to `main`; the current unmerged work adds the offseason planner. Workflow is
 feature branch → PR → squash-merge per phase. Database is a live hosted **Neon** Postgres.
 
 ---
@@ -52,10 +53,10 @@ Spotrac-sourced per-season cap hits as evaluation/pay comparison data.
 The core product cockpit is now working.
 
 - **FastAPI:** health/current-season, player search/profile, valuation, batched player cards, contract
-  watchlist, free-agency board, option decisions, team FA targets, simulator, backtest metadata/
+  watchlist, free-agency board, option decisions, team FA targets, offseason planning, simulator, backtest metadata/
   valuations, scout-rating eval, player scout-rating fixture aggregation, and cached player headshots.
-- **Dashboard:** Next.js app with players/watchlist, player profile, teams, free agency, simulator, and
-  model/backtest views.
+- **Dashboard:** Next.js app with players/watchlist, player profile, teams, free agency, offseason plan,
+  simulator, and model/backtest views.
 - **Simulator:** simplified-but-explicit CBA subset, 2025-26 default contract start, actual loaded
   2025-26 cap constants, future cap projection, option/guarantee sliders, and assumption flags.
 - **Watchlist:** bucket/sort/position/search filters; valuation pinned to the displayed season so
@@ -115,9 +116,8 @@ Most were caught by actually running the pipeline, not by reading code:
 ## Known limitations
 - **Salary stickiness:** persistence beats the model on mid-contract players (expected; we exclude salary
   on purpose). The fix is forward contract data (Spotrac) to evaluate at contract-decision points.
-- **Forward contract structure is present but not yet fully surfaced.** `contracts`/`contract_years`
-  exist, feed 2025-26 salary bridging, and now power the free-agency board. The next product step is a
-  visible current-contract timeline and extension simulation flow.
+- **Forward contract structure is decision-visible.** `contracts`/`contract_years` feed salary bridging,
+  player timelines, extension handoff, free-agency classes, option decisions, and the offseason plan.
 - **Name matching:** ~15 `mismatch` / ~106 `not_found` players remain (accents, Jr./Sr., no BBRef page).
 - **Cap rules** are a simplified subset of the CBA (no Bird rights / exceptions / repeater tax yet).
 - **Free-agency labels are inferred:** UFA/RFA is estimated from loaded stat seasons, not official service
@@ -207,9 +207,26 @@ schema change.
 
 ---
 
+## Team offseason planner (2026-07-10)
+
+The discovery-to-decision loop now continues from team targets into an executable multi-move plan.
+
+- **Backend:** new pure `scoutiq.api.offseason.apply_plan` engine plus `POST /offseason/plan`. Proposed
+  contracts replace existing figures on re-signs, option removals are validated against loaded contract
+  structure, and each season reports before/after payroll, roster count, cap room, tax/apron tier, and
+  whether the plan crosses a line.
+- **Frontend:** new `/offseason` cockpit with shareable team/season state, ranked team targets, current
+  option decisions, editable AAV/length/final-year structure, live server repricing, and a four-season
+  cap ledger. Team and free-agency surfaces link directly into the selected team's plan.
+- **Scope discipline:** waivers, trades, cap holds, incomplete-roster charges, Bird rights, exceptions,
+  tax owed, and repeater history remain explicitly out of the calculation until sourced correctly.
+- **Testing:** pure planner tests cover replacement accounting, option removal, roster counts, room, and
+  apron transitions; the live Neon smoke path prices both an empty team baseline and a real FA signing.
+
+---
+
 ## Next
-The highest-leverage next feature is **current contract timeline + one-click extension simulation**:
-show what the player is owed, compare it to production-implied value, and let the user launch a proposed
-extension from the current deal. After that: persist official Spotrac FA/UFA/RFA rows, add RFA offer-sheet
-simulation/cap holds/Bird-rights nuance, then similar-player contract comps and grounded rationale
-generation.
+The next credibility step is **official free-agent and rights data**: persist UFA/RFA status, qualifying
+offers, rights team, and Bird-right category, then add cap holds and incomplete-roster charges to the
+planner. After that: compare and share two or three offseason plans, then run a backtest-gated one-to-two-
+year aging forecast before adding any long-horizon risk claims.

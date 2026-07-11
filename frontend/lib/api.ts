@@ -10,6 +10,23 @@ function normalizeBase(raw: string): string {
 
 const BASE = normalizeBase(process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000');
 
+function formatApiError(detail: unknown, fallback: string): string {
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (!Array.isArray(detail)) return fallback;
+
+  const messages = detail.flatMap((issue) => {
+    if (typeof issue !== 'object' || issue == null) return [];
+    const record = issue as { loc?: unknown; msg?: unknown };
+    if (typeof record.msg !== 'string') return [];
+    const location = Array.isArray(record.loc)
+      ? record.loc.filter((part) => part !== 'body').map(String).join('.')
+      : '';
+    const message = record.msg.replace(/^Value error,\s*/i, '');
+    return [location ? `${location}: ${message}` : message];
+  });
+  return messages.length > 0 ? messages.join(' ') : fallback;
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body && !headers.has('Content-Type')) {
@@ -20,8 +37,11 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     headers,
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(detail?.detail ?? res.statusText);
+    const body: unknown = await res.json().catch(() => null);
+    const detail = typeof body === 'object' && body != null && 'detail' in body
+      ? (body as { detail: unknown }).detail
+      : null;
+    throw new Error(formatApiError(detail, res.statusText));
   }
   return res.json() as Promise<T>;
 }
@@ -555,6 +575,82 @@ export interface TeamFaTargetsResponse {
   caveat: string;
 }
 
+// ---- Offseason planning --------------------------------------
+
+export interface ProposedOffseasonContract {
+  player_id: number;
+  aav_pct: number;
+  years: number;
+  guaranteed_years?: number | null;
+  player_option_years?: number;
+  team_option_years?: number;
+}
+
+export interface OffseasonPlanRequest {
+  team_id: number;
+  start_season: string;
+  horizon?: number;
+  valuation_season?: string | null;
+  contracts: ProposedOffseasonContract[];
+  option_declines: number[];
+}
+
+export interface OffseasonContractYear {
+  season: string;
+  cap_hit_usd: number;
+  cap_hit_pct: number;
+  is_guaranteed: boolean;
+  is_player_option: boolean;
+  is_team_option: boolean;
+  is_projected_cap: boolean;
+}
+
+export type OffseasonMoveKind =
+  | 'signing'
+  | 're-sign'
+  | 'team-option-decline'
+  | 'player-option-opt-out';
+
+export interface OffseasonMoveResponse {
+  player_id: number;
+  player_name: string;
+  kind: OffseasonMoveKind;
+  value_pct: number | null;
+  value_gap_pct: number | null;
+  removed_existing_usd: number;
+  years: OffseasonContractYear[];
+}
+
+export interface OffseasonPlanSeason {
+  season: string;
+  salary_cap: number;
+  tax_line: number;
+  first_apron: number;
+  second_apron: number;
+  is_projected_cap: boolean;
+  baseline_payroll_usd: number;
+  payroll_after_usd: number;
+  payroll_delta_usd: number;
+  baseline_roster_count: number;
+  roster_count_after: number;
+  tier_before: CapTier;
+  tier_after: CapTier;
+  crosses_a_line: boolean;
+  room_to_cap_after: number;
+  room_to_tax_after: number;
+  room_to_first_apron_after: number;
+  room_to_second_apron_after: number;
+}
+
+export interface OffseasonPlanResponse {
+  team: TeamSummary;
+  start_season: string;
+  valuation_season: string;
+  moves: OffseasonMoveResponse[];
+  seasons: OffseasonPlanSeason[];
+  caveat: string;
+}
+
 // ---- API functions -------------------------------------------
 
 export function getTeams(signal?: AbortSignal): Promise<TeamListItem[]> {
@@ -604,6 +700,17 @@ export function getTeamFaTargets(
     position: params.position,
     limit: params.limit ?? 15,
   })}`, { signal });
+}
+
+export function buildOffseasonPlan(
+  request: OffseasonPlanRequest,
+  signal?: AbortSignal,
+): Promise<OffseasonPlanResponse> {
+  return apiFetch<OffseasonPlanResponse>('/offseason/plan', {
+    method: 'POST',
+    body: JSON.stringify(request),
+    signal,
+  });
 }
 
 export function searchPlayers(query?: string, limit = 20, signal?: AbortSignal): Promise<PlayerSummary[]> {
