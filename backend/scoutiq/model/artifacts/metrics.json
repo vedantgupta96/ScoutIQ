@@ -1,50 +1,72 @@
 {
-  "model_version": "v0-gbm-conformal",
+  "model_version": "v1-gbm-cqr-lags-dpcal",
   "n_train": 4321,
   "n_calibration": 1081,
-  "n_test": 699,
+  "n_test": 803,
+  "interval_calibration": "decision_point_oof_5fold",
+  "n_decision_calibration": 51,
+  "global_cqr_qhat_pct": 0.769,
+  "decision_cqr_qhat_pct": 1.796,
   "test_seasons": [
     "2024-25",
     "2025-26"
   ],
-  "mae_pct_of_cap": 3.128,
-  "mae_usd": 4592615,
-  "r2": 0.767,
-  "interval_80_coverage": 0.797,
-  "interval_80_half_width_pct": 4.85,
-  "naive_mean_baseline_mae_pct": 6.98,
-  "persistence_ref_mae_pct_midcontract": 2.146,
-  "n_midcontract": 678,
+  "mae_pct_of_cap": 2.79,
+  "mae_usd": 4127643,
+  "r2": 0.807,
+  "interval_80_coverage": 0.877,
+  "interval_80_half_width_pct": 5.36,
+  "interval_80_half_width_min_pct": 1.81,
+  "interval_80_half_width_max_pct": 17.03,
+  "naive_mean_baseline_mae_pct": 7.031,
+  "persistence_ref_mae_pct_midcontract": 2.101,
+  "n_midcontract": 762,
+  "segments": {
+    "decision_point": {
+      "n": 226,
+      "mae_pct_of_cap": 3.202,
+      "r2": 0.764,
+      "interval_80_coverage": 0.858,
+      "persistence_mae_pct": 4.6
+    },
+    "mid_contract": {
+      "n": 577,
+      "mae_pct_of_cap": 2.628,
+      "r2": 0.826,
+      "interval_80_coverage": 0.884,
+      "persistence_mae_pct": 1.212
+    }
+  },
   "calibration": [
     {
       "nominal": 0.5,
-      "empirical": 0.508,
-      "half_width_pct": 2.1
+      "empirical": 0.292,
+      "half_width_pct": 2.44
     },
     {
       "nominal": 0.6,
-      "empirical": 0.592,
-      "half_width_pct": 2.77
+      "empirical": 0.473,
+      "half_width_pct": 3.31
     },
     {
       "nominal": 0.7,
-      "empirical": 0.678,
-      "half_width_pct": 3.57
+      "empirical": 0.699,
+      "half_width_pct": 4.25
     },
     {
       "nominal": 0.8,
-      "empirical": 0.797,
-      "half_width_pct": 4.85
+      "empirical": 0.858,
+      "half_width_pct": 5.34
     },
     {
       "nominal": 0.9,
-      "empirical": 0.891,
-      "half_width_pct": 6.99
+      "empirical": 0.876,
+      "half_width_pct": 5.86
     },
     {
       "nominal": 0.95,
-      "empirical": 0.928,
-      "half_width_pct": 8.81
+      "empirical": 0.996,
+      "half_width_pct": 11.24
     }
   ]
 }

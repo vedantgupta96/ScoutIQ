@@ -41,7 +41,12 @@ from scoutiq.api.routers.players import (
 )
 from scoutiq.api.routers.teams import _apron, team_cap_hits
 from scoutiq.config import settings
-from scoutiq.model.predict import build_features_from_season, predict_many_from_features
+from scoutiq.model.predict import (
+    build_features_from_season,
+    predict_many_from_features,
+    prev_season_label,
+    previous_seasons_for,
+)
 from scoutiq.model.roster_fit import profile_roster, score_candidate
 from scoutiq.models import CapConstants, Contract, ContractYear, Player, PlayerSeason, Team
 
@@ -278,13 +283,17 @@ def _assemble_pool(
     return pool
 
 
-def _value_pool(pool: list[_PoolEntry]) -> dict[int, dict]:
+def _value_pool(db: DB, pool: list[_PoolEntry]) -> dict[int, dict]:
     """Batch model valuation for every pool player with a latest stats season."""
     feature_rows: list[dict] = []
     ids: list[int] = []
+    season_rows = [e.latest_season_row for e in pool if e.latest_season_row is not None]
+    prev_by_key = previous_seasons_for(season_rows, db)
     for e in pool:
         if e.latest_season_row is not None:
-            feature_rows.append(build_features_from_season(e.latest_season_row, e.player))
+            row = e.latest_season_row
+            prev = prev_by_key.get((e.player.player_id, prev_season_label(row.season)))
+            feature_rows.append(build_features_from_season(row, e.player, prev=prev))
             ids.append(e.player.player_id)
     if not feature_rows:
         return {}
@@ -303,7 +312,7 @@ def _entry_models(
 ) -> list[FreeAgentEntry]:
     """Turn assembled pool entries into API models, valued and (optionally) with an option verdict."""
     summaries = _batched_summaries([e.player for e in pool], db)
-    value_by_player = _value_pool(pool)
+    value_by_player = _value_pool(db, pool)
     entering_cap = _cap_for(pool[0].entering_season, caps) if pool else None
     entering_salary_cap = entering_cap.salary_cap if entering_cap else None
 

@@ -36,7 +36,7 @@ class BacktestResponse(BaseModel):
 
 @router.get("/backtest", response_model=BacktestResponse)
 def get_backtest():
-    """Return metadata for the published v0 valuation backtest."""
+    """Return metadata for the published valuation backtest."""
     if not METRICS_PATH.exists():
         raise HTTPException(
             status_code=503,
@@ -52,8 +52,11 @@ def get_backtest():
         report_path="scoutiq/model/artifacts/report.md",
         artifacts=artifacts,
         caveat=(
-            "The v0 model estimates production-implied value and intentionally excludes current salary. "
-            "Contract-decision-point valuation is deferred until forward contract data is audited."
+            "The model estimates production-implied value and intentionally excludes current salary. "
+            "Its decision-point segment is the relevant contract-setting benchmark; mid-contract "
+            "salaries are largely locked and remain easier for a persistence baseline. The nominal "
+            "80% interval uses five-fold out-of-fold calibration on historical contract starts and "
+            "is conservative on the full test set."
         ),
     )
 

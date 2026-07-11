@@ -525,6 +525,7 @@ export default function ModelPage() {
   const loading = valRows.length === 0;
   const metrics = backtest?.metrics;
   const calibration = metrics?.calibration ?? [];
+  const decisionCoverage = metrics?.segments?.decision_point.interval_80_coverage;
   const seasonRange = compactSeasonRange(metrics?.test_seasons);
 
   return (
@@ -542,14 +543,14 @@ export default function ModelPage() {
           { label: `R² (${seasonRange})`, value: metrics ? metrics.r2.toFixed(2) : '—', sub: metrics ? `${metrics.n_test} held-out rows` : 'Loading artifact' },
           { label: 'MAE', value: metrics ? metrics.mae_pct_of_cap.toFixed(1) : '—', unit: '%', sub: metrics ? `Mean baseline ${metrics.naive_mean_baseline_mae_pct.toFixed(1)}%` : 'Loading artifact' },
           {
-            label: '80% coverage',
-            value: metrics ? (metrics.interval_80_coverage * 100).toFixed(1) : '—',
+            label: 'Contract-start coverage',
+            value: decisionCoverage != null ? (decisionCoverage * 100).toFixed(1) : '—',
             unit: '%',
-            sub: 'Target 80.0%',
-            delta: metrics ? `${((metrics.interval_80_coverage - 0.8) * 100).toFixed(1)}` : undefined,
-            deltaDir: metrics && metrics.interval_80_coverage >= 0.8 ? 'up' as const : 'down' as const,
+            sub: metrics ? `${metrics.segments.decision_point.n} held-out decisions · 80% nominal` : 'Loading artifact',
+            delta: decisionCoverage != null ? `${((decisionCoverage - 0.8) * 100).toFixed(1)}` : undefined,
+            deltaDir: decisionCoverage != null && decisionCoverage >= 0.8 ? 'up' as const : 'down' as const,
           },
-          { label: 'Interval ±width', value: metrics ? `±${metrics.interval_80_half_width_pct.toFixed(1)}` : '—', unit: '%', sub: 'at 80% nominal' },
+          { label: 'Interval ±width', value: metrics ? `±${metrics.interval_80_half_width_pct.toFixed(1)}` : '—', unit: '%', sub: metrics ? `${(metrics.interval_80_coverage * 100).toFixed(1)}% coverage across all rows` : 'at 80% nominal' },
         ].map((m) => (
           <Card key={m.label} padded>
             <StatTile {...m} size="md" />

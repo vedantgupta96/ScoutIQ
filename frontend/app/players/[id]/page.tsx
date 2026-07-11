@@ -733,6 +733,42 @@ function ContractSpark({ contract }: { contract: PlayerContractResponse | null }
   );
 }
 
+function ValueDrivers({ attribution }: { attribution: ValuationResponse['attribution'] }) {
+  if (!attribution?.length) return null;
+  const drivers = attribution
+    .filter(({ delta_pct }) => Math.abs(delta_pct) >= 0.05)
+    .toSorted((a, b) => Math.abs(b.delta_pct) - Math.abs(a.delta_pct))
+    .slice(0, 5);
+  if (!drivers.length) return null;
+  const maxMagnitude = Math.max(...drivers.map(({ delta_pct }) => Math.abs(delta_pct)));
+
+  return (
+    <section className="siq-value-drivers" aria-labelledby="value-drivers-title">
+      <div className="siq-value-drivers__heading">
+        <span id="value-drivers-title" className="ds-eyebrow">What drives this value</span>
+        <span>vs. a league-median profile</span>
+      </div>
+      <div className="siq-value-drivers__list">
+        {drivers.map(({ group, label, delta_pct }) => (
+          <div key={group} className="siq-value-driver">
+            <span>{label}</span>
+            <span className={`siq-value-driver__delta ds-tnum ${delta_pct >= 0 ? 'is-positive' : 'is-negative'}`}>
+              {signed(delta_pct)}%
+            </span>
+            <span className="siq-value-driver__track" aria-hidden="true">
+              <span
+                className={delta_pct >= 0 ? 'is-positive' : 'is-negative'}
+                style={{ width: `${Math.max(6, Math.abs(delta_pct) / maxMagnitude * 100)}%` }}
+              />
+            </span>
+          </div>
+        ))}
+      </div>
+      <p>Grouped model effects can overlap, so these drivers do not sum to the valuation.</p>
+    </section>
+  );
+}
+
 function FrontOfficeRead({
   val,
   valueUsd,
@@ -810,6 +846,7 @@ function FrontOfficeRead({
             sub={contract ? `${contract.years} listed yrs` : 'loading'}
           />
         </div>
+        <ValueDrivers attribution={val.attribution} />
         <ProductionRow features={val.features} />
         <ContractSpark contract={contract} />
       </Surface>

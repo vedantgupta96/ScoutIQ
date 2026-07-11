@@ -24,7 +24,12 @@ from scoutiq.api.routers.players import (
     _batched_summaries,
     _team_summary,
 )
-from scoutiq.model.predict import build_features_from_season, predict_many_from_features
+from scoutiq.model.predict import (
+    build_features_from_season,
+    predict_many_from_features,
+    prev_season_label,
+    previous_seasons_for,
+)
 from scoutiq.model.roster_fit import profile_roster
 from scoutiq.config import settings
 from scoutiq.models import (
@@ -242,6 +247,7 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
         else []
     )
     season_by_player = {r.player_id: r for r in season_rows}
+    prev_by_key = previous_seasons_for(season_rows, db)
 
     feature_rows: list[dict] = []
     feature_ids: list[int] = []
@@ -249,7 +255,8 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
         sr = season_by_player.get(pid)
         if sr is None:
             continue
-        feature_rows.append(build_features_from_season(sr, player_by_id[pid]))
+        prev = prev_by_key.get((pid, prev_season_label(sr.season)))
+        feature_rows.append(build_features_from_season(sr, player_by_id[pid], prev=prev))
         feature_ids.append(pid)
     try:
         value_by_player = dict(zip(feature_ids, predict_many_from_features(feature_rows)))

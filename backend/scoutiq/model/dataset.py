@@ -11,7 +11,7 @@ import pandas as pd
 
 from scoutiq.config import settings
 from scoutiq.db import engine
-from scoutiq.model.features import NBA_ADV, BBREF_ADV, POSITIONS, primary_position
+from scoutiq.model.features import LAG_SRC, NBA_ADV, BBREF_ADV, POSITIONS, primary_position
 
 _PER_GAME_SRC = {
     "pts_pg": "PTS", "reb_pg": "REB", "ast_pg": "AST",
@@ -55,6 +55,21 @@ def build_dataset() -> pd.DataFrame:
     for p in POSITIONS:
         df[f"pos_{p}"] = (pos1 == p).astype(float)
 
+    # lagged season context: self-merge on (player, previous season)
+    prev_season = {seasons[i + 1]: seasons[i] for i in range(len(seasons) - 1)}
+    lag = df[["player_id", "season"] + LAG_SRC].copy()
+    lag.columns = ["player_id", "lag_join_season"] + [f"lag_{c}" for c in LAG_SRC]
+    df["lag_join_season"] = df["season"].map(prev_season)
+    df = df.merge(lag, on=["player_id", "lag_join_season"], how="left")
+    df = df.drop(columns=["lag_join_season"])
+    df["d_pts_pg"] = df["pts_pg"] - df["lag_pts_pg"]
+    df["gp_2yr"] = df["gp"].fillna(0) + df["lag_gp"].fillna(0)
+
+    # contract-decision flag: the target season is the first year of a Spotrac
+    # contract for this player — the rows where a valuation model is actionable.
+    contracts = pd.read_sql("select player_id, season_start from contracts", engine)
+    starts = set(zip(contracts["player_id"], contracts["season_start"]))
+
     # prior pay (feature) and next-season pay (target), both as % of that season's cap
     prior_salary = pd.Series(
         [sal_map.get((pid, s), np.nan) for pid, s in zip(df["player_id"], df["season"])],
@@ -69,6 +84,10 @@ def build_dataset() -> pd.DataFrame:
         index=df.index,
     )
     df["pct_cap_next"] = df["target_salary"] / df["target_cap"]
+
+    df["decision_point"] = [
+        (pid, ns) in starts for pid, ns in zip(df["player_id"], df["next_season"])
+    ]
 
     # trainable rows only: target known AND BBRef advanced present
     df = df[df["pct_cap_next"].notna() & df["BPM"].notna()].reset_index(drop=True)

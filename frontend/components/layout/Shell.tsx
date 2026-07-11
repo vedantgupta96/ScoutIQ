@@ -60,7 +60,7 @@ function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) 
 
       <div className="siq-sidebar-footer">
         <span className="siq-sidebar-footer-label">Valuation model</span>
-        <Badge tone="confidence" variant="outline" size="sm" dot>v0-gbm-conformal</Badge>
+        <Badge tone="confidence" variant="outline" size="sm" dot>v1 · adaptive intervals</Badge>
       </div>
     </aside>
   );

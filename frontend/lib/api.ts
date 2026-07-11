@@ -93,10 +93,17 @@ export interface ValuationResponse {
   value_usd: number | null;
   model_version: string;
   features: Record<string, number> | null;
+  attribution: ValuationAttribution[] | null;
   verdict_label: string;
   verdict_tone: 'positive' | 'negative' | 'neutral' | 'warning';
   caution_flags: string[];
   caveat: string | null;
+}
+
+export interface ValuationAttribution {
+  group: string;
+  label: string;
+  delta_pct: number;
 }
 
 export type ValuationStatus = 'ready' | 'unavailable';
@@ -317,6 +324,10 @@ export interface BacktestMetrics {
   n_train: number;
   n_calibration: number;
   n_test: number;
+  interval_calibration: string;
+  n_decision_calibration: number;
+  global_cqr_qhat_pct: number;
+  decision_cqr_qhat_pct: number;
   test_seasons: string[];
   mae_pct_of_cap: number;
   mae_usd: number;
@@ -326,7 +337,19 @@ export interface BacktestMetrics {
   naive_mean_baseline_mae_pct: number;
   persistence_ref_mae_pct_midcontract: number;
   n_midcontract: number;
+  segments: {
+    decision_point: BacktestSegment;
+    mid_contract: BacktestSegment;
+  };
   calibration: BacktestCalibrationPoint[];
+}
+
+export interface BacktestSegment {
+  n: number;
+  mae_pct_of_cap: number;
+  r2: number | null;
+  interval_80_coverage: number;
+  persistence_mae_pct: number | null;
 }
 
 export interface BacktestResponse {

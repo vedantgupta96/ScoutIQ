@@ -111,7 +111,7 @@ def _patch_common(monkeypatch, pool=POOL):
     # value by player_id so filtering (e.g. options-only) can't misalign predictions
     monkeypatch.setattr(
         far, "_value_pool",
-        lambda pool: {e.player.player_id: PREDS[e.player.player_id]
+        lambda db, pool: {e.player.player_id: PREDS[e.player.player_id]
                       for e in pool if e.latest_season_row is not None},
     )
 
