@@ -127,6 +127,18 @@ function MetricCell({
   );
 }
 
+// Maps the display label to the percentile key sent by the API.
+const STAT_PCTL_KEY: Record<string, string> = {
+  gp: 'gp', mpg: 'mpg', pts: 'pts_pg', reb: 'reb_pg', ast: 'ast_pg', bpm: 'bpm',
+};
+
+function setBoardStatHover(el: HTMLElement, stat: string | null) {
+  const board = el.closest('.siq-pressure-board');
+  if (!board) return;
+  if (stat) board.setAttribute('data-stat-hover', stat);
+  else board.removeAttribute('data-stat-hover');
+}
+
 function CardStatLine({ stats }: { stats: PlayerCardStats }) {
   const items: Array<{ value: string; label: string }> = [];
   if (stats.gp != null) items.push({ value: String(stats.gp), label: 'gp' });
@@ -139,12 +151,27 @@ function CardStatLine({ stats }: { stats: PlayerCardStats }) {
 
   return (
     <div className="siq-statline siq-statline--card">
-      {items.map(({ value, label }) => (
-        <span key={label} className="siq-statline__cell">
-          <span className="siq-statline__value ds-tnum">{value}</span>
-          <span className="siq-statline__label">{label}</span>
-        </span>
-      ))}
+      {items.map(({ value, label }) => {
+        const pctl = stats.pctl?.[STAT_PCTL_KEY[label]];
+        return (
+          <span
+            key={label}
+            className="siq-statline__cell"
+            data-stat={label}
+            title={pctl != null ? `League percentile: ${pctl}` : undefined}
+            onPointerEnter={(e) => setBoardStatHover(e.currentTarget, label)}
+            onPointerLeave={(e) => setBoardStatHover(e.currentTarget, null)}
+          >
+            <span className="siq-statline__value ds-tnum">{value}</span>
+            {pctl != null && (
+              <span className="siq-statline__pctl" aria-hidden="true">
+                <span style={{ width: `${pctl}%` }} />
+              </span>
+            )}
+            <span className="siq-statline__label">{label}</span>
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -256,7 +283,10 @@ function PlayersContent() {
 
   const [draftQuery, setDraftQuery] = useState(q);
   const [watchlist, setWatchlist] = useState<PlayerWatchlistResponse | null>(null);
-  const [bucket, setBucket] = useState<WatchlistBucket>('all');
+  const bucketParam = searchParams.get('bucket');
+  const [bucket, setBucket] = useState<WatchlistBucket>(
+    bucketParam === 'underpaid' || bucketParam === 'overpaid' ? bucketParam : 'all',
+  );
   const [sort, setSort] = useState<WatchlistSort>('mismatch');
   const [position, setPosition] = useState('');
   const [qualifiedOnly, setQualifiedOnly] = useState(true);

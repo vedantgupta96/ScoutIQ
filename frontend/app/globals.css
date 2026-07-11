@@ -336,6 +336,7 @@ textarea::placeholder {
   padding: 0 18px;
   height: var(--topbar-height);
   border-bottom: 1px solid var(--border-subtle);
+  text-decoration: none;
   flex-shrink: 0;
 }
 
@@ -3102,4 +3103,237 @@ textarea::placeholder {
   .siq-similar-metrics {
     flex-wrap: wrap;
   }
+}
+
+/* ============================================================
+   Cockpit polish — Morning Board, percentile bars, column
+   compare, verdict beat, contract spark
+   ============================================================ */
+
+/* ---- Morning Board (/) ---- */
+.siq-home {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--panel-gap);
+  align-items: stretch;
+}
+
+.siq-home-hero {
+  grid-column: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 24px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+}
+
+.siq-home-calibration { grid-column: 3; }
+
+.siq-home-hero__row { display: flex; align-items: center; gap: 14px; }
+.siq-home-hero__id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+
+.siq-home-hero__name {
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.siq-home-hero__name:hover { color: var(--accent-text); }
+.siq-home-hero__team { color: var(--text-muted); font-size: 12.5px; line-height: 1.45; }
+
+.siq-home-hero__gap {
+  font-size: 54px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.siq-home-hero__foot { display: flex; align-items: center; gap: 12px; }
+.siq-home-hero__loading { color: var(--text-muted); font-size: 13px; }
+
+.siq-home-cal__body { display: flex; flex-direction: column; gap: 12px; }
+.siq-home-cal__note { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+
+.siq-home-cal__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.siq-home-cal__stats dt {
+  color: var(--text-faint);
+  font-family: var(--font-sans);
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.siq-home-cal__stats dd {
+  margin: 3px 0 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.siq-home-cal__link,
+.siq-home-more {
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.siq-home-more { display: block; margin-top: 10px; }
+
+.siq-home-mover {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  text-decoration: none;
+}
+
+.siq-home-mover:last-of-type { border-bottom: 0; }
+.siq-home-mover__rank { width: 14px; color: var(--text-faint); font-size: 11px; }
+.siq-home-mover__id { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+
+.siq-home-mover__name {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.siq-home-mover:hover .siq-home-mover__name { color: var(--accent-text); }
+.siq-home-mover__team { color: var(--text-muted); font-size: 11px; }
+.siq-home-mover__gap { margin-left: auto; font-size: 13px; font-weight: 700; }
+.siq-home-caution-note { margin: 10px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
+
+@media (max-width: 960px) {
+  .siq-home { grid-template-columns: minmax(0, 1fr); }
+  .siq-home-hero, .siq-home-calibration { grid-column: 1; }
+  .siq-home-hero__gap { font-size: 42px; }
+}
+
+/* ---- Verdict beat: one-shot rule sweep under a hero verdict figure ---- */
+.siq-verdict-beat { position: relative; display: inline-block; }
+.siq-verdict-beat--positive { color: var(--positive-text); }
+.siq-verdict-beat--negative { color: var(--negative-text); }
+
+.siq-verdict-beat::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  right: 6px;
+  bottom: -8px;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.55;
+  transform-origin: left center;
+  animation: siq-beat-sweep 460ms var(--ease-out) 160ms backwards;
+}
+
+@keyframes siq-beat-sweep {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .siq-verdict-beat::after { animation: none; }
+}
+
+/* ---- Percentile underbars in card stat strips ---- */
+.siq-statline__cell { padding: 2px 2px 3px; border-radius: var(--radius-sm); }
+
+.siq-statline__pctl {
+  width: 100%;
+  max-width: 30px;
+  height: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--text-faint) 24%, transparent);
+  overflow: hidden;
+}
+
+.siq-statline__pctl span {
+  display: block;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--confidence);
+  opacity: 0.8;
+}
+
+/* ---- Cross-card column compare: hover a stat, read it everywhere ---- */
+.siq-pressure-board[data-stat-hover] .siq-statline__cell {
+  opacity: 0.4;
+  transition: opacity var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
+}
+
+.siq-pressure-board[data-stat-hover="gp"] .siq-statline__cell[data-stat="gp"],
+.siq-pressure-board[data-stat-hover="mpg"] .siq-statline__cell[data-stat="mpg"],
+.siq-pressure-board[data-stat-hover="pts"] .siq-statline__cell[data-stat="pts"],
+.siq-pressure-board[data-stat-hover="reb"] .siq-statline__cell[data-stat="reb"],
+.siq-pressure-board[data-stat-hover="ast"] .siq-statline__cell[data-stat="ast"],
+.siq-pressure-board[data-stat-hover="bpm"] .siq-statline__cell[data-stat="bpm"] {
+  opacity: 1;
+  background: var(--bg-inset);
+}
+
+.siq-pressure-board[data-stat-hover="gp"] .siq-statline__cell[data-stat="gp"] .siq-statline__value,
+.siq-pressure-board[data-stat-hover="mpg"] .siq-statline__cell[data-stat="mpg"] .siq-statline__value,
+.siq-pressure-board[data-stat-hover="pts"] .siq-statline__cell[data-stat="pts"] .siq-statline__value,
+.siq-pressure-board[data-stat-hover="reb"] .siq-statline__cell[data-stat="reb"] .siq-statline__value,
+.siq-pressure-board[data-stat-hover="ast"] .siq-statline__cell[data-stat="ast"] .siq-statline__value,
+.siq-pressure-board[data-stat-hover="bpm"] .siq-statline__cell[data-stat="bpm"] .siq-statline__value {
+  color: var(--text-primary);
+}
+
+/* ---- Contract trajectory spark (decision brief) ---- */
+.siq-contract-spark {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.siq-contract-spark svg { display: block; width: 100%; height: 44px; }
+
+.siq-contract-spark__legend {
+  display: flex;
+  gap: 14px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.siq-contract-spark__legend i {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  margin-right: 5px;
+  vertical-align: middle;
+  font-style: normal;
+}
+
+/* ---- Interval band edge ticks (ValueGauge jewelry) ---- */
+.siq-gauge-bound {
+  position: absolute;
+  top: calc(100% + 2px);
+  width: 2px;
+  height: 5px;
+  transform: translateX(-1px);
+  border-radius: 1px;
+  background: var(--confidence);
+  opacity: 0.9;
 }

@@ -97,6 +97,7 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
         )}
 
         <div
+          title={`80% interval ${fmtPct(loPct)}–${fmtPct(hiPct)} — calibrated so roughly 8 in 10 true values land inside; see the backtest.`}
           style={{
             position: 'absolute',
             left: `${bandStart.toFixed(3)}%`,
@@ -107,8 +108,19 @@ export function ValueGauge({ valuePct, loPct, hiPct, actualPct }: ValueGaugeProp
             background: 'var(--grad-confidence)',
             opacity: 0.85,
             boxShadow: 'var(--glow-confidence)',
+            cursor: 'help',
             zIndex: 3,
           }}
+        />
+        <span
+          className="siq-gauge-bound"
+          aria-hidden="true"
+          style={{ left: `${bandStart.toFixed(3)}%` }}
+        />
+        <span
+          className="siq-gauge-bound"
+          aria-hidden="true"
+          style={{ left: `${bandEnd.toFixed(3)}%` }}
         />
 
         {ticks.map((t) => (
