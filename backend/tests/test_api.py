@@ -506,6 +506,65 @@ def test_player_cards_returns_batched_valuation_snippets(monkeypatch):
     assert body[0]["valuation"]["verdict_label"] == "Significant bargain"
     assert body[0]["valuation"]["verdict_tone"] == "positive"
     assert body[0]["valuation"]["caution_flags"] == []
+    assert body[0]["valuation"]["stats"] == {
+        "gp": 70,
+        "mpg": 34.3,
+        "pts_pg": 21.4,
+        "reb_pg": 4.3,
+        "ast_pg": 5.7,
+        "ts_pct": 0.6,
+        "bpm": 2.5,
+    }
+
+
+def test_card_stats_tolerate_non_numeric_feature_values():
+    # Advanced stats come from loosely-typed JSON columns; strings and NaN must
+    # degrade to None instead of raising (regression: live rows carried str BPM).
+    stats = players_router._card_stats_from_features({
+        "gp": 70,
+        "minutes": 2400,
+        "pts_pg": 21.43,
+        "reb_pg": None,
+        "ast_pg": "5.71",
+        "TS_PCT": "",
+        "BPM": "n/a",
+    })
+    assert stats.gp == 70
+    assert stats.mpg == 34.3
+    assert stats.pts_pg == 21.4
+    assert stats.reb_pg is None
+    assert stats.ast_pg == 5.7
+    assert stats.ts_pct is None
+    assert stats.bpm is None
+
+
+def test_build_features_coerces_string_stat_values():
+    # Live bbref-derived rows store some numerics as strings (e.g. Saddiq Bey:
+    # BPM "0.5", WS48 ".116") and Numeric columns yield Decimal. Features must
+    # come out as float | None so API consumers can format them without type
+    # checks — and without dropping real values (regression: Decimal minutes).
+    from decimal import Decimal
+
+    from scoutiq.model.predict import build_features_from_season
+
+    ps = PlayerSeason(
+        player_id=1630180,
+        season="2025-26",
+        team_id=1610612740,
+        age=26,
+        gp=72,
+        minutes=Decimal("2245.575"),
+        box={"PTS": "1271", "REB": 300, "AST": 150, "STL": 60, "BLK": 20, "TOV": 90, "FG3M": 170},
+        advanced={"BPM": "0.5", "WS48": ".116", "PER": "n/a", "TS_PCT": 0.579},
+    )
+    features = build_features_from_season(ps, None)
+
+    assert features["minutes"] == 2245.575
+    assert features["BPM"] == 0.5
+    assert features["WS48"] == 0.116
+    assert features["PER"] is None
+    assert features["TS_PCT"] == 0.579
+    assert features["pts_pg"] == 1271 / 72
 
 
 def test_player_watchlist_defaults_to_ranked_recent_mismatches(monkeypatch):
@@ -536,6 +595,8 @@ def test_player_watchlist_defaults_to_ranked_recent_mismatches(monkeypatch):
     assert body["total"] == 1
     assert body["items"][0]["full_name"] == "Desmond Bane"
     assert body["items"][0]["valuation"]["gap_pct"] == 3.58
+    assert body["items"][0]["valuation"]["stats"]["gp"] == 70
+    assert body["items"][0]["valuation"]["stats"]["pts_pg"] == 21.4
 
 
 def test_valuation_cautions_returns_warning_verdicts(monkeypatch):
