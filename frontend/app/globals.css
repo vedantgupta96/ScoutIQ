@@ -1363,16 +1363,6 @@ textarea::placeholder {
   font-size: 13px;
 }
 
-.siq-offseason-loading,
-.siq-offseason-empty {
-  min-height: 96px;
-  display: grid;
-  place-items: center;
-  color: var(--text-muted);
-  font-size: 13px;
-  text-align: center;
-}
-
 .siq-offseason-hero {
   display: flex;
   align-items: flex-start;
@@ -1496,12 +1486,6 @@ textarea::placeholder {
 }
 
 .siq-offseason-add:disabled { opacity: 0.4; cursor: not-allowed; }
-
-.siq-offseason-empty--plan {
-  min-height: 180px;
-  align-content: center;
-  gap: 8px;
-}
 
 .siq-offseason-moves { gap: 10px; }
 
@@ -2190,6 +2174,18 @@ textarea::placeholder {
   font-weight: 650;
 }
 
+.siq-field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.siq-field--inline .siq-field__label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .siq-field__hint {
   color: var(--text-muted);
   font-size: 11px;
@@ -2246,6 +2242,24 @@ textarea::placeholder {
 .siq-alert__text p { margin: 0; }
 
 /* ---- Empty state ---- */
+.siq-loading-note {
+  padding: 44px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.siq-loading-note--tall {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  padding: 16px;
+}
+
+.siq-loading-note--row {
+  padding: 24px 16px;
+}
+
 .siq-empty {
   display: flex;
   flex-direction: column;
@@ -2393,6 +2407,18 @@ textarea::placeholder {
   align-items: center;
   gap: 7px;
   min-width: 0;
+}
+
+/* Narrow screens: actions drop below the heading instead of crushing it. */
+@media (max-width: 480px) {
+  .siq-surface__head,
+  .siq-card__head {
+    flex-wrap: wrap;
+    row-gap: 2px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+    min-height: 0;
+  }
 }
 
 .siq-surface__icon {

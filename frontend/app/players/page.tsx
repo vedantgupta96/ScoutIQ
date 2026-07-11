@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingNote } from '@/components/ui/LoadingNote';
 import { Select } from '@/components/ui/Select';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -550,7 +551,7 @@ function PlayersContent() {
 
 export default function PlayersPage() {
   return (
-    <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>}>
+    <Suspense fallback={<LoadingNote>Loading…</LoadingNote>}>
       <PlayersContent />
     </Suspense>
   );

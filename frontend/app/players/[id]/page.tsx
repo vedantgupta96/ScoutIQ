@@ -177,7 +177,7 @@ function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsRespo
           Scout ratings unavailable: {error}
         </p>
       ) : ratings == null ? (
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading scout ratings…</p>
+        <p role="status" style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading scout ratings…</p>
       ) : ratings.report_count === 0 ? (
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
           No scout-report coverage for this player yet.
