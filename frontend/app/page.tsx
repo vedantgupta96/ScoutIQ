@@ -14,9 +14,8 @@ import {
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { ButtonLink } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
+import { Panel } from '@/components/ui/Panel';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { Surface } from '@/components/ui/Surface';
 import { fmtPct, signed } from '@/lib/utils';
 
 function gapText(gap: number): string {
@@ -123,7 +122,7 @@ export default function Home() {
         )}
       </section>
 
-      <Surface eyebrow="Model, on the record" icon={<Target size={15} />} className="siq-home-calibration">
+      <Panel eyebrow="Model, on the record" icon={<Target size={15} />} className="siq-home-calibration">
         {metrics ? (
           <div className="siq-home-cal__body">
             <p className="siq-home-cal__note">
@@ -139,19 +138,19 @@ export default function Home() {
         ) : (
           <Skeleton height={56} />
         )}
-      </Surface>
+      </Panel>
 
-      <Card eyebrow="Best value" icon={<TrendingUp size={15} />} headingLevel="h2">
+      <Panel variant="card" eyebrow="Best value" icon={<TrendingUp size={15} />} headingLevel="h2">
         {underpaid ? underpaid.map((p, i) => <MoverRow key={p.player_id} player={p} rank={i + 1} />) : <MoverSkeletons />}
         <Link href="/players?bucket=underpaid" className="siq-home-more">Full underpaid board →</Link>
-      </Card>
+      </Panel>
 
-      <Card eyebrow="Most overpaid" icon={<TrendingDown size={15} />} headingLevel="h2">
+      <Panel variant="card" eyebrow="Most overpaid" icon={<TrendingDown size={15} />} headingLevel="h2">
         {overpaid ? overpaid.map((p, i) => <MoverRow key={p.player_id} player={p} rank={i + 1} />) : <MoverSkeletons />}
         <Link href="/players?bucket=overpaid" className="siq-home-more">Full overpaid board →</Link>
-      </Card>
+      </Panel>
 
-      <Card eyebrow="Trust flags" icon={<TriangleAlert size={15} />} headingLevel="h2">
+      <Panel variant="card" eyebrow="Trust flags" icon={<TriangleAlert size={15} />} headingLevel="h2">
         {cautions && cautions.items.length > 0 ? (
           <>
             {cautions.items.map((p) => (
@@ -171,7 +170,7 @@ export default function Home() {
         ) : (
           <MoverSkeletons />
         )}
-      </Card>
+      </Panel>
     </div>
   );
 }

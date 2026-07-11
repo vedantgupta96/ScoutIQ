@@ -578,44 +578,6 @@ textarea::placeholder {
   pointer-events: none;
 }
 
-.siq-card {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  overflow: hidden;
-  transition:
-    border-color var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out);
-}
-
-.siq-card:hover {
-  border-color: var(--border-default);
-}
-
-.siq-card__head,
-.siq-card__head-main {
-  display: flex;
-  align-items: center;
-}
-
-.siq-card__head {
-  min-height: 42px;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.siq-card__head-main { gap: 7px; min-width: 0; }
-.siq-card__head .ds-eyebrow,
-.siq-surface__head .ds-eyebrow { margin: 0; }
-.siq-card__icon { display: flex; color: var(--text-muted); }
-.siq-card__action { flex-shrink: 0; }
-.siq-card__body { padding: 14px 16px 16px; }
-.siq-card__body--padded { padding: 16px; }
-.siq-card__body--flush { padding: 0; }
-
 .siq-badge {
   display: inline-flex;
   align-items: center;
@@ -1208,7 +1170,7 @@ textarea::placeholder {
   .siq-decision-strip__actions { grid-column: auto; flex-wrap: wrap; }
 }
 
-.siq-roster-ledger .siq-card {
+.siq-roster-ledger .siq-panel {
   overflow: hidden;
 }
 
@@ -1233,7 +1195,7 @@ textarea::placeholder {
 }
 
 .siq-roster-ledger-row:hover {
-  background: color-mix(in srgb, var(--surface-accent, var(--accent)) 5%, transparent);
+  background: color-mix(in srgb, var(--panel-accent, var(--accent)) 5%, transparent);
 }
 
 .siq-roster-gauge-cell {
@@ -1781,7 +1743,7 @@ textarea::placeholder {
 
 .siq-control-slab {
   padding: 9px 10px;
-  border: 1px solid color-mix(in srgb, var(--surface-accent, var(--accent)) 13%, var(--border-subtle));
+  border: 1px solid color-mix(in srgb, var(--panel-accent, var(--accent)) 13%, var(--border-subtle));
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-inset) 82%, transparent);
 }
@@ -2373,7 +2335,7 @@ textarea::placeholder {
 }
 
 /* ---- Surface base ---- */
-.siq-surface {
+.siq-panel {
   position: relative;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -2383,14 +2345,15 @@ textarea::placeholder {
   isolation: isolate;
   transition:
     border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out);
 }
 
-.siq-surface:hover {
+.siq-panel:hover {
   border-color: var(--border-default);
 }
 
-.siq-surface__head {
+.siq-panel__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2402,7 +2365,7 @@ textarea::placeholder {
   z-index: 2;
 }
 
-.siq-surface__head-l {
+.siq-panel__head-l {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -2411,8 +2374,7 @@ textarea::placeholder {
 
 /* Narrow screens: actions drop below the heading instead of crushing it. */
 @media (max-width: 480px) {
-  .siq-surface__head,
-  .siq-card__head {
+  .siq-panel__head {
     flex-wrap: wrap;
     row-gap: 2px;
     padding-top: 9px;
@@ -2421,20 +2383,25 @@ textarea::placeholder {
   }
 }
 
-.siq-surface__icon {
+.siq-panel__head .ds-eyebrow { margin: 0; }
+
+.siq-panel__icon {
   display: flex;
-  color: var(--surface-accent, var(--text-muted));
+  color: var(--panel-accent, var(--text-muted));
 }
 
-.siq-surface__body {
+.siq-panel--card .siq-panel__icon { color: var(--text-muted); }
+
+.siq-panel__action { flex-shrink: 0; }
+
+.siq-panel__body {
   padding: 14px 16px 16px;
   position: relative;
   z-index: 2;
 }
 
-.siq-surface__body--flush {
-  padding: 0;
-}
+.siq-panel__body--padded { padding: 16px; }
+.siq-panel__body--flush { padding: 0; }
 
 
 .siq-gauge-well {
@@ -2479,7 +2446,7 @@ textarea::placeholder {
   width: 20px;
   height: 2px;
   border-radius: 0 0 2px 2px;
-  background: var(--plate-accent, var(--surface-accent, var(--accent)));
+  background: var(--plate-accent, var(--panel-accent, var(--accent)));
 }
 
 .siq-metric-plate__label {
@@ -2506,8 +2473,8 @@ textarea::placeholder {
   line-height: 1.3;
 }
 
-.siq-surface--board {
-  border-color: color-mix(in srgb, var(--surface-accent, var(--accent)) 22%, var(--border-subtle));
+.siq-panel--board {
+  border-color: color-mix(in srgb, var(--panel-accent, var(--accent)) 22%, var(--border-subtle));
   background: var(--bg-panel);
 }
 
@@ -2525,7 +2492,7 @@ textarea::placeholder {
   top: 2px;
   bottom: 2px;
   width: 7px;
-  border: 1.5px solid color-mix(in srgb, var(--surface-accent, var(--confidence)) 45%, var(--border-strong));
+  border: 1.5px solid color-mix(in srgb, var(--panel-accent, var(--confidence)) 45%, var(--border-strong));
   border-right: none;
   border-radius: 3px 0 0 3px;
 }
@@ -3159,8 +3126,7 @@ textarea::placeholder {
 
   .siq-brand-mark::after { display: none; }
 
-  .siq-card:hover,
-  .siq-surface:hover,
+  .siq-panel:hover,
   .siq-primary-button:hover,
   .siq-secondary-button:hover,
   .siq-case-card:hover,

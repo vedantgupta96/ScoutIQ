@@ -16,8 +16,7 @@ import {
   TeamListItem,
   FaType,
 } from '@/lib/api';
-import { Card } from '@/components/ui/Card';
-import { Surface } from '@/components/ui/Surface';
+import { Panel } from '@/components/ui/Panel';
 import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
@@ -159,7 +158,7 @@ function BoardTab({ season }: { season: string }) {
 
       {error && <ErrorNote message={error} />}
 
-      <Card
+      <Panel variant="card"
         className="siq-roster-ledger"
         eyebrow={data ? `${data.total} free agents · entering ${data.entering_season}` : 'Free agents'}
         icon={<Handshake size={15} />}
@@ -206,7 +205,7 @@ function BoardTab({ season }: { season: string }) {
         {data && data.total > PAGE_SIZE && (
           <Pager offset={offset} total={data.total} onPrev={() => setOffset(Math.max(0, offset - PAGE_SIZE))} onNext={() => setOffset(offset + PAGE_SIZE)} />
         )}
-      </Card>
+      </Panel>
 
       {data && <AssumptionFlag tone="warning" title="Derived free-agency status" icon={<TriangleAlert size={16} />}>{data.caveat}</AssumptionFlag>}
     </div>
@@ -246,7 +245,7 @@ function OptionsTab({ season }: { season: string }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
       {error && <ErrorNote message={error} />}
 
-      <Card eyebrow={data ? `${data.total} option decisions · entering ${data.entering_season}` : 'Option decisions'} icon={<Scale size={15} />}>
+      <Panel variant="card" eyebrow={data ? `${data.total} option decisions · entering ${data.entering_season}` : 'Option decisions'} icon={<Scale size={15} />}>
         {loading && !data && <LoadingNote>Loading option decisions…</LoadingNote>}
         {data && data.items.length === 0 && (
           <EmptyState title={`No player/team options for ${data.entering_season}.`} />
@@ -285,7 +284,7 @@ function OptionsTab({ season }: { season: string }) {
         {data && data.total > PAGE_SIZE && (
           <Pager offset={offset} total={data.total} onPrev={() => setOffset(Math.max(0, offset - PAGE_SIZE))} onNext={() => setOffset(offset + PAGE_SIZE)} />
         )}
-      </Card>
+      </Panel>
 
       {data && <AssumptionFlag tone="warning" title="Verdicts compare model value to the option salary" icon={<TriangleAlert size={16} />}>{data.caveat}</AssumptionFlag>}
     </div>
@@ -372,7 +371,7 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
 
       {data && ctx && (
         <>
-          <Surface variant="instrument" eyebrow={`Projected room · ${data.entering_season}`} icon={<Users size={15} />}
+          <Panel variant="instrument" eyebrow={`Projected room · ${data.entering_season}`} icon={<Users size={15} />}
             action={
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Link href={`/offseason?team=${data.team.team_id}&season=${encodeURIComponent(data.entering_season)}`} style={{ textDecoration: 'none' }}>
@@ -402,16 +401,16 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
                 </div>
               </>
             )}
-          </Surface>
+          </Panel>
 
-          <Surface
+          <Panel
             variant="instrument"
             eyebrow="Projected roster needs"
             icon={<Radar size={15} />}
             action={<Badge tone="neutral" variant="outline" size="sm">vs league median</Badge>}
           >
             <RosterNeeds before={data.needs} />
-          </Surface>
+          </Panel>
 
           <DecisionStrip
             ariaLabel={`${data.team.name ?? data.team.abbreviation} free-agency decision status`}
@@ -443,7 +442,7 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
             ]}
           />
 
-          <Card className="siq-roster-ledger" eyebrow={sort === 'fit' ? 'Team-fit targets' : 'Top available by model value'} icon={<Handshake size={15} />}>
+          <Panel variant="card" className="siq-roster-ledger" eyebrow={sort === 'fit' ? 'Team-fit targets' : 'Top available by model value'} icon={<Handshake size={15} />}>
             <div className="siq-roster-ledger-head">
               <span className="ds-eyebrow">Player</span>
               <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Need fit</span>
@@ -476,7 +475,7 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
                 </div>
               </div>
             ))}
-          </Card>
+          </Panel>
 
           <AssumptionFlag tone="warning" title="Projected room is a simplified model" icon={<TriangleAlert size={16} />}>{data.caveat}</AssumptionFlag>
         </>

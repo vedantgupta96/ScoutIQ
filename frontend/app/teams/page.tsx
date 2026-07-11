@@ -11,8 +11,7 @@ import {
   TeamCapSheetResponse,
   TeamCapSheetPlayer,
 } from '@/lib/api';
-import { Card } from '@/components/ui/Card';
-import { Surface } from '@/components/ui/Surface';
+import { Panel } from '@/components/ui/Panel';
 import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import { Select } from '@/components/ui/Select';
@@ -142,7 +141,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
       } as CSSProperties}
     >
       {/* Payroll hero */}
-      <Surface variant="instrument" teamAccent eyebrow="Team payroll vs cap" icon={<Shield size={15} />}
+      <Panel variant="instrument" teamAccent eyebrow="Team payroll vs cap" icon={<Shield size={15} />}
         action={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Link href={`/offseason?team=${sheet.team.team_id}`} style={{ textDecoration: 'none' }}>
@@ -201,7 +200,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
             Cap thresholds unavailable for {sheet.season}.
           </p>
         )}
-      </Surface>
+      </Panel>
 
       <DecisionStrip
         ariaLabel={`${sheet.team.name ?? sheet.team.abbreviation} decision status`}
@@ -234,7 +233,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
       />
 
       {/* Roster board */}
-      <Card
+      <Panel variant="card"
         className="siq-roster-ledger"
         eyebrow={`Roster · ${totals.roster_size} players`}
         icon={<Users size={15} />}
@@ -266,7 +265,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
           <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Gap</span>
         </div>
         {players.map((p) => <RosterRow key={p.player_id} player={p} gaugeDomainMaxPct={gaugeDomainMaxPct} />)}
-      </Card>
+      </Panel>
 
       <AssumptionFlag tone="warning" title="Simplified roster cap model" icon={<TriangleAlert size={16} />}>
         {sheet.caveat}

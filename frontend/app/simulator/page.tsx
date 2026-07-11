@@ -9,8 +9,7 @@ import {
   searchPlayers, getPlayer, simulateContract, getPlayerWatchlist,
   PlayerSummary, PlayerCardResponse, SimulatorResponse, ContractYearResponse,
 } from '@/lib/api';
-import { Card } from '@/components/ui/Card';
-import { Surface } from '@/components/ui/Surface';
+import { Panel } from '@/components/ui/Panel';
 import { Badge } from '@/components/ui/Badge';
 import { Button, ButtonLink } from '@/components/ui/Button';
 import { StatTile } from '@/components/ui/StatTile';
@@ -272,7 +271,7 @@ function QuickPick({ p, onPick }: { p: PlayerCardResponse; onPick: (p: PlayerSum
 // empty page sells the feature instead of just demanding a search.
 function FeatureCard({ icon, accent, title, body }: { icon: ReactNode; accent: string; title: string; body: string }) {
   return (
-    <div className="siq-card siq-sim-feature">
+    <div className="siq-panel siq-sim-feature">
       <span
         className="siq-sim-feature__icon"
         style={{ color: accent, background: `color-mix(in srgb, ${accent} 12%, transparent)` }}
@@ -462,7 +461,7 @@ function SimulatorContent() {
           picker, and offer one-click starters so the page is never a dead end. */}
       {!player && (
         <div className="siq-sim-intro">
-          <Surface
+          <Panel
             variant="instrument"
             eyebrow="What-if contract & cap simulator"
             icon={<SlidersHorizontal size={15} />}
@@ -489,7 +488,7 @@ function SimulatorContent() {
                 </div>
               )}
             </div>
-          </Surface>
+          </Panel>
 
           <div className="siq-sim-intro__features">
             <FeatureCard
@@ -559,7 +558,7 @@ function SimulatorContent() {
 
           <div className="siq-simulator-grid">
             {/* Controls */}
-            <Surface variant="instrument" teamAccent eyebrow="Contract terms" icon={<SlidersHorizontal size={15} />}>
+            <Panel variant="instrument" teamAccent eyebrow="Contract terms" icon={<SlidersHorizontal size={15} />}>
               <div className="siq-simulator-controls">
                 <DSSlider
                   label="AAV"
@@ -620,12 +619,12 @@ function SimulatorContent() {
                   format={(v) => `${v} yr${v !== 1 ? 's' : ''}`}
                 />
               </div>
-            </Surface>
+            </Panel>
 
             {/* Results */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
               {loading && !result && (
-                <Card padded className="siq-sim-loading-card">
+                <Panel variant="card" padded className="siq-sim-loading-card">
                   <div className="siq-sim-loading-head">
                     <span className="ds-eyebrow">Running simulation</span>
                     <span className="siq-loading-dot" />
@@ -640,7 +639,7 @@ function SimulatorContent() {
                     <span />
                     <span />
                   </div>
-                </Card>
+                </Panel>
               )}
 
               {error && (
@@ -652,7 +651,7 @@ function SimulatorContent() {
               {displayResult && (
                 <>
                   {/* Summary card */}
-                  <Surface variant="board" teamAccent eyebrow="Proposed deal" icon={<SlidersHorizontal size={15} />}>
+                  <Panel variant="board" teamAccent eyebrow="Proposed deal" icon={<SlidersHorizontal size={15} />}>
                     <div className="siq-sim-summary-grid">
                       <StatTile
                         label="Contract AAV"
@@ -691,12 +690,12 @@ function SimulatorContent() {
                         <MiniValuePayGauge valuePct={displayResult.value_pct} payPct={displayResult.proposed_aav_pct} />
                       </div>
                     )}
-                  </Surface>
+                  </Panel>
 
                   {/* Cap share & structure — read against the individual
                       max-salary tiers (a single deal never nears the team tax line),
                       plus the year-by-year dollar escalation and guarantee structure. */}
-                  <Surface
+                  <Panel
                     variant="board"
                     teamAccent
                     eyebrow="Cap share & structure"
@@ -722,7 +721,7 @@ function SimulatorContent() {
                       </div>
                       {displayResult.years.map((yr) => <YearRow key={yr.season} yr={yr} />)}
                     </div>
-                  </Surface>
+                  </Panel>
 
                   <AssumptionFlag tone="warning" title="Simplified CBA model" icon={<TriangleAlert size={16} />}>
                     {displayResult.disclaimer} Caps project at {(displayResult.assumptions.cap_projection_rate * 100).toFixed(1)}%/yr.
