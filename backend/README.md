@@ -72,6 +72,9 @@ curl 'http://127.0.0.1:8000/players/1630217/rationale?consensus=fusion'   # LIVE
 curl 'http://127.0.0.1:8000/free-agency/board?season=2026-27&limit=25'
 curl 'http://127.0.0.1:8000/free-agency/options?season=2026-27'
 curl 'http://127.0.0.1:8000/free-agency/teams/1610612747/targets?season=2026-27'
+curl -X POST 'http://127.0.0.1:8000/offseason/plan' \
+  -H 'content-type: application/json' \
+  -d '{"team_id":1610612747,"start_season":"2026-27","horizon":4,"contracts":[{"player_id":201935,"aav_pct":25,"years":4,"team_option_years":1}],"option_declines":[]}'
 curl 'http://127.0.0.1:8000/backtest'
 curl 'http://127.0.0.1:8000/llm/scout-ratings/eval'
 curl -X POST 'http://127.0.0.1:8000/simulate/contract' \
@@ -98,6 +101,11 @@ The board ranks pending free agents by production-implied model value; the optio
 player/team option salary to model value; team targets combine projected room with the same value lens.
 UFA/RFA labels are service-time estimates, and projected room intentionally excludes cap holds, Bird
 rights, exceptions, incomplete-roster charges, and dead money.
+
+`POST /offseason/plan` turns that target view into a multi-move ledger. Proposed contracts replace an
+existing team figure for re-signings, valid option removals reduce the baseline, and each projected
+season returns payroll, roster count, cap room, and tax/apron tier. It deliberately shares the same
+simplified-CBA assumptions as the team cap sheet and simulator.
 
 The v0 simulator is intentionally narrow: it models a standalone proposed contract against cap constants
 and the valuation model, not full team payroll, luxury tax owed, Bird rights, MLE/BAE, repeater tax, or

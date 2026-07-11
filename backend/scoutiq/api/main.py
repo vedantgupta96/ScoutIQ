@@ -12,6 +12,7 @@ from scoutiq.api.routers import (
     headshots,
     health,
     llm_eval,
+    offseason,
     players,
     simulator,
     teams,
@@ -39,6 +40,7 @@ app.include_router(headshots.router)
 app.include_router(players.router)
 app.include_router(teams.router)
 app.include_router(free_agency.router)
+app.include_router(offseason.router)
 app.include_router(simulator.router)
 app.include_router(backtest.router)
 app.include_router(llm_eval.router)

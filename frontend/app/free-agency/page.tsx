@@ -391,7 +391,14 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
       {data && ctx && (
         <>
           <Surface variant="instrument" eyebrow={`Projected room · ${data.entering_season}`} icon={<Users size={15} />}
-            action={<Badge tone="confidence" variant="outline" size="sm">{ctx.is_projected ? 'projected' : 'actual'} cap</Badge>}>
+            action={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Link href={`/offseason?team=${data.team.team_id}&season=${encodeURIComponent(data.entering_season)}`} style={{ textDecoration: 'none' }}>
+                  <Badge tone="accent" size="sm">Build plan →</Badge>
+                </Link>
+                <Badge tone="confidence" variant="outline" size="sm">{ctx.is_projected ? 'projected' : 'actual'} cap</Badge>
+              </div>
+            }>
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
               <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
                 {data.team.name ?? data.team.abbreviation}
