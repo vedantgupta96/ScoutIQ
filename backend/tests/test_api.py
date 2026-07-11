@@ -789,9 +789,12 @@ def test_backtest_returns_committed_metrics():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["model_version"] == "v0-gbm-conformal"
-    assert body["metrics"]["n_test"] == 699
+    assert body["model_version"] == "v1-gbm-cqr-lags-dpcal"
+    assert body["metrics"]["n_test"] == 803
     assert body["metrics"]["test_seasons"] == ["2024-25", "2025-26"]
+    assert body["metrics"]["segments"]["decision_point"]["n"] == 226
+    assert body["metrics"]["segments"]["decision_point"]["interval_80_coverage"] == 0.858
+    assert body["metrics"]["interval_calibration"] == "decision_point_oof_5fold"
     assert "metrics.json" in body["artifacts"]
 
 

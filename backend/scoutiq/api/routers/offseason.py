@@ -21,7 +21,12 @@ from scoutiq.api.routers.free_agency import _season_caps
 from scoutiq.api.routers.players import LATEST_SEASON, TeamSummary, _team_summary
 from scoutiq.api.routers.teams import team_cap_hits
 from scoutiq.api.season import is_valid_season
-from scoutiq.model.predict import build_features_from_season, predict_many_from_features
+from scoutiq.model.predict import (
+    build_features_from_season,
+    predict_many_from_features,
+    prev_season_label,
+    previous_seasons_for,
+)
 from scoutiq.model.roster_fit import profile_roster
 from scoutiq.models import Contract, ContractYear, Player, PlayerSeason, Team
 
@@ -161,9 +166,17 @@ def _valuations(
     ).all()
     if not season_rows:
         return {}
+    prev_by_key = previous_seasons_for(season_rows, db)
     try:
         predictions = predict_many_from_features(
-            [build_features_from_season(row, players_by_id[row.player_id]) for row in season_rows]
+            [
+                build_features_from_season(
+                    row,
+                    players_by_id[row.player_id],
+                    prev=prev_by_key.get((row.player_id, prev_season_label(row.season))),
+                )
+                for row in season_rows
+            ]
         )
     except FileNotFoundError:
         return {}

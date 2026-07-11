@@ -21,7 +21,14 @@ from scoutiq.llm.player_ratings import (
     aggregate_player_scout_ratings,
     load_player_reports,
 )
-from scoutiq.model.predict import build_features_from_season, predict_from_features, predict_many_from_features
+from scoutiq.model.predict import (
+    attribute_prediction,
+    build_features_from_season,
+    predict_from_features,
+    predict_many_from_features,
+    prev_season_label,
+    previous_seasons_for,
+)
 from scoutiq.model.similarity import (
     SIMILARITY_BASIS,
     SimilarityMode,
@@ -507,6 +514,7 @@ def _card_valuations(
         .where(PlayerSeason.season.in_(seasons))
     ).all()
     season_by_key = {(row.player_id, row.season): row for row in season_rows}
+    prev_by_key = previous_seasons_for(season_rows, db)
 
     salary_rows = db.scalars(
         select(PlayerSalary)
@@ -527,7 +535,8 @@ def _card_valuations(
         season_row = season_by_key.get((player_id, target_season))
         if season_row is None:
             continue
-        feature_rows.append(build_features_from_season(season_row, player_by_id[player_id]))
+        prev = prev_by_key.get((player_id, prev_season_label(target_season)))
+        feature_rows.append(build_features_from_season(season_row, player_by_id[player_id], prev=prev))
         feature_keys.append((player_id, target_season))
 
     predictions = predict_many_from_features(feature_rows)
@@ -783,13 +792,15 @@ def get_similar_players(
 
     value_by_player: dict[int, float | None] = {}
     try:
+        prev_by_key = previous_seasons_for(season_rows, db)
         feature_rows = []
         feature_player_ids = []
         for row in season_rows:
             candidate = player_by_id.get(row.player_id)
             if candidate is None:
                 continue
-            feature_rows.append(build_features_from_season(row, candidate))
+            prev = prev_by_key.get((row.player_id, prev_season_label(row.season)))
+            feature_rows.append(build_features_from_season(row, candidate, prev=prev))
             feature_player_ids.append(row.player_id)
         for candidate_id, prediction in zip(feature_player_ids, predict_many_from_features(feature_rows)):
             value_by_player[candidate_id] = prediction["value_pct"]
@@ -895,8 +906,16 @@ def get_player_contract(player_id: int, db: DB = None):
                 )
             ).all()
             if stat_rows:
+                prev_by_key = previous_seasons_for(stat_rows, db)
                 predictions = predict_many_from_features(
-                    [build_features_from_season(row, player) for row in stat_rows]
+                    [
+                        build_features_from_season(
+                            row,
+                            player,
+                            prev=prev_by_key.get((player_id, prev_season_label(row.season))),
+                        )
+                        for row in stat_rows
+                    ]
                 )
                 value_by_season = {
                     row.season: prediction["value_pct"]
@@ -976,7 +995,9 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
             detail=f"No stats for player_id={player_id} in season {target_season}.",
         )
 
-    features = build_features_from_season(season_row, player)
+    prev_by_key = previous_seasons_for([season_row], db)
+    prev = prev_by_key.get((player_id, prev_season_label(target_season)))
+    features = build_features_from_season(season_row, player, prev=prev)
     try:
         prediction = predict_from_features(features)
     except FileNotFoundError as e:
@@ -1019,6 +1040,7 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
         "value_usd": int(value_pct / 100 * salary_cap) if salary_cap else None,
         "model_version": prediction["model_version"],
         "features": {k: (None if v != v else v) for k, v in features.items()},
+        "attribution": attribute_prediction(features),
         "verdict_label": verdict_label,
         "verdict_tone": verdict_tone,
         "caution_flags": caution_flags,

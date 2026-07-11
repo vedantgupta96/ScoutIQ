@@ -1,9 +1,9 @@
-"""Feature specification for the v0 valuation model.
+"""Feature specification for the v1 valuation model.
 
 Target: a player's salary as % of cap in season t+1.
-Features: production at season t (the LOCKED set from docs/02 §3), age, role, and prior pay.
+Features: production at season t, prior-season production/trajectory, age, and role.
 All numeric features tolerate NaN — HistGradientBoostingRegressor handles missing values natively, so
-rookies (no prior salary) or players missing a metric still produce a prediction.
+rookies (no prior season) or players missing a metric still produce a prediction.
 """
 from __future__ import annotations
 
@@ -26,7 +26,13 @@ BASE_NUM = ["age", "gp", "minutes"]
 POSITIONS = ["PG", "SG", "SF", "PF", "C"]
 POS_COLS = [f"pos_{p}" for p in POSITIONS]
 
-NUMERIC_FEATURES = BASE_NUM + PER_GAME + NBA_ADV + BBREF_ADV
+# Multi-season context (v1): last season's workload/production/impact, the scoring
+# trend, and two-year availability. NaN for rookies or missing history — HGB is
+# NaN-native, so "no history" is a learnable state, not an error.
+LAG_SRC = ["gp", "minutes", "pts_pg", "TS_PCT", "BPM", "WS"]
+LAG_FEATURES = [f"lag_{c}" for c in LAG_SRC] + ["d_pts_pg", "gp_2yr"]
+
+NUMERIC_FEATURES = BASE_NUM + PER_GAME + NBA_ADV + BBREF_ADV + LAG_FEATURES
 FEATURE_COLS = NUMERIC_FEATURES + POS_COLS
 
 TARGET = "pct_cap_next"

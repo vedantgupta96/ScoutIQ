@@ -11,7 +11,12 @@ from scoutiq.api.cap_simulator import SeasonCapData, apron_outlook, simulate
 from scoutiq.api.deps import DB
 from scoutiq.api.season import is_valid_season
 from scoutiq.api.routers.teams import team_cap_hits
-from scoutiq.model.predict import build_features_from_season, predict_from_features
+from scoutiq.model.predict import (
+    build_features_from_season,
+    predict_from_features,
+    prev_season_label,
+    previous_seasons_for,
+)
 from scoutiq.models import CapConstants, Player, PlayerSeason, Team
 
 router = APIRouter(tags=["simulator"])
@@ -156,7 +161,9 @@ def _simulate_cap(req: SimulatorRequest, db: DB = None) -> dict:
 
     if ps_check is not None:
         try:
-            valuation = predict_from_features(build_features_from_season(ps_check, player))
+            prev_by_key = previous_seasons_for([ps_check], db)
+            prev = prev_by_key.get((req.player_id, prev_season_label(val_season)))
+            valuation = predict_from_features(build_features_from_season(ps_check, player, prev=prev))
         except (LookupError, FileNotFoundError):
             valuation = None
 
