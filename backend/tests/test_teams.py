@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from scoutiq.api.deps import get_db
 from scoutiq.api.main import app
+from scoutiq.model.roster_fit import build_fit_context
 from scoutiq.models import CapConstants, ContractYear, Player, PlayerSalary, PlayerSeason, Team
 
 ATL_ID = 1610612737
@@ -157,6 +158,26 @@ def test_cap_sheet_keeps_roster_when_model_artifact_missing(monkeypatch):
     assert body["top_bargain"] is None
     assert body["top_overpay"] is None
     assert {p["valuation_status"] for p in body["players"]} == {"unavailable"}
+
+
+def test_team_needs_uses_projected_committed_roster(monkeypatch):
+    monkeypatch.setattr(
+        teams_router,
+        "team_cap_hits",
+        lambda db, ids, season: ({100: 10_000_000}, {100: "contract"}),
+    )
+    monkeypatch.setattr(
+        teams_router,
+        "load_fit_context",
+        lambda db, season: build_fit_context([]),
+    )
+
+    body = _client(FakeDB()).get(f"/teams/{ATL_ID}/needs?season=2026-27").json()
+
+    assert body["role_season"] == "2025-26"
+    assert body["roster_player_count"] == 1
+    assert body["profiled_player_count"] == 0
+    assert body["confidence"] == "low"
 
 
 def test_unknown_team_404():

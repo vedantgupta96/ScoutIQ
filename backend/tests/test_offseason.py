@@ -6,6 +6,7 @@ from scoutiq.api.main import app
 from scoutiq.api.offseason import PlannedContract, apply_plan
 from scoutiq.api.routers import offseason as offseason_router
 from scoutiq.api.routers.offseason import OffseasonPlanRequest, ProposedContractRequest
+from scoutiq.model.roster_fit import build_fit_context
 from scoutiq.models import Player, Team
 
 
@@ -131,6 +132,11 @@ def test_build_offseason_plan_prices_proposed_signing(monkeypatch):
         "_valuations",
         lambda db, players, season: {20: {"value_pct": 25.0, "lo_pct": 20.0, "hi_pct": 30.0}},
     )
+    monkeypatch.setattr(
+        offseason_router,
+        "load_fit_context",
+        lambda db, season: build_fit_context([]),
+    )
 
     response = offseason_router.build_offseason_plan(
         OffseasonPlanRequest(
@@ -147,3 +153,5 @@ def test_build_offseason_plan_prices_proposed_signing(monkeypatch):
     assert response.seasons[0].baseline_payroll_usd == 110
     assert response.seasons[0].payroll_after_usd == 130
     assert response.seasons[0].tier_after == "first-apron"
+    assert response.needs_before.roster_player_count == 1
+    assert response.needs_after.roster_player_count == 2

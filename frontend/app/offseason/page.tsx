@@ -8,6 +8,7 @@ import {
   CalendarRange,
   CircleDollarSign,
   Plus,
+  Radar,
   RotateCcw,
   Shield,
   Trash2,
@@ -35,6 +36,7 @@ import { CapBar, CAP_TIER_LABEL, CapTierKey, capTierBadgeTone } from '@/componen
 import { StatTile } from '@/components/ui/StatTile';
 import { Surface } from '@/components/ui/Surface';
 import { TeamLogo } from '@/components/ui/TeamLogo';
+import { RosterNeeds } from '@/components/teams/RosterNeeds';
 import { fmtM, fmtPct, signed } from '@/lib/utils';
 import { teamVisual } from '@/lib/teamVisuals';
 
@@ -97,7 +99,11 @@ function TargetRow({
         </Link>
         <span>{target.position ?? '—'} · {team?.abbreviation ?? 'FA'}</span>
       </div>
-      <div className="siq-offseason-target-value ds-tnum">
+      <div className="siq-offseason-target-value siq-offseason-target-fit ds-tnum">
+        <strong>{target.fit.fit_score.toFixed(1)} fit</strong>
+        <span>{target.fit.fills[0]?.label ?? 'Depth only'}</span>
+      </div>
+      <div className="siq-offseason-target-value siq-offseason-target-model ds-tnum">
         <strong>{target.value_pct != null ? fmtPct(target.value_pct) : '—'}</strong>
         <span>{target.lo_pct != null && target.hi_pct != null ? `${target.lo_pct.toFixed(1)}–${target.hi_pct.toFixed(1)}%` : 'No interval'}</span>
       </div>
@@ -292,27 +298,48 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
   const [declines, setDeclines] = useState<number[]>([]);
   const [plan, setPlan] = useState<OffseasonPlanResponse | null>(null);
   const [marketLoading, setMarketLoading] = useState(true);
+  const [optionsLoading, setOptionsLoading] = useState(true);
   const [planLoading, setPlanLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const addPlayerKey = contracts.map((draft) => draft.player.player_id).sort((a, b) => a - b).join(',');
+  const removePlayerKey = [...declines].sort((a, b) => a - b).join(',');
 
   useEffect(() => {
     const controller = new AbortController();
     setMarketLoading(true);
     setError(null);
-    Promise.all([
-      getTeamFaTargets(teamId, { season, limit: 20 }, controller.signal),
-      getFreeAgencyOptions({ season, limit: 100 }, controller.signal),
-    ])
-      .then(([targets, options]) => {
-        setMarket(targets);
-        setTeamOptions(options.items.filter((item) => item.current_team?.team_id === teamId));
-      })
+    getTeamFaTargets(teamId, {
+      season,
+      sort: 'fit',
+      limit: 20,
+      addPlayerIds: addPlayerKey ? addPlayerKey.split(',').map(Number) : [],
+      removePlayerIds: removePlayerKey ? removePlayerKey.split(',').map(Number) : [],
+    }, controller.signal)
+      .then(setMarket)
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
         setError(reason instanceof Error ? reason.message : 'Failed to load offseason market.');
       })
       .finally(() => {
         if (!controller.signal.aborted) setMarketLoading(false);
+      });
+    return () => controller.abort();
+  }, [addPlayerKey, removePlayerKey, season, teamId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setOptionsLoading(true);
+    getFreeAgencyOptions({ season, limit: 100 }, controller.signal)
+      .then((options) => {
+        setTeamOptions(options.items.filter((item) => item.current_team?.team_id === teamId));
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(reason instanceof Error ? reason.message : 'Failed to load option decisions.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setOptionsLoading(false);
       });
     return () => controller.abort();
   }, [season, teamId]);
@@ -451,11 +478,22 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
         <div className="siq-offseason-loading">Pricing baseline…</div>
       )}
 
+      {plan ? (
+        <Surface
+          variant="instrument"
+          eyebrow="Roster needs after staged moves"
+          icon={<Radar size={15} />}
+          action={<Badge tone="neutral" variant="outline" size="sm">vs league median</Badge>}
+        >
+          <RosterNeeds before={plan.needs_before} after={plan.needs_after} />
+        </Surface>
+      ) : null}
+
       <div className="siq-offseason-grid">
         <div className="siq-offseason-market">
           <Surface variant="instrument" eyebrow="Free-agent targets" icon={<UserRoundPlus size={15} />}
             action={<Badge tone="neutral" variant="outline" size="sm">{market?.targets.length ?? 0} ranked</Badge>}>
-            {marketLoading ? <div className="siq-offseason-empty">Loading market…</div> : market?.targets.length ? (
+            {marketLoading && !market ? <div className="siq-offseason-empty">Loading market…</div> : market?.targets.length ? (
               <div className="siq-offseason-targets">
                 {market.targets.map((target) => (
                   <TargetRow key={target.player_id} target={target} added={stagedIds.has(target.player_id)} onAdd={() => addTarget(target)} />
@@ -466,7 +504,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
 
           <Surface variant="instrument" eyebrow="Option decisions" icon={<CircleDollarSign size={15} />}
             action={<Badge tone="neutral" variant="outline" size="sm">{teamOptions.length}</Badge>}>
-            {marketLoading ? <div className="siq-offseason-empty">Loading options…</div> : teamOptions.length ? (
+            {optionsLoading ? <div className="siq-offseason-empty">Loading options…</div> : teamOptions.length ? (
               <div className="siq-offseason-options">
                 {teamOptions.map((player) => (
                   <OptionRow

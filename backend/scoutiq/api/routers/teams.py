@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from scoutiq.api.cap_simulator import classify_tier
 from scoutiq.api.deps import DB
+from scoutiq.api.roster_fit import TeamNeedsResponse, load_fit_context, needs_response
 from scoutiq.api.season import is_valid_season
 from scoutiq.api.routers.players import (
     LATEST_SEASON,
@@ -24,6 +25,7 @@ from scoutiq.api.routers.players import (
     _team_summary,
 )
 from scoutiq.model.predict import build_features_from_season, predict_many_from_features
+from scoutiq.model.roster_fit import profile_roster
 from scoutiq.config import settings
 from scoutiq.models import (
     CapConstants,
@@ -352,3 +354,24 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
         top_overpay=top_overpay,
         caveat=CAVEAT,
     )
+
+
+@router.get("/{team_id}/needs", response_model=TeamNeedsResponse)
+def get_team_needs(team_id: int, season: str | None = None, db: DB = None):
+    """Projected committed roster compared with median league role coverage."""
+    if season is not None and not is_valid_season(season):
+        raise HTTPException(
+            status_code=422, detail="season must be a 'YYYY-YY' label, e.g. '2026-27'."
+        )
+    team = db.get(Team, team_id)
+    if team is None:
+        raise HTTPException(status_code=404, detail="Team not found.")
+
+    target = season or LATEST_SEASON
+    roster_ids = [
+        player.player_id
+        for player in db.scalars(select(Player).where(Player.current_team_id == team_id)).all()
+    ]
+    cap_hits, _ = team_cap_hits(db, roster_ids, target)
+    context = load_fit_context(db, LATEST_SEASON)
+    return needs_response(profile_roster(context, set(cap_hits)), LATEST_SEASON)

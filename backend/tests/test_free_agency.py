@@ -13,6 +13,7 @@ from scoutiq.api.cap_simulator import SeasonCapData
 from scoutiq.api.deps import get_db
 from scoutiq.api.main import app
 from scoutiq.api.routers.players import PlayerSummary
+from scoutiq.model.roster_fit import CandidateFit
 from scoutiq.models import ContractYear, Player, PlayerSeason, Team
 
 LAL_ID = 1610612747
@@ -205,6 +206,38 @@ def test_team_targets_room_and_fit(monkeypatch):
     # both targets' model value is well under the ~$81M of room → both fit
     assert all(t["fits_room"] is True for t in body["targets"])
     assert body["committed_player_count"] == 2
+    assert body["needs"]["roster_player_count"] == 2
+
+
+def test_team_targets_fit_sort_and_staged_roster_overrides(monkeypatch):
+    _patch_common(monkeypatch)
+    monkeypatch.setattr(
+        far,
+        "team_cap_hits",
+        lambda db, ids, season: ({1: 50_000_000, 2: 30_000_000}, {}),
+    )
+    monkeypatch.setattr(
+        far,
+        "score_candidate",
+        lambda context, roster, player_id: CandidateFit(
+            player_id=player_id,
+            fit_score=90.0 if player_id == 100 else 10.0,
+            confidence="medium",
+            fills=[],
+            reasons=["fixture"],
+        ),
+    )
+    team = Team(team_id=LAL_ID, abbreviation="LAL", name="Los Angeles Lakers")
+    fake = _FakeDB(team=team, roster=[Player(player_id=1, current_team_id=LAL_ID)])
+
+    body = _client(fake).get(
+        f"/free-agency/teams/{LAL_ID}/targets",
+        params={"season": "2026-27", "sort": "fit", "add": "200", "remove": "1"},
+    ).json()
+
+    assert [target["player_id"] for target in body["targets"]] == [100]
+    assert body["targets"][0]["fit"]["fit_score"] == 90.0
+    assert body["needs"]["roster_player_count"] == 2  # {2, 200}
 
 
 def test_team_targets_unknown_team_404(monkeypatch):

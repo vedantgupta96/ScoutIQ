@@ -561,8 +561,44 @@ export interface ProjectedCapContext {
   room_to_second_apron: number | null;
 }
 
+export type FitConfidence = 'high' | 'medium' | 'low';
+export type RosterNeedStatus = 'critical' | 'need' | 'covered';
+
+export interface RosterNeed {
+  key: string;
+  label: string;
+  coverage_pct: number;
+  deficit_pct: number;
+  status: RosterNeedStatus;
+  caution: string | null;
+}
+
+export interface TeamNeedsResponse {
+  role_season: string;
+  roster_player_count: number;
+  profiled_player_count: number;
+  confidence: FitConfidence;
+  needs: RosterNeed[];
+  caveat: string;
+}
+
+export interface CandidateFill {
+  key: string;
+  label: string;
+  coverage_gain_pct: number;
+  deficit_reduction_pct: number;
+}
+
+export interface CandidateFit {
+  fit_score: number;
+  confidence: FitConfidence;
+  fills: CandidateFill[];
+  reasons: string[];
+}
+
 export interface TeamFaTarget extends FreeAgentEntry {
   fits_room: boolean | null;
+  fit: CandidateFit;
 }
 
 export interface TeamFaTargetsResponse {
@@ -570,6 +606,7 @@ export interface TeamFaTargetsResponse {
   entering_season: string;
   cap_context: ProjectedCapContext;
   committed_player_count: number;
+  needs: TeamNeedsResponse;
   targets: TeamFaTarget[];
   limit: number;
   caveat: string;
@@ -648,6 +685,8 @@ export interface OffseasonPlanResponse {
   valuation_season: string;
   moves: OffseasonMoveResponse[];
   seasons: OffseasonPlanSeason[];
+  needs_before: TeamNeedsResponse;
+  needs_after: TeamNeedsResponse;
   caveat: string;
 }
 
@@ -659,6 +698,10 @@ export function getTeams(signal?: AbortSignal): Promise<TeamListItem[]> {
 
 export function getTeamCapSheet(teamId: number, season?: string, signal?: AbortSignal): Promise<TeamCapSheetResponse> {
   return apiFetch<TeamCapSheetResponse>(`/teams/${teamId}/cap-sheet${queryString({ season })}`, { signal });
+}
+
+export function getTeamNeeds(teamId: number, season?: string, signal?: AbortSignal): Promise<TeamNeedsResponse> {
+  return apiFetch<TeamNeedsResponse>(`/teams/${teamId}/needs${queryString({ season })}`, { signal });
 }
 
 export interface FreeAgencyBoardParams {
@@ -692,12 +735,22 @@ export function getFreeAgencyOptions(
 
 export function getTeamFaTargets(
   teamId: number,
-  params: { season?: string; position?: string; limit?: number } = {},
+  params: {
+    season?: string;
+    position?: string;
+    sort?: 'fit' | 'value';
+    addPlayerIds?: number[];
+    removePlayerIds?: number[];
+    limit?: number;
+  } = {},
   signal?: AbortSignal,
 ): Promise<TeamFaTargetsResponse> {
   return apiFetch<TeamFaTargetsResponse>(`/free-agency/teams/${teamId}/targets${queryString({
     season: params.season,
     position: params.position,
+    sort: params.sort ?? 'fit',
+    add: params.addPlayerIds?.join(','),
+    remove: params.removePlayerIds?.join(','),
     limit: params.limit ?? 15,
   })}`, { signal });
 }
