@@ -75,6 +75,9 @@ class PlayerCardStats(BaseModel):
     ast_pg: float | None
     ts_pct: float | None
     bpm: float | None
+    # League percentile (0-100) per stat key, computed across the watchlist's
+    # full valued candidate set. Absent when the peer set is too small.
+    pctl: dict[str, int] | None = None
 
 
 class PlayerCardValuation(BaseModel):
@@ -442,6 +445,38 @@ def _card_stats_from_features(features: dict) -> PlayerCardStats | None:
     return stats
 
 
+_PCTL_KEYS = ("gp", "mpg", "pts_pg", "reb_pg", "ast_pg", "bpm")
+_PCTL_MIN_PEERS = 20
+
+
+def _annotate_stat_percentiles(valuations: dict[int, PlayerCardValuation]) -> None:
+    """Stamp league percentile ranks onto card stats, mid-rank for ties."""
+    from bisect import bisect_left, bisect_right
+
+    stats_list = [v.stats for v in valuations.values() if v.stats is not None]
+    if len(stats_list) < _PCTL_MIN_PEERS:
+        return
+
+    sorted_by_key: dict[str, list[float]] = {}
+    for key in _PCTL_KEYS:
+        values = sorted(
+            value for stats in stats_list
+            if (value := getattr(stats, key)) is not None
+        )
+        if len(values) >= _PCTL_MIN_PEERS:
+            sorted_by_key[key] = values
+
+    for stats in stats_list:
+        pctl: dict[str, int] = {}
+        for key, values in sorted_by_key.items():
+            value = getattr(stats, key)
+            if value is None:
+                continue
+            mid_rank = (bisect_left(values, value) + bisect_right(values, value)) / 2
+            pctl[key] = round(100 * mid_rank / len(values))
+        stats.pctl = pctl or None
+
+
 def _card_valuations(
     players: list[Player],
     summaries: dict[int, PlayerSummary],
@@ -596,6 +631,8 @@ def get_player_watchlist(
         valuations = _card_valuations(players, summaries, db, season=valuation_season)
     except FileNotFoundError:
         valuations = {}
+
+    _annotate_stat_percentiles(valuations)
 
     cards = [
         card

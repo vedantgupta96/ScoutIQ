@@ -514,6 +514,7 @@ def test_player_cards_returns_batched_valuation_snippets(monkeypatch):
         "ast_pg": 5.7,
         "ts_pct": 0.6,
         "bpm": 2.5,
+        "pctl": None,
     }
 
 
@@ -536,6 +537,34 @@ def test_card_stats_tolerate_non_numeric_feature_values():
     assert stats.ast_pg == 5.7
     assert stats.ts_pct is None
     assert stats.bpm is None
+
+
+def test_stat_percentiles_use_mid_rank_and_skip_small_peer_sets():
+    def _valuation(stats):
+        return players_router.PlayerCardValuation(
+            season="2024-25", value_pct=10.0, lo_pct=5.0, hi_pct=15.0,
+            actual_pct=None, actual_usd=None, gap_pct=None, salary_cap=None,
+            model_version="test", verdict_label="No data", verdict_tone="neutral",
+            caution_flags=[], caveat=None, stats=stats,
+        )
+
+    def _stats(pts):
+        return players_router.PlayerCardStats(
+            gp=None, mpg=None, pts_pg=pts, reb_pg=None, ast_pg=None, ts_pct=None, bpm=None,
+        )
+
+    # Below the peer floor: no percentiles stamped.
+    small = {i: _valuation(_stats(float(i))) for i in range(5)}
+    players_router._annotate_stat_percentiles(small)
+    assert all(v.stats.pctl is None for v in small.values())
+
+    # 25 players, pts 1..25: median player sits at the 50th percentile.
+    big = {i: _valuation(_stats(float(i + 1))) for i in range(25)}
+    players_router._annotate_stat_percentiles(big)
+    assert big[12].stats.pctl["pts_pg"] == 50
+    assert big[24].stats.pctl["pts_pg"] == 98
+    assert big[0].stats.pctl["pts_pg"] == 2
+    assert "gp" not in big[12].stats.pctl  # all-None stats never rank
 
 
 def test_build_features_coerces_string_stat_values():
