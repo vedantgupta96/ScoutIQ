@@ -20,18 +20,19 @@ export function AssumptionFlag({ children, title, tone = 'warning', icon }: Assu
   const c = TONE_COLORS[tone];
 
   return (
-    <div style={{
-      borderRadius: 'var(--radius-lg)',
-      background: c.bg,
-      border: `1px solid ${c.border}30`,
-      boxShadow: `inset 0 0 0 1px ${c.border}20`,
-      padding: '12px 14px',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
-        {icon && <span style={{ color: c.text, display: 'flex', flexShrink: 0 }}>{icon}</span>}
-        <span style={{ fontSize: 12, fontWeight: 700, color: c.text, letterSpacing: '0.01em' }}>{title}</span>
+    <div
+      className="siq-assumption"
+      style={{
+        background: c.bg,
+        border: `1px solid ${c.border}30`,
+        boxShadow: `inset 0 0 0 1px ${c.border}20`,
+      }}
+    >
+      <div className="siq-assumption__header">
+        {icon && <span className="siq-assumption__icon" style={{ color: c.text }}>{icon}</span>}
+        <span className="siq-assumption__title" style={{ color: c.text }}>{title}</span>
       </div>
-      <p style={{ fontSize: 13, color: c.text, opacity: 0.85, lineHeight: 1.55, margin: 0 }}>
+      <p className="ds-m0 siq-assumption__body" style={{ color: c.text }}>
         {children}
       </p>
     </div>

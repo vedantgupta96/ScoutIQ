@@ -154,7 +154,7 @@ function OptionRow({
         onClick={onToggle}
         aria-pressed={selected}
         icon={selected ? <RotateCcw size={14} /> : <Trash2 size={14} />}
-        style={{ whiteSpace: 'nowrap' }}
+        className="siq-offseason-nowrap"
       >
         {selected ? 'Restore' : isTeamOption ? 'Decline' : 'Assume opt out'}
       </Button>
@@ -578,7 +578,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
                         <strong>{player.full_name}</strong>
                         <span>{move ? moveLabel(move) : 'Option removal'}</span>
                       </div>
-                      <span className="ds-tnum" style={{ color: 'var(--positive-text)', fontWeight: 700 }}>
+                      <span className="ds-tnum siq-offseason-decline-amount">
                         {move ? `−${fmtM(move.removed_existing_usd)}` : '—'}
                       </span>
                       <IconButton onClick={() => toggleDecline(playerId, true)} label={`Restore ${player.full_name} option`} title="Restore option"><RotateCcw size={15} /></IconButton>

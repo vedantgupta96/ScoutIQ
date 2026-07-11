@@ -23,25 +23,12 @@ export function TeamLogo({ teamId, abbreviation, name, size = 'md', muted = fals
       style={{
         width: px,
         height: px,
-        borderRadius: '50%',
-        display: 'grid',
-        placeItems: 'center',
-        flexShrink: 0,
-        position: 'relative',
-        overflow: 'hidden',
-        border: '1px solid color-mix(in srgb, var(--team-primary, var(--accent)) 22%, var(--border-subtle))',
-        background: 'color-mix(in srgb, var(--team-primary, var(--accent)) 10%, var(--bg-panel))',
-        color: 'var(--team-primary, var(--accent-text))',
         boxShadow: muted ? undefined : '0 1px 3px rgba(16,24,40,0.08)',
       }}
     >
       <span
-        className="ds-tnum"
-        style={{
-          fontSize: Math.max(9, px * 0.25),
-          fontWeight: 800,
-          lineHeight: 1,
-        }}
+        className="ds-tnum siq-team-logo__abbr"
+        style={{ fontSize: Math.max(9, px * 0.25) }}
       >
         {abbreviation ?? '—'}
       </span>
@@ -52,12 +39,11 @@ export function TeamLogo({ teamId, abbreviation, name, size = 'md', muted = fals
           aria-hidden="true"
           loading="lazy"
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          className="siq-team-logo__image"
           style={{
-            position: 'absolute',
             inset: px <= 24 ? 2 : 3,
             width: `calc(100% - ${px <= 24 ? 4 : 6}px)`,
             height: `calc(100% - ${px <= 24 ? 4 : 6}px)`,
-            objectFit: 'contain',
             filter: muted ? 'grayscale(1) saturate(0.25) opacity(0.72)' : undefined,
           }}
         />

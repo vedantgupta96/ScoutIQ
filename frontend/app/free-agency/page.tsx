@@ -73,18 +73,15 @@ function faTypeBadge(entry: { fa_type: FaType; rfa_estimate: boolean }): ReactNo
 function PlayerCell({ entry, extra }: { entry: FreeAgentEntry; extra?: ReactNode }) {
   const team = entry.current_team ?? entry.latest_stats_team;
   return (
-    <Link href={`/players/${entry.player_id}`} style={{ textDecoration: 'none', minWidth: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+    <Link href={`/players/${entry.player_id}`} className="siq-plain-link siq-min0">
+      <div className="siq-row siq-row--10 siq-min0">
         <Avatar name={entry.full_name} size="md" position={entry.position} playerId={entry.player_id} />
-        <div style={{ minWidth: 0 }}>
-          <div style={{
-            fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
+        <div className="siq-min0">
+          <div className="siq-fa-player-name">
             {entry.full_name}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          <div className="siq-fa-player-meta-row">
+            <span className="ds-note">
               {entry.position ?? '—'}{entry.age != null ? ` · age ${entry.age}` : ''}{team?.abbreviation ? ` · ${team.abbreviation}` : ''}
             </span>
             {extra ?? faTypeBadge(entry)}
@@ -141,8 +138,8 @@ function BoardTab({ season }: { season: string }) {
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+    <div className="siq-stack">
+      <div className="siq-row siq-fa-flex-wrap">
         <span className="ds-eyebrow">Filter</span>
         <SegmentedControl
           options={TYPE_FILTERS}
@@ -165,9 +162,9 @@ function BoardTab({ season }: { season: string }) {
       >
         <div className="siq-roster-ledger-head">
           <span className="ds-eyebrow">Player</span>
-          <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Expiring pay</span>
+          <span className="ds-eyebrow ds-right">Expiring pay</span>
           <span className="ds-eyebrow">Value vs pay</span>
-          <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Model value</span>
+          <span className="ds-eyebrow ds-right">Model value</span>
         </div>
 
         {loading && !data && <LoadingNote>Loading free agents…</LoadingNote>}
@@ -178,24 +175,24 @@ function BoardTab({ season }: { season: string }) {
         {data?.items.map((entry) => (
           <div key={entry.player_id} className="siq-roster-ledger-row">
             <PlayerCell entry={entry} />
-            <div style={{ textAlign: 'right' }}>
-              <div className="ds-tnum" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <div className="ds-right">
+              <div className="ds-tnum siq-fa-value-primary">
                 {entry.expiring_aav_usd != null ? fmtM(entry.expiring_aav_usd) : '—'}
               </div>
-              <div className="ds-tnum" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <div className="ds-tnum ds-note">
                 {entry.expiring_cap_pct != null ? `${fmtPct(entry.expiring_cap_pct)} cap` : '—'}
               </div>
             </div>
             <div className="siq-roster-gauge-cell">
               {entry.valuation_status === 'ready'
                 ? <MiniValuePayGauge valuePct={entry.value_pct} payPct={entry.expiring_cap_pct} showLabels domainMaxPct={domainMax} />
-                : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No model value</span>}
+                : <span className="ds-note">No model value</span>}
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div className="ds-tnum" style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>
+            <div className="ds-right">
+              <div className="ds-tnum siq-fa-value-strong">
                 {entry.value_usd != null ? fmtM(entry.value_usd) : '—'}
               </div>
-              <div className="ds-tnum" style={{ fontSize: 12, color: 'var(--confidence-text)' }}>
+              <div className="ds-tnum siq-fa-note-confidence">
                 {entry.value_pct != null ? fmtPct(entry.value_pct) : '—'}
               </div>
             </div>
@@ -242,7 +239,7 @@ function OptionsTab({ season }: { season: string }) {
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
+    <div className="siq-stack">
       {error && <ErrorNote message={error} />}
 
       <Panel variant="card" eyebrow={data ? `${data.total} option decisions · entering ${data.entering_season}` : 'Option decisions'} icon={<Scale size={15} />}>
@@ -251,7 +248,7 @@ function OptionsTab({ season }: { season: string }) {
           <EmptyState title={`No player/team options for ${data.entering_season}.`} />
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="siq-fa-option-list">
           {data?.items.map((entry) => {
             const o = entry.option;
             return (
@@ -265,16 +262,16 @@ function OptionsTab({ season }: { season: string }) {
                 <div className="siq-fa-option-gauge">
                   {entry.valuation_status === 'ready'
                     ? <MiniValuePayGauge valuePct={entry.value_pct} payPct={o?.option_cap_pct ?? null} showLabels domainMaxPct={domainMax} />
-                    : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No model value</span>}
+                    : <span className="ds-note">No model value</span>}
                   {o && (
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{o.rationale}</div>
+                    <div className="ds-note siq-fa-mt6">{o.rationale}</div>
                   )}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                <div className="siq-fa-verdict-col">
                   {o
                     ? <VerdictPill gapPct={o.gap_pct} tone={o.tone} label={o.verdict} size="md" />
-                    : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>}
-                  {o && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{o.deciding_party} decides</span>}
+                    : <span className="ds-note">—</span>}
+                  {o && <span className="siq-fa-note-sm">{o.deciding_party} decides</span>}
                 </div>
               </div>
             );
@@ -296,9 +293,9 @@ function RoomLine({ label, room }: { label: string; room: number | null }) {
   if (room == null) return null;
   const over = room < 0;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
-      <span className="ds-eyebrow" style={{ letterSpacing: '0.06em' }}>{label}</span>
-      <span className="ds-tnum" style={{ fontWeight: 700, color: over ? 'var(--negative-text)' : 'var(--positive-text)' }}>
+    <span className="siq-fa-room-line">
+      <span className="ds-eyebrow siq-fa-eyebrow-tight">{label}</span>
+      <span className="ds-tnum siq-fa-room-value" style={{ color: over ? 'var(--negative-text)' : 'var(--positive-text)' }}>
         {over ? `−${fmtM(Math.abs(room))} over` : `${fmtM(room)} under`}
       </span>
     </span>
@@ -350,8 +347,8 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+    <div className="siq-stack">
+      <div className="siq-row siq-row--12 siq-fa-flex-wrap">
         <Field label="Team" htmlFor="fa-team-select" inline>
           <Select id="fa-team-select" value={selectedId != null ? String(selectedId) : ''} onChange={(e) => setTeam(e.target.value)}>
             {teams.length === 0 && <option value="">Loading teams…</option>}
@@ -373,28 +370,28 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
         <>
           <Panel variant="instrument" eyebrow={`Projected room · ${data.entering_season}`} icon={<Users size={15} />}
             action={
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Link href={`/offseason?team=${data.team.team_id}&season=${encodeURIComponent(data.entering_season)}`} style={{ textDecoration: 'none' }}>
+              <div className="siq-row">
+                <Link href={`/offseason?team=${data.team.team_id}&season=${encodeURIComponent(data.entering_season)}`} className="siq-plain-link">
                   <Badge tone="accent" size="sm">Build plan →</Badge>
                 </Link>
                 <Badge tone="confidence" variant="outline" size="sm">{ctx.is_projected ? 'projected' : 'actual'} cap</Badge>
               </div>
             }>
-            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-              <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <div className="siq-fa-hero-row">
+              <h1 className="siq-fa-hero-title">
                 {data.team.name ?? data.team.abbreviation}
               </h1>
-              <div style={{ textAlign: 'right' }}>
-                <div className="ds-tnum" style={{ fontSize: 26, fontWeight: 700, fontFamily: 'var(--font-display)', color: ctx.room_to_cap != null && ctx.room_to_cap < 0 ? 'var(--negative-text)' : 'var(--positive-text)', lineHeight: 1 }}>
+              <div className="ds-right">
+                <div className="ds-tnum siq-fa-hero-value" style={{ color: ctx.room_to_cap != null && ctx.room_to_cap < 0 ? 'var(--negative-text)' : 'var(--positive-text)' }}>
                   {ctx.room_to_cap != null ? (ctx.room_to_cap < 0 ? `−${fmtM(Math.abs(ctx.room_to_cap))}` : fmtM(ctx.room_to_cap)) : '—'}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>projected cap space</div>
+                <div className="ds-note siq-fa-mt3">projected cap space</div>
               </div>
             </div>
             {thresholdsReady && (
               <>
                 <CapBar value={ctx.committed_payroll_usd} taxLine={ctx.tax_line!} firstApron={ctx.first_apron!} secondApron={ctx.second_apron!} height={16} showLabels valueLabel="Committed" />
-                <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 14 }}>
+                <div className="siq-fa-room-lines">
                   <RoomLine label="To tax" room={ctx.room_to_tax} />
                   <RoomLine label="To 1st apron" room={ctx.room_to_first_apron} />
                   <RoomLine label="To 2nd apron" room={ctx.room_to_second_apron} />
@@ -445,32 +442,32 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
           <Panel variant="card" className="siq-roster-ledger" eyebrow={sort === 'fit' ? 'Team-fit targets' : 'Top available by model value'} icon={<Handshake size={15} />}>
             <div className="siq-roster-ledger-head">
               <span className="ds-eyebrow">Player</span>
-              <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Need fit</span>
+              <span className="ds-eyebrow ds-right">Need fit</span>
               <span className="ds-eyebrow">Value vs pay</span>
-              <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Cap</span>
+              <span className="ds-eyebrow ds-right">Cap</span>
             </div>
             {data.targets.length === 0 && (
-              <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>No free agents for {data.entering_season}.</div>
+              <div className="siq-fa-empty-cell">No free agents for {data.entering_season}.</div>
             )}
             {data.targets.map((entry) => (
               <div key={entry.player_id} className="siq-roster-ledger-row">
                 <PlayerCell entry={entry} />
-                <div style={{ textAlign: 'right' }}>
-                  <div className="ds-tnum" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                <div className="ds-right">
+                  <div className="ds-tnum siq-fa-value-primary">
                     {entry.fit.fit_score.toFixed(1)}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                  <div className="siq-fa-note-sm-mt2">
                     {entry.fit.fills[0]?.label ?? 'Depth only'}
                   </div>
                 </div>
                 <div className="siq-roster-gauge-cell">
                   {entry.valuation_status === 'ready'
                     ? <MiniValuePayGauge valuePct={entry.value_pct} payPct={entry.expiring_cap_pct} showLabels domainMaxPct={domainMax} />
-                    : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No model value</span>}
+                    : <span className="ds-note">No model value</span>}
                 </div>
-                <div style={{ textAlign: 'right' }}>
+                <div className="ds-right">
                   {entry.fits_room == null
-                    ? <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
+                    ? <span className="ds-note">—</span>
                     : <Badge tone={entry.fits_room ? 'positive' : 'negative'} size="sm">{entry.fits_room ? 'Fits' : 'Over room'}</Badge>}
                 </div>
               </div>
@@ -488,9 +485,9 @@ function Pager({ offset, total, onPrev, onNext }: { offset: number; total: numbe
   const from = offset + 1;
   const to = Math.min(offset + PAGE_SIZE, total);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
-      <span className="ds-tnum" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{from}–{to} of {total}</span>
-      <div style={{ display: 'flex', gap: 8 }}>
+    <div className="siq-fa-pager">
+      <span className="ds-tnum ds-note">{from}–{to} of {total}</span>
+      <div className="siq-fa-btn-row">
         <Button size="sm" icon={<ChevronLeft size={14} />} onClick={onPrev} disabled={offset === 0}>Prev</Button>
         <Button size="sm" onClick={onNext} disabled={to >= total}>Next <ChevronRight size={14} /></Button>
       </div>
@@ -524,8 +521,8 @@ function FreeAgencyContent() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+    <div className="siq-stack">
+      <div className="siq-row siq-row--12 siq-fa-justify-wrap">
         <SegmentedControl
           options={TABS.map(({ id, label, Icon }) => ({ value: id, label, icon: <Icon size={15} /> }))}
           value={tab}
