@@ -35,8 +35,7 @@ import {
   ValuationResponse,
   teamLogoUrl,
 } from '@/lib/api';
-import { Card } from '@/components/ui/Card';
-import { Surface } from '@/components/ui/Surface';
+import { Panel } from '@/components/ui/Panel';
 import { Badge } from '@/components/ui/Badge';
 import { Button, ButtonLink } from '@/components/ui/Button';
 import { Tabs } from '@/components/ui/Tabs';
@@ -161,7 +160,7 @@ function ScoutTraitRow({ trait }: { trait: PlayerScoutTraitRating }) {
 function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsResponse | null; error: string | null }) {
   const isReal = ratings?.source_mode === 'sonar_claude_db';
   return (
-    <Surface
+    <Panel
       variant="dossier"
       teamAccent
       eyebrow="Scout ratings"
@@ -218,7 +217,7 @@ function ScoutRatingsCard({ ratings, error }: { ratings: PlayerScoutRatingsRespo
           </p>
         </>
       )}
-    </Surface>
+    </Panel>
   );
 }
 
@@ -294,7 +293,7 @@ function ContractCard({
   }
 
   return (
-    <Surface
+    <Panel
       variant="board"
       teamAccent
       eyebrow="Current contract"
@@ -343,7 +342,7 @@ function ContractCard({
           </div>
         </>
       )}
-    </Surface>
+    </Panel>
   );
 }
 
@@ -429,7 +428,7 @@ function SimilarPlayersCard({
   onModeChange: (mode: SimilarPlayersMode) => void;
 }) {
   return (
-    <Surface
+    <Panel
       variant="board"
       teamAccent
       eyebrow="Similar player market"
@@ -474,7 +473,7 @@ function SimilarPlayersCard({
           </p>
         </>
       )}
-    </Surface>
+    </Panel>
   );
 }
 
@@ -796,7 +795,7 @@ function FrontOfficeRead({
 
   return (
     <div className="siq-read-grid">
-      <Surface variant="instrument" teamAccent eyebrow="Decision brief" icon={<Target size={15} />}>
+      <Panel variant="instrument" teamAccent eyebrow="Decision brief" icon={<Target size={15} />}>
         <div className="siq-brief-copy">
           <p>
             Production prices {val.player_name} at <strong>{fmtPct(val.value_pct)}</strong> of the cap
@@ -849,9 +848,9 @@ function FrontOfficeRead({
         <ValueDrivers attribution={val.attribution} />
         <ProductionRow features={val.features} />
         <ContractSpark contract={contract} />
-      </Surface>
+      </Panel>
 
-      <Surface variant="board" teamAccent eyebrow="Market signal" icon={<GitCompare size={15} />}>
+      <Panel variant="board" teamAccent eyebrow="Market signal" icon={<GitCompare size={15} />}>
         {topMatch ? (
           <div className="siq-market-signal">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -883,9 +882,9 @@ function FrontOfficeRead({
         ) : (
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Loading market signal…</p>
         )}
-      </Surface>
+      </Panel>
 
-      <Surface variant="dossier" teamAccent eyebrow="Confidence notes" icon={<Info size={15} />}>
+      <Panel variant="dossier" teamAccent eyebrow="Confidence notes" icon={<Info size={15} />}>
         <div className="siq-confidence-bracket">
           <div className="siq-confidence-stack">
             <RiskLine label="Model interval" value={`${fmtPct(val.lo_pct)} to ${fmtPct(val.hi_pct)}`} />
@@ -896,7 +895,7 @@ function FrontOfficeRead({
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0 0', lineHeight: 1.5 }}>
           Use the tabs to move from the executive read into the market, contract structure, scout context, and raw model inputs.
         </p>
-      </Surface>
+      </Panel>
     </div>
   );
 }
@@ -921,7 +920,7 @@ function RationaleCard({ playerId }: { playerId: number }) {
 
   const cost = data?.cost;
   return (
-    <Surface variant="dossier" teamAccent eyebrow="Scout's rationale" icon={<FileText size={15} />}
+    <Panel variant="dossier" teamAccent eyebrow="Scout's rationale" icon={<FileText size={15} />}
       action={cost ? <Badge tone="neutral" variant="outline" size="sm">${cost.est_cost_usd.toFixed(4)} · {Math.round((cost.input_tokens + cost.output_tokens) / 100) / 10}k tok</Badge> : undefined}
     >
       {!data && (
@@ -975,7 +974,7 @@ function RationaleCard({ playerId }: { playerId: number }) {
           </p>
         </>
       )}
-    </Surface>
+    </Panel>
   );
 }
 
@@ -999,7 +998,7 @@ function ActionRail({
   const topMatch = similarMarket?.results[0];
   return (
     <aside className="siq-action-rail">
-      <Card eyebrow="Action rail" icon={<SlidersHorizontal size={15} />}>
+      <Panel variant="card" eyebrow="Action rail" icon={<SlidersHorizontal size={15} />}>
         <div className="siq-action-stack">
           <Button variant="primary" icon={<SlidersHorizontal size={15} />} onClick={onSimulate}>
             Simulate extension
@@ -1014,14 +1013,14 @@ function ActionRail({
             Inspect model inputs
           </Button>
         </div>
-      </Card>
+      </Panel>
 
-      <Surface variant="dossier" teamAccent eyebrow="Case file" icon={<FileText size={15} />}>
+      <Panel variant="dossier" teamAccent eyebrow="Case file" icon={<FileText size={15} />}>
         <RiskLine label="Active view" value={WORKSPACE_TABS.find((tab) => tab.key === activeTab)?.label ?? '—'} />
         <RiskLine label="Value gap" value={val.gap_pct != null ? `${signed(val.gap_pct)}%` : '—'} tone={val.gap_pct != null && val.gap_pct >= 0 ? 'positive' : 'negative'} />
         <RiskLine label="Top comp" value={topMatch?.player.full_name ?? 'Loading'} />
         <RiskLine label="Extension window" value={contract?.extension_start_season ?? '—'} />
-      </Surface>
+      </Panel>
 
       <RationaleCard playerId={val.player_id} />
     </aside>
@@ -1043,7 +1042,7 @@ function ModelInputs({
 
   return (
     <div className="siq-read-grid">
-      <Surface
+      <Panel
         variant="instrument"
         teamAccent
         eyebrow="Production-implied value"
@@ -1084,9 +1083,9 @@ function ModelInputs({
             actualPct={val.actual_pct}
           />
         </div>
-      </Surface>
+      </Panel>
 
-      <Surface variant="board" teamAccent eyebrow="Model inputs" icon={<Activity size={15} />}>
+      <Panel variant="board" teamAccent eyebrow="Model inputs" icon={<Activity size={15} />}>
         {featureEntries.length > 0 ? (
           <>
             {featureEntries.map(([key, value]) => {
@@ -1102,9 +1101,9 @@ function ModelInputs({
             Feature data not available for this player-season.
           </p>
         )}
-      </Surface>
+      </Panel>
 
-      <Surface variant="dossier" teamAccent eyebrow="Model info" icon={<BarChart3 size={15} />}>
+      <Panel variant="dossier" teamAccent eyebrow="Model info" icon={<BarChart3 size={15} />}>
         <StatRow label="Model version" value={val.model_version ?? '—'} />
         <StatRow label="Season" value={val.season} />
         <StatRow label="Value" value={`${fmtPct(val.value_pct)} of cap`} />
@@ -1123,7 +1122,7 @@ function ModelInputs({
             ))}
           </div>
         )}
-      </Surface>
+      </Panel>
 
       <AssumptionFlag
         tone={val.verdict_tone === 'warning' ? 'warning' : 'confidence'}
@@ -1279,12 +1278,12 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
             {activeTab === 'scout' && (
               <div className="siq-read-grid">
                 <ScoutRatingsCard ratings={scoutRatings} error={scoutError} />
-                <Card eyebrow="How to read this" icon={<Info size={15} />}>
+                <Panel variant="card" eyebrow="How to read this" icon={<Info size={15} />}>
                   <p style={{ font: '14px/1.6 var(--font-sans)', color: 'var(--text-primary)', margin: 0 }}>
                     Scout ratings are fixture-backed qualitative context for the portfolio demo. Treat them as
                     a separate lens from the deterministic model and cap math.
                   </p>
-                </Card>
+                </Panel>
               </div>
             )}
 

@@ -34,12 +34,11 @@ import { Badge } from '@/components/ui/Badge';
 import { Button, ButtonLink } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Select';
-import { Card } from '@/components/ui/Card';
+import { Panel } from '@/components/ui/Panel';
 import { CapBar, CAP_TIER_LABEL, CapTierKey, capTierBadgeTone } from '@/components/cap/CapBar';
 import { DecisionStrip } from '@/components/ui/DecisionStrip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingNote } from '@/components/ui/LoadingNote';
-import { Surface } from '@/components/ui/Surface';
 import { TeamLogo } from '@/components/ui/TeamLogo';
 import { RosterNeeds } from '@/components/teams/RosterNeeds';
 import { fmtM, fmtPct, signed } from '@/lib/utils';
@@ -247,7 +246,7 @@ function ContractEditor({
 
 function SeasonLedger({ plan }: { plan: OffseasonPlanResponse }) {
   return (
-    <Surface variant="instrument" eyebrow="Multi-season ledger" icon={<CalendarRange size={15} />}>
+    <Panel variant="instrument" eyebrow="Multi-season ledger" icon={<CalendarRange size={15} />}>
       <div className="siq-offseason-ledger-head" aria-hidden="true">
         <span>Season</span><span>Baseline</span><span>Plan</span><span>Delta</span><span>Tier</span>
       </div>
@@ -291,7 +290,7 @@ function SeasonLedger({ plan }: { plan: OffseasonPlanResponse }) {
           );
         })}
       </div>
-    </Surface>
+    </Panel>
   );
 }
 
@@ -442,7 +441,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
       {error ? <div className="siq-offseason-error">{error}</div> : null}
 
       {firstYear && plan ? (
-        <Surface
+        <Panel
           variant="instrument"
           teamAccent
           eyebrow={`${season} plan`}
@@ -500,25 +499,25 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
               },
             ]}
           />
-        </Surface>
+        </Panel>
       ) : (
         <LoadingNote>Pricing baseline…</LoadingNote>
       )}
 
       {plan ? (
-        <Surface
+        <Panel
           variant="instrument"
           eyebrow="Roster needs after staged moves"
           icon={<Radar size={15} />}
           action={<Badge tone="neutral" variant="outline" size="sm">vs league median</Badge>}
         >
           <RosterNeeds before={plan.needs_before} after={plan.needs_after} />
-        </Surface>
+        </Panel>
       ) : null}
 
       <div className="siq-offseason-grid">
         <div className="siq-offseason-market">
-          <Surface variant="instrument" eyebrow="Free-agent targets" icon={<UserRoundPlus size={15} />}
+          <Panel variant="instrument" eyebrow="Free-agent targets" icon={<UserRoundPlus size={15} />}
             action={<Badge tone="neutral" variant="outline" size="sm">{market?.targets.length ?? 0} ranked</Badge>}>
             {marketLoading && !market ? <LoadingNote>Loading market…</LoadingNote> : market?.targets.length ? (
               <div className="siq-offseason-targets">
@@ -527,9 +526,9 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
                 ))}
               </div>
             ) : <EmptyState title="No targets available for this class." />}
-          </Surface>
+          </Panel>
 
-          <Surface variant="instrument" eyebrow="Option decisions" icon={<CircleDollarSign size={15} />}
+          <Panel variant="instrument" eyebrow="Option decisions" icon={<CircleDollarSign size={15} />}
             action={<Badge tone="neutral" variant="outline" size="sm">{teamOptions.length}</Badge>}>
             {optionsLoading ? <LoadingNote>Loading options…</LoadingNote> : teamOptions.length ? (
               <div className="siq-offseason-options">
@@ -543,11 +542,11 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
                 ))}
               </div>
             ) : <EmptyState title="No option decisions for this team and season." />}
-          </Surface>
+          </Panel>
         </div>
 
         <div className="siq-offseason-plan-column">
-          <Surface variant="instrument" eyebrow="Staged moves" icon={<CalendarRange size={15} />}
+          <Panel variant="instrument" eyebrow="Staged moves" icon={<CalendarRange size={15} />}
             action={(contracts.length || declines.length) ? (
               <IconButton onClick={resetPlan} label="Reset offseason plan" title="Reset plan"><RotateCcw size={15} /></IconButton>
             ) : undefined}>
@@ -588,7 +587,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
                 })}
               </div>
             )}
-          </Surface>
+          </Panel>
         </div>
       </div>
 

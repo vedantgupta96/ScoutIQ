@@ -16,8 +16,7 @@ import {
   ScoutRatingEvalResponse,
   ScoutRatingRow,
 } from '@/lib/api';
-import { Card } from '@/components/ui/Card';
-import { Surface } from '@/components/ui/Surface';
+import { Panel } from '@/components/ui/Panel';
 import { Badge } from '@/components/ui/Badge';
 import { DecisionStrip } from '@/components/ui/DecisionStrip';
 import { LoadingNote } from '@/components/ui/LoadingNote';
@@ -143,7 +142,7 @@ function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | nu
     new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
-    <Surface
+    <Panel
       variant="dossier"
       eyebrow="AI extraction eval"
       icon={<ClipboardCheck size={15} />}
@@ -259,7 +258,7 @@ function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | nu
           {scoutEval ? ` CLI artifact: ${scoutEval.artifact_path}.` : ''}
         </p>
       </div>
-    </Surface>
+    </Panel>
   );
 }
 
@@ -571,7 +570,7 @@ export default function ModelPage() {
 
       <div className="siq-model-grid">
         {/* Scatter */}
-        <Surface variant="instrument" eyebrow="Predicted vs. actual" icon={<Target size={15} />}
+        <Panel variant="instrument" eyebrow="Predicted vs. actual" icon={<Target size={15} />}
               action={scatterPoints.length > 0
                 ? <Badge tone="accent" size="sm" dot>{scatterPoints.length} test-set rows</Badge>
                 : <Badge tone="accent" size="sm" dot>loading…</Badge>}>
@@ -579,10 +578,10 @@ export default function ModelPage() {
             ? <LoadingNote className="siq-loading-note--tall">Loading…</LoadingNote>
             : <ScatterPlot points={scatterPoints} highlight={highlightNames} />
           }
-        </Surface>
+        </Panel>
 
         {/* Calibration table */}
-        <Surface variant="board" eyebrow="Interval calibration" icon={<Target size={15} />}
+        <Panel variant="board" eyebrow="Interval calibration" icon={<Target size={15} />}
               action={<Badge tone="confidence" variant="outline" size="sm">calibrated</Badge>}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -618,7 +617,7 @@ export default function ModelPage() {
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0 0', lineHeight: 1.5 }}>
             The published 80% interval is calibrated on historical contract starts. Other levels are diagnostics, not separate production guarantees.
           </p>
-        </Surface>
+        </Panel>
       </div>
 
       {scoutEvalError && (
@@ -635,7 +634,7 @@ export default function ModelPage() {
         </AssumptionFlag>
       )}
 
-      <Surface
+      <Panel
         variant="dossier"
         eyebrow="Live caution cases"
         icon={<TriangleAlert size={15} />}
@@ -652,10 +651,10 @@ export default function ModelPage() {
             />
           ))
         }
-      </Surface>
+      </Panel>
 
       {/* Leaderboard qualification controls */}
-      <Card padded>
+      <Panel variant="card" padded>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px 24px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto' }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Leaderboard qualification</span>
@@ -666,11 +665,11 @@ export default function ModelPage() {
           <MiniSlider label="Min MPG" value={minMpg} onChange={setMinMpg} min={0} max={40} step={1} suffix="" />
           <MiniSlider label="Min GP" value={minGp} onChange={setMinGp} min={0} max={82} step={1} suffix="" />
         </div>
-      </Card>
+      </Panel>
 
       {/* Leaderboards */}
       <div className="siq-leader-grid">
-        <Surface variant="board" eyebrow="Most underpaid" icon={<TrendingUp size={15} />} flush
+        <Panel variant="board" eyebrow="Most underpaid" icon={<TrendingUp size={15} />} flush
               action={<Badge tone="positive" size="sm">test-set bargains</Badge>}>
           {loading
             ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
@@ -684,9 +683,9 @@ export default function ModelPage() {
                 );
               })
           }
-        </Surface>
+        </Panel>
 
-        <Surface variant="board" eyebrow="Most overpaid" icon={<TrendingDown size={15} />} flush
+        <Panel variant="board" eyebrow="Most overpaid" icon={<TrendingDown size={15} />} flush
               action={<Badge tone="negative" size="sm">test-set overpays</Badge>}>
           {loading
             ? <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
@@ -700,7 +699,7 @@ export default function ModelPage() {
                 );
               })
           }
-        </Surface>
+        </Panel>
       </div>
 
       <AssumptionFlag tone="warning" title="Honest caveat — salary stickiness" icon={<TriangleAlert size={16} />}>
