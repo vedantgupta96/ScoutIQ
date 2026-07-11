@@ -162,7 +162,6 @@ function BoardTab({ season }: { season: string }) {
             key={f.value}
             onClick={() => setType(f.value)}
             aria-pressed={type === f.value}
-            className="siq-enter-x"
             style={{
               height: 30, padding: '0 12px', borderRadius: 'var(--radius-pill)', cursor: 'pointer',
               border: `1px solid ${type === f.value ? 'transparent' : 'var(--border-subtle)'}`,

@@ -3,17 +3,17 @@
 import { ReactNode, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Users, SlidersHorizontal, Target, Shield, Handshake, CalendarRange, Moon, Sun, Bell, Search, Menu } from 'lucide-react';
+import { Users, SlidersHorizontal, Target, Shield, Handshake, CalendarRange, Moon, Sun, Search, Menu, X } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { getHealth } from '@/lib/api';
 
 const NAV = [
-  { id: 'players',   href: '/players',   label: 'Players',      Icon: Users },
-  { id: 'teams',     href: '/teams',     label: 'Team war room', Icon: Shield },
-  { id: 'free-agency', href: '/free-agency', label: 'Free agency', Icon: Handshake },
-  { id: 'offseason', href: '/offseason', label: 'Offseason plan', Icon: CalendarRange },
-  { id: 'simulator', href: '/simulator', label: 'Cap simulator', Icon: SlidersHorizontal },
-  { id: 'model',     href: '/model',     label: 'Model & backtest', Icon: Target },
+  { id: 'players', href: '/players', label: 'Players', mobileLabel: 'Players', Icon: Users },
+  { id: 'teams', href: '/teams', label: 'Team war room', mobileLabel: 'Teams', Icon: Shield },
+  { id: 'free-agency', href: '/free-agency', label: 'Free agency', mobileLabel: 'Market', Icon: Handshake },
+  { id: 'offseason', href: '/offseason', label: 'Offseason plan', mobileLabel: 'Plan', Icon: CalendarRange },
+  { id: 'simulator', href: '/simulator', label: 'Cap simulator', mobileLabel: 'Cap sim', Icon: SlidersHorizontal },
+  { id: 'model', href: '/model', label: 'Model & backtest', mobileLabel: 'Model', Icon: Target },
 ];
 
 const TITLES: Record<string, string> = {
@@ -27,40 +27,29 @@ const TITLES: Record<string, string> = {
 
 function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) {
   return (
-    <aside className={`siq-sidebar${collapsed ? ' siq-sidebar--collapsed' : ''}`}>
-      {/* Logo */}
+    <aside id="primary-sidebar" className={`siq-sidebar${collapsed ? ' siq-sidebar--collapsed' : ''}`}>
       <div className="siq-sidebar-logo">
         <div className="siq-brand-mark">
-          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 13, color: 'var(--text-on-accent)' }}>S</span>
+          <span>S</span>
         </div>
-        <span className="siq-logo-text" style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 19, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
-          Scout<span style={{ color: 'var(--accent)' }}>IQ</span>
+        <span className="siq-logo-text">
+          Scout<span>IQ</span>
         </span>
       </div>
 
-      {/* Nav */}
-      <nav className="siq-sidebar-nav" style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <span className="ds-eyebrow siq-nav-eyebrow siq-enter-x" style={{ padding: '8px 8px 6px', ['--i' as string]: 0 }}>Front office</span>
-        {NAV.map(({ id, href, label, Icon }, i) => {
+      <nav className="siq-sidebar-nav" aria-label="Primary navigation">
+        <span className="siq-nav-eyebrow">Front office</span>
+        {NAV.map(({ id, href, label, Icon }) => {
           const isActive = active === id;
           return (
-            <Link key={id} href={href} className="siq-sidebar-link siq-enter-x" aria-label={label} style={{
-              ['--i' as string]: i + 1,
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '9px 10px', borderRadius: 'var(--radius-md)',
-              textDecoration: 'none', position: 'relative',
-              fontFamily: 'var(--font-sans)', fontSize: 14,
-              fontWeight: isActive ? 700 : 500,
-              color: isActive ? 'var(--accent-text)' : 'var(--text-secondary)',
-              background: isActive ? 'var(--nav-active-bg)' : 'transparent',
-              transition: 'background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out)',
-            }}>
-              {isActive && (
-                <span style={{
-                  position: 'absolute', left: 7, right: 7, bottom: 4,
-                  height: 1, borderRadius: 3, background: 'var(--accent)',
-                }} />
-              )}
+            <Link
+              key={id}
+              href={href}
+              className={`siq-sidebar-link${isActive ? ' siq-sidebar-link--active' : ''}`}
+              aria-label={label}
+              aria-current={isActive ? 'page' : undefined}
+              title={collapsed ? label : undefined}
+            >
               <Icon size={17} />
               <span className="siq-nav-label">{label}</span>
             </Link>
@@ -68,22 +57,33 @@ function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) 
         })}
       </nav>
 
-      {/* Footer — a quiet half-court etched into the dead space above the
-          model-version badge: structure the data sits on, not décor. */}
       <div className="siq-sidebar-footer">
-        <svg className="siq-sidebar-court" viewBox="0 0 200 122" aria-hidden="true">
-          <g fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M2 121 H198" />
-            <rect x="68" y="45" width="64" height="76" />
-            <circle cx="100" cy="45" r="24" />
-            <path d="M86 96 H114" />
-            <circle cx="100" cy="103" r="4.5" />
-            <path d="M14 121 V68 A108 108 0 0 1 186 68 V121" />
-          </g>
-        </svg>
+        <span className="siq-sidebar-footer-label">Valuation model</span>
         <Badge tone="confidence" variant="outline" size="sm" dot>v0-gbm-conformal</Badge>
       </div>
     </aside>
+  );
+}
+
+function MobileNav({ active }: { active: string }) {
+  return (
+    <nav className="siq-mobile-nav" aria-label="Primary navigation">
+      {NAV.map(({ id, href, label, mobileLabel, Icon }) => {
+        const isActive = active === id;
+        return (
+          <Link
+            key={id}
+            href={href}
+            className={`siq-mobile-nav__link${isActive ? ' siq-mobile-nav__link--active' : ''}`}
+            aria-label={label}
+            aria-current={isActive ? 'page' : undefined}
+          >
+            <Icon size={17} />
+            <span>{mobileLabel}</span>
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -120,10 +120,6 @@ function TopBar({
     return () => controller.abort();
   }, []);
 
-  // Arena lights: the new theme sweeps across the floor as a circle expanding
-  // from the toggle (View Transitions). The DOM attribute flip inside the
-  // callback is synchronous, so the snapshot pair is always consistent; without
-  // browser support or with reduced motion it falls back to an instant switch.
   const toggleTheme = (e: ReactMouseEvent<HTMLButtonElement>) => {
     const next = !dark;
     const apply = () => {
@@ -150,7 +146,7 @@ function TopBar({
     doc.startViewTransition(apply).ready.then(() => {
       document.documentElement.animate(
         { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
-        { duration: 520, easing: 'cubic-bezier(0.22,1,0.36,1)', pseudoElement: '::view-transition-new(root)' },
+        { duration: 240, easing: 'cubic-bezier(0.22,1,0.36,1)', pseudoElement: '::view-transition-new(root)' },
       );
     }).catch(() => {});
   };
@@ -172,59 +168,46 @@ function TopBar({
   }, [pathname, query, router]);
 
   return (
-    <header className="siq-topbar">
+    <header className={`siq-topbar${pathname.startsWith('/simulator') ? ' siq-topbar--compact' : ''}`}>
       <button
         type="button"
-        className="siq-icon-button"
+        className="siq-icon-button siq-sidebar-toggle"
         onClick={onToggleSidebar}
         aria-label={sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
-        aria-pressed={sidebarCollapsed}
+        aria-expanded={!sidebarCollapsed}
+        aria-controls="primary-sidebar"
         title={sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
       >
         <Menu size={17} />
       </button>
 
-      <div className="siq-topbar-title siq-enter" style={{
-        ['--i' as string]: 1,
-        fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 20,
-        color: 'var(--text-primary)', whiteSpace: 'nowrap', margin: 0,
-      }}>
+      <div className="siq-topbar-title">
         {title}
       </div>
 
       {/* Search — hidden on the simulator, which owns its own player picker
           (avoids two competing search bars on that page). */}
       {!pathname.startsWith('/simulator') && (
-      <div className="siq-topbar-search siq-enter" style={{ ['--i' as string]: 2, flex: 1, maxWidth: 340, marginLeft: 8 }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '6px 10px',
-          background: 'var(--bg-panel)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-md)',
-        }}>
-          <Search size={15} color="var(--text-muted)" />
+      <div className="siq-topbar-search">
+        <div className="siq-search-field">
+          <Search size={16} aria-hidden="true" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search players…"
             aria-label="Search players"
-            style={{
-              flex: 1, background: 'transparent', border: 'none', outline: 'none',
-              fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-primary)',
-            }}
           />
           {query && (
             <button
               type="button"
+              className="siq-search-clear"
               onClick={() => setQuery('')}
               aria-label="Clear player search"
               title="Clear player search"
-              style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--text-muted)', padding: 0, display: 'flex',
-            }}>✕</button>
+            >
+              <X size={14} />
+            </button>
           )}
         </div>
       </div>
@@ -238,33 +221,17 @@ function TopBar({
         </span>
       )}
 
-      <button
-        type="button"
-        className="siq-icon-button"
-        onClick={toggleTheme}
-        aria-label={dark ? 'Use light theme' : 'Use dark theme'}
-        title={dark ? 'Use light theme' : 'Use dark theme'}
-        style={{
-        display: 'inline-flex', padding: 7, borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--border-subtle)', background: 'var(--bg-panel)',
-        color: 'var(--text-secondary)', cursor: 'pointer',
-      }}>
-        {dark ? <Sun size={16} /> : <Moon size={16} />}
-      </button>
-
-      <button
-        type="button"
-        className="siq-icon-button siq-bell-button"
-        aria-label="Notifications are not available yet"
-        title="Notifications are not available yet"
-        disabled
-        style={{
-        display: 'inline-flex', padding: 7, borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--border-subtle)', background: 'var(--bg-panel)',
-        color: 'var(--text-muted)', cursor: 'not-allowed', opacity: 0.62,
-      }}>
-        <Bell size={16} />
-      </button>
+      <div className="siq-topbar-actions">
+        <button
+          type="button"
+          className="siq-icon-button"
+          onClick={toggleTheme}
+          aria-label={dark ? 'Use light theme' : 'Use dark theme'}
+          title={dark ? 'Use light theme' : 'Use dark theme'}
+        >
+          {dark ? <Sun size={16} /> : <Moon size={16} />}
+        </button>
+      </div>
     </header>
   );
 }
@@ -282,20 +249,24 @@ export function Shell({ children }: ShellProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
-    <div className={`siq-shell${sidebarCollapsed ? ' siq-shell--sidebar-collapsed' : ''}`}>
-      <Sidebar active={activeId} collapsed={sidebarCollapsed} />
-      <div className="siq-shell-workspace" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <TopBar
-          title={baseTitle}
-          sidebarCollapsed={sidebarCollapsed}
-          onToggleSidebar={() => setSidebarCollapsed((collapsed) => !collapsed)}
-        />
-        <main className="siq-main">
-          <div key={pathname} className="siq-content siq-route-enter">
-            {children}
-          </div>
-        </main>
+    <>
+      <a className="siq-skip-link" href="#main-content">Skip to content</a>
+      <div className={`siq-shell${sidebarCollapsed ? ' siq-shell--sidebar-collapsed' : ''}`}>
+        <Sidebar active={activeId} collapsed={sidebarCollapsed} />
+        <div className="siq-shell-workspace">
+          <TopBar
+            title={baseTitle}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleSidebar={() => setSidebarCollapsed((collapsed) => !collapsed)}
+          />
+          <main id="main-content" className="siq-main" tabIndex={-1}>
+            <div key={pathname} className="siq-content">
+              {children}
+            </div>
+          </main>
+        </div>
+        <MobileNav active={activeId} />
       </div>
-    </div>
+    </>
   );
 }
