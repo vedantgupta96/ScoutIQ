@@ -109,6 +109,8 @@ export interface PlayerCardStats {
   ast_pg: number | null;
   ts_pct: number | null;
   bpm: number | null;
+  /** League percentile (0-100) per stat key; present on watchlist payloads. */
+  pctl?: Record<string, number> | null;
 }
 
 export interface PlayerCardValuation {

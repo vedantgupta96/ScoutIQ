@@ -599,7 +599,17 @@ function DecisionHero({
       </div>
 
       <div className="siq-decision-actions">
-        <VerdictPill gapPct={val.gap_pct} label={val.verdict_label} tone={val.verdict_tone} size="lg" />
+        <span
+          className="siq-verdict-beat"
+          style={{
+            color: val.verdict_tone === 'positive' ? 'var(--positive)'
+              : val.verdict_tone === 'negative' ? 'var(--negative)'
+              : val.verdict_tone === 'warning' ? 'var(--warning)'
+              : 'var(--border-strong)',
+          }}
+        >
+          <VerdictPill gapPct={val.gap_pct} label={val.verdict_label} tone={val.verdict_tone} size="lg" />
+        </span>
         <Button variant="primary" icon={<SlidersHorizontal size={15} />} onClick={onSimulate}>
           Run simulation
         </Button>
@@ -658,6 +668,66 @@ function ProductionRow({ features }: { features: Record<string, number> | null }
             <span className="siq-statline__label">{label}</span>
           </span>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function ContractSpark({ contract }: { contract: PlayerContractResponse | null }) {
+  const years = (contract?.years_detail ?? []).filter(
+    (y) => y.value_pct != null || y.cap_hit_pct != null,
+  );
+  if (years.length < 2) return null;
+
+  const W = 100;
+  const H = 40;
+  const PAD = 4;
+  const max = Math.max(
+    ...years.flatMap((y) => [y.value_pct ?? 0, y.cap_hit_pct ?? 0]),
+    1,
+  );
+  const x = (i: number) => PAD + (i / (years.length - 1)) * (W - PAD * 2);
+  const y = (v: number) => H - PAD - (v / max) * (H - PAD * 2);
+  const points = (key: 'value_pct' | 'cap_hit_pct') =>
+    years
+      .map((year, i) => (year[key] != null ? `${x(i).toFixed(1)},${y(year[key]!).toFixed(1)}` : null))
+      .filter(Boolean)
+      .join(' ');
+
+  const valuePoints = points('value_pct');
+  const payPoints = points('cap_hit_pct');
+
+  return (
+    <div className="siq-contract-spark">
+      <span className="ds-eyebrow">Deal trajectory · {years[0].season} to {years[years.length - 1].season}</span>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={`Model value versus cap hit across ${years.length} contract seasons`}
+      >
+        {payPoints && (
+          <polyline
+            points={payPoints}
+            fill="none"
+            stroke="var(--text-faint)"
+            strokeWidth={1.6}
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
+        {valuePoints && (
+          <polyline
+            points={valuePoints}
+            fill="none"
+            stroke="var(--confidence)"
+            strokeWidth={2}
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
+      </svg>
+      <div className="siq-contract-spark__legend">
+        <span><i style={{ background: 'var(--confidence)' }} />Model value, % of cap</span>
+        <span><i style={{ background: 'var(--text-faint)' }} />Cap hit</span>
       </div>
     </div>
   );
@@ -741,6 +811,7 @@ function FrontOfficeRead({
           />
         </div>
         <ProductionRow features={val.features} />
+        <ContractSpark contract={contract} />
       </Surface>
 
       <Surface variant="board" teamAccent eyebrow="Market signal" icon={<GitCompare size={15} />}>

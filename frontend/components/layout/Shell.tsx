@@ -17,6 +17,7 @@ const NAV = [
 ];
 
 const TITLES: Record<string, string> = {
+  '/':          'Front office',
   '/players':   'Players',
   '/teams':     'Team war room',
   '/free-agency': 'Free agency',
@@ -28,14 +29,14 @@ const TITLES: Record<string, string> = {
 function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) {
   return (
     <aside id="primary-sidebar" className={`siq-sidebar${collapsed ? ' siq-sidebar--collapsed' : ''}`}>
-      <div className="siq-sidebar-logo">
+      <Link href="/" className="siq-sidebar-logo" aria-label="ScoutIQ home">
         <div className="siq-brand-mark">
           <span>S</span>
         </div>
         <span className="siq-logo-text">
           Scout<span>IQ</span>
         </span>
-      </div>
+      </Link>
 
       <nav className="siq-sidebar-nav" aria-label="Primary navigation">
         <span className="siq-nav-eyebrow">Front office</span>
@@ -243,7 +244,7 @@ interface ShellProps {
 export function Shell({ children }: ShellProps) {
   const pathname = usePathname();
 
-  const activeId = NAV.find((n) => pathname.startsWith(n.href))?.id ?? 'players';
+  const activeId = NAV.find((n) => pathname.startsWith(n.href))?.id ?? '';
   const baseTitle = TITLES[pathname] ?? TITLES[`/${pathname.split('/')[1]}`] ?? 'ScoutIQ';
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
