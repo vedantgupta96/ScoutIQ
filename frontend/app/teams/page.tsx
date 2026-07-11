@@ -16,7 +16,7 @@ import { Surface } from '@/components/ui/Surface';
 import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import { Select } from '@/components/ui/Select';
-import { StatTile } from '@/components/ui/StatTile';
+import { DecisionStrip } from '@/components/ui/DecisionStrip';
 import { Avatar } from '@/components/ui/Avatar';
 import { TeamLogo } from '@/components/ui/TeamLogo';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
@@ -127,30 +127,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
 
   const thresholdsReady = ctx.tax_line != null && ctx.first_apron != null && ctx.second_apron != null;
   const surplusPositive = totals.surplus_usd >= 0;
-  const surplusDeltaDir: 'up' | 'down' = surplusPositive ? 'up' : 'down';
-  const summaryTiles = [
-    {
-      label: 'Total payroll',
-      value: fmtM(totals.total_payroll_usd),
-      unit: totals.payroll_pct != null ? `· ${fmtPct(totals.payroll_pct)}` : undefined,
-      sub: `${totals.payroll_player_count} of ${totals.roster_size} on the books`,
-    },
-    {
-      label: 'Model value',
-      value: fmtM(totals.total_value_usd),
-      sub: `${totals.valued_player_count} valued`,
-    },
-    {
-      label: 'Surplus value',
-      value: `${surplusPositive ? '+' : '−'}${fmtM(Math.abs(totals.surplus_usd))}`,
-      unit: totals.surplus_pct != null ? `· ${signed(totals.surplus_pct)}%` : undefined,
-      delta: surplusPositive ? 'value over pay' : 'pay over value',
-      deltaDir: surplusDeltaDir,
-      sub: 'model value − payroll',
-    },
-    { label: 'Bargains', value: totals.bargain_count, sub: 'value ≥ pay +1%' },
-    { label: 'Overpays', value: totals.overpay_count, sub: 'pay ≥ value +1%' },
-  ];
+  const primaryMismatch = sheet.top_overpay ?? sheet.top_bargain;
 
   return (
     <div
@@ -225,14 +202,35 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
         )}
       </Surface>
 
-      {/* Summary tiles */}
-      <div className="siq-summary-tile-grid">
-        {summaryTiles.map((tile) => (
-          <Card key={tile.label} padded>
-            <StatTile {...tile} size="sm" />
-          </Card>
-        ))}
-      </div>
+      <DecisionStrip
+        ariaLabel={`${sheet.team.name ?? sheet.team.abbreviation} decision status`}
+        lead={{
+          label: sheet.top_overpay ? 'Priority contract review' : 'Strongest value position',
+          value: primaryMismatch?.full_name ?? 'No priced mismatch',
+          detail: primaryMismatch?.gap_pct != null ? `${signed(primaryMismatch.gap_pct)}% of cap versus pay` : `${totals.valued_player_count} players valued`,
+          tone: sheet.top_overpay ? 'negative' : sheet.top_bargain ? 'positive' : 'neutral',
+        }}
+        items={[
+          {
+            label: 'Cap constraint',
+            value: CAP_TIER_LABEL[tier],
+            detail: ctx.room_to_first_apron != null ? `${ctx.room_to_first_apron >= 0 ? fmtM(ctx.room_to_first_apron) + ' below' : fmtM(Math.abs(ctx.room_to_first_apron)) + ' over'} first apron` : 'Threshold unavailable',
+            tone: tier === 'second-apron' || tier === 'first-apron' ? 'warning' : 'neutral',
+          },
+          {
+            label: 'Roster value gap',
+            value: `${surplusPositive ? '+' : '−'}${fmtM(Math.abs(totals.surplus_usd))}`,
+            detail: totals.surplus_pct != null ? `${signed(totals.surplus_pct)}% of cap · model value minus payroll` : 'Model value minus payroll',
+            tone: surplusPositive ? 'positive' : 'negative',
+          },
+          {
+            label: 'Coverage',
+            value: `${totals.valued_player_count}/${totals.roster_size} valued`,
+            detail: `${totals.bargain_count} bargains · ${totals.overpay_count} overpays`,
+            tone: totals.valued_player_count === totals.roster_size ? 'confidence' : 'warning',
+          },
+        ]}
+      />
 
       {/* Roster board */}
       <Card

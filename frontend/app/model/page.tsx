@@ -19,7 +19,7 @@ import {
 import { Card } from '@/components/ui/Card';
 import { Surface } from '@/components/ui/Surface';
 import { Badge } from '@/components/ui/Badge';
-import { StatTile } from '@/components/ui/StatTile';
+import { DecisionStrip } from '@/components/ui/DecisionStrip';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
 import { fmtPct, signed } from '@/lib/utils';
@@ -538,25 +538,35 @@ export default function ModelPage() {
         </AssumptionFlag>
       )}
 
-      <div className="siq-model-metrics-grid">
-        {[
-          { label: `R² (${seasonRange})`, value: metrics ? metrics.r2.toFixed(2) : '—', sub: metrics ? `${metrics.n_test} held-out rows` : 'Loading artifact' },
-          { label: 'MAE', value: metrics ? metrics.mae_pct_of_cap.toFixed(1) : '—', unit: '%', sub: metrics ? `Mean baseline ${metrics.naive_mean_baseline_mae_pct.toFixed(1)}%` : 'Loading artifact' },
+      <DecisionStrip
+        ariaLabel="Model decision readiness"
+        lead={{
+          label: 'Contract-setting test',
+          value: metrics ? `${metrics.segments.decision_point.mae_pct_of_cap.toFixed(1)}% MAE` : 'Loading artifact',
+          detail: metrics ? `Beats ${metrics.segments.decision_point.persistence_mae_pct?.toFixed(1) ?? '—'}% salary persistence across ${metrics.segments.decision_point.n} held-out decisions` : 'Evaluating decision-point performance',
+          tone: metrics && metrics.segments.decision_point.persistence_mae_pct != null && metrics.segments.decision_point.mae_pct_of_cap < metrics.segments.decision_point.persistence_mae_pct ? 'positive' : 'warning',
+        }}
+        items={[
           {
-            label: 'Contract-start coverage',
-            value: decisionCoverage != null ? (decisionCoverage * 100).toFixed(1) : '—',
-            unit: '%',
-            sub: metrics ? `${metrics.segments.decision_point.n} held-out decisions · 80% nominal` : 'Loading artifact',
-            delta: decisionCoverage != null ? `${((decisionCoverage - 0.8) * 100).toFixed(1)}` : undefined,
-            deltaDir: decisionCoverage != null && decisionCoverage >= 0.8 ? 'up' as const : 'down' as const,
+            label: 'Decision coverage',
+            value: decisionCoverage != null ? `${(decisionCoverage * 100).toFixed(1)}%` : '—',
+            detail: 'Nominal 80% interval at contract starts',
+            tone: decisionCoverage != null && decisionCoverage >= 0.8 ? 'confidence' : 'warning',
           },
-          { label: 'Interval ±width', value: metrics ? `±${metrics.interval_80_half_width_pct.toFixed(1)}` : '—', unit: '%', sub: metrics ? `${(metrics.interval_80_coverage * 100).toFixed(1)}% coverage across all rows` : 'at 80% nominal' },
-        ].map((m) => (
-          <Card key={m.label} padded>
-            <StatTile {...m} size="md" />
-          </Card>
-        ))}
-      </div>
+          {
+            label: `Explanatory fit · ${seasonRange}`,
+            value: metrics ? `R² ${metrics.r2.toFixed(2)}` : '—',
+            detail: metrics ? `${metrics.n_test} held-out rows · ${metrics.mae_pct_of_cap.toFixed(1)}% overall MAE` : 'Loading artifact',
+            tone: 'neutral',
+          },
+          {
+            label: 'Uncertainty cost',
+            value: metrics ? `±${metrics.interval_80_half_width_pct.toFixed(1)}% cap` : '—',
+            detail: metrics ? `${(metrics.interval_80_coverage * 100).toFixed(1)}% conservative all-row coverage` : 'Adaptive interval width',
+            tone: 'confidence',
+          },
+        ]}
+      />
 
       <div className="siq-model-grid">
         {/* Scatter */}
@@ -605,7 +615,7 @@ export default function ModelPage() {
             </tbody>
           </table>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0 0', lineHeight: 1.5 }}>
-            Conformal intervals are well-calibrated when empirical ≈ nominal. Coverage tracks the diagonal across all levels.
+            The published 80% interval is calibrated on historical contract starts. Other levels are diagnostics, not separate production guarantees.
           </p>
         </Surface>
       </div>
