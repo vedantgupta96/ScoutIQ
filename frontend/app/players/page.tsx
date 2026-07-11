@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, Suspense, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
 import {
   getPlayerWatchlist,
   PlayerCardResponse,
+  PlayerCardStats,
   PlayerWatchlistResponse,
   WatchlistBucket,
   WatchlistSort,
@@ -120,19 +121,29 @@ function MetricCell({
   );
 }
 
-// Trading-card tilt is pointer-candy only: skip it for touch (no hover) and
-// for anyone asking for reduced motion. Evaluated once, lazily, client-side.
-let tiltCapable: boolean | null = null;
-function canTilt(): boolean {
-  if (tiltCapable == null) {
-    tiltCapable = typeof window !== 'undefined'
-      && window.matchMedia('(pointer: fine)').matches
-      && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  }
-  return tiltCapable;
+function CardStatLine({ stats }: { stats: PlayerCardStats }) {
+  const items: Array<{ value: string; label: string }> = [];
+  if (stats.gp != null) items.push({ value: String(stats.gp), label: 'gp' });
+  if (stats.mpg != null) items.push({ value: stats.mpg.toFixed(1), label: 'mpg' });
+  if (stats.pts_pg != null) items.push({ value: stats.pts_pg.toFixed(1), label: 'pts' });
+  if (stats.reb_pg != null) items.push({ value: stats.reb_pg.toFixed(1), label: 'reb' });
+  if (stats.ast_pg != null) items.push({ value: stats.ast_pg.toFixed(1), label: 'ast' });
+  if (stats.bpm != null) items.push({ value: `${stats.bpm > 0 ? '+' : ''}${stats.bpm.toFixed(1)}`, label: 'bpm' });
+  if (items.length === 0) return null;
+
+  return (
+    <div className="siq-statline siq-statline--card">
+      {items.map(({ value, label }) => (
+        <span key={label} className="siq-statline__cell">
+          <span className="siq-statline__value ds-tnum">{value}</span>
+          <span className="siq-statline__label">{label}</span>
+        </span>
+      ))}
+    </div>
+  );
 }
 
-function RosterCard({ player, index = 0 }: { player: PlayerCardResponse; index?: number }) {
+function RosterCard({ player }: { player: PlayerCardResponse }) {
   const team = player.current_team ?? player.latest_stats_team;
   const valuation = player.valuation_status === 'ready' ? player.valuation : undefined;
   const gap = valuation?.gap_pct ?? null;
@@ -142,52 +153,12 @@ function RosterCard({ player, index = 0 }: { player: PlayerCardResponse; index?:
     ? (valuation.value_pct / 100) * valuation.salary_cap
     : null;
 
-  // Holo-card tilt: pointer position drives the rotation (--rx/--ry) and the
-  // sheen spot (--mx/--my) directly on the element — no re-render per frame.
-  const cardRef = useRef<HTMLAnchorElement>(null);
-  const frame = useRef(0);
-  const onPointerMove = (e: ReactPointerEvent<HTMLAnchorElement>) => {
-    if (!canTilt()) return;
-    const el = cardRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const px = (e.clientX - r.left) / r.width;
-    const py = (e.clientY - r.top) / r.height;
-    cancelAnimationFrame(frame.current);
-    frame.current = requestAnimationFrame(() => {
-      el.style.setProperty('--rx', `${((0.5 - py) * 4).toFixed(2)}deg`);
-      el.style.setProperty('--ry', `${((px - 0.5) * 5).toFixed(2)}deg`);
-      el.style.setProperty('--mx', `${(px * 100).toFixed(1)}%`);
-      el.style.setProperty('--my', `${(py * 100).toFixed(1)}%`);
-    });
-  };
-  const onPointerLeave = () => {
-    const el = cardRef.current;
-    if (!el) return;
-    cancelAnimationFrame(frame.current);
-    el.style.removeProperty('--rx');
-    el.style.removeProperty('--ry');
-  };
-
   return (
     <Link
       href={`/players/${player.player_id}`}
-      ref={cardRef}
-      onPointerMove={onPointerMove}
-      onPointerLeave={onPointerLeave}
-      className="siq-case-card siq-enter"
-      style={{
-        '--case-accent': accent,
-        // Cap the stagger so deep rows don't wait — the cascade reads as one
-        // quick deal of the board, not a slow load.
-        ['--i' as string]: Math.min(index, 11),
-        ['--enter-base' as string]: '40ms',
-      } as React.CSSProperties}
+      className="siq-case-card"
+      style={{ '--case-accent': accent } as React.CSSProperties}
     >
-        {/* Holo sheen — verdict-tinted glint riding the pointer */}
-        <span className="siq-case-card__sheen" aria-hidden="true" />
-
-        {/* Header row */}
         <div className="siq-case-card__head">
           <Avatar name={player.full_name} size="lg" position={player.position} playerId={player.player_id} />
           <div style={{ minWidth: 0 }}>
@@ -215,7 +186,6 @@ function RosterCard({ player, index = 0 }: { player: PlayerCardResponse; index?:
                 <CountUpPct
                   value={gap}
                   withSign
-                  className="siq-enter-pop"
                   style={{
                     fontSize: 24, fontWeight: 700, lineHeight: 1,
                     fontFamily: 'var(--font-display)', color: TONE_COLOR[tone],
@@ -236,6 +206,8 @@ function RosterCard({ player, index = 0 }: { player: PlayerCardResponse; index?:
               <MetricCell label="value" dotColor="var(--confidence)" pct={valuation.value_pct} usd={valueUsd} />
               <MetricCell label="pay" dotColor={TONE_COLOR[tone]} pct={valuation.actual_pct} usd={valuation.actual_usd} align="right" />
             </div>
+
+            {valuation.stats && <CardStatLine stats={valuation.stats} />}
           </>
         ) : player.valuation_status === 'unavailable' ? (
           <div style={{
@@ -507,15 +479,13 @@ function PlayersContent() {
       </div>
 
       {loading && (
-        // Ghost board: skeleton case cards deal in with the same stagger as the
-        // real ones, breathing in a wave while the watchlist loads.
         <div role="status" aria-label="Loading players">
           <div className="siq-pressure-board" aria-hidden="true">
             {Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
-                className="siq-case-card siq-case-skel siq-enter"
-                style={{ ['--i' as string]: Math.min(i, 11), ['--enter-base' as string]: '40ms' }}
+                className="siq-case-card siq-case-skel"
+                style={{ ['--i' as string]: Math.min(i, 11) }}
               >
                 <div className="siq-case-skel__head">
                   <span className="siq-skel siq-case-skel__avatar" />
@@ -566,7 +536,7 @@ function PlayersContent() {
           </div>
 
           <div className="siq-pressure-board">
-            {players.map((p, i) => <RosterCard key={p.player_id} player={p} index={i} />)}
+            {players.map((p) => <RosterCard key={p.player_id} player={p} />)}
           </div>
 
           <div style={{

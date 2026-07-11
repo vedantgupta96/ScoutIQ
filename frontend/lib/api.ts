@@ -101,6 +101,16 @@ export interface ValuationResponse {
 
 export type ValuationStatus = 'ready' | 'unavailable';
 
+export interface PlayerCardStats {
+  gp: number | null;
+  mpg: number | null;
+  pts_pg: number | null;
+  reb_pg: number | null;
+  ast_pg: number | null;
+  ts_pct: number | null;
+  bpm: number | null;
+}
+
 export interface PlayerCardValuation {
   season: string;
   value_pct: number;
@@ -115,6 +125,7 @@ export interface PlayerCardValuation {
   verdict_tone: 'positive' | 'negative' | 'neutral' | 'warning';
   caution_flags: string[];
   caveat: string | null;
+  stats?: PlayerCardStats | null;
 }
 
 export interface PlayerCardResponse extends PlayerSummary {

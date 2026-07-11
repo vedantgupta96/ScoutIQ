@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500;600;700&family=Commissioner:wght@400;500;600;700;800&family=Saira+Semi+Condensed:wght@500;600;700;800&display=swap');
 @import 'tailwindcss';
 
 /* ============================================================
@@ -57,31 +56,33 @@
   --blue-400: #79A9FF;
   --blue-soft: rgba(77,141,255,0.14);
 
+  --teal-700: #087777;
   --teal-600: #0E9C9C;
   --teal-500: #1FC1C1;
   --teal-400: #4FD6D6;
   --teal-soft: rgba(31,193,193,0.14);
 
   /* Semantic surfaces (LIGHT default) */
-  --bg-app:      #F0F2F0;
-  --bg-backdrop: #E2E6E4;
-  --bg-inset:    #E9ECEA;
-  --bg-panel:    #FBFCFA;
+  --bg-app:      #F4F5F7;
+  --bg-backdrop: #E8EBEF;
+  --bg-inset:    #EEF0F3;
+  --bg-panel:    #FFFFFF;
   --bg-elevated: #FFFFFF;
-  --bg-hover:    #F3F6F3;
-  --bg-active:   #E5EAE6;
+  --bg-hover:    #F7F8FA;
+  --bg-active:   #E8EBF0;
 
   /* Borders */
-  --border-subtle:  rgba(24,31,24,0.10);
-  --border-default: rgba(24,31,24,0.18);
-  --border-strong:  rgba(24,31,24,0.30);
+  --border-subtle:  rgba(20,24,31,0.09);
+  --border-default: rgba(20,24,31,0.16);
+  --border-strong:  rgba(20,24,31,0.26);
 
   /* Text */
-  --text-primary:   #0E1116;
-  --text-secondary: #4B5563;
-  --text-muted:     #79828F;
-  --text-faint:     #A6AEBA;
-  --text-on-accent: #FFFFFF;
+  --text-primary:   #151922;
+  --text-secondary: #4F5968;
+  --text-muted:     #687383;
+  /* Faint intentionally aliases muted in light mode: anything lighter fails 4.5:1 */
+  --text-faint:     var(--text-muted);
+  --text-on-accent: #151922;
 
   /* Brand semantic */
   --accent:       var(--orange-500);
@@ -89,8 +90,8 @@
   --accent-press: var(--orange-700);
   --accent-soft:  rgba(244,98,31,0.12);
   --accent-glow:  rgba(255,90,31,0.24);
-  --accent-text:  var(--orange-600);
-  --nav-active-bg: rgba(244,98,31,0.12);
+  --accent-text:  var(--orange-700);
+  --nav-active-bg: rgba(255,90,31,0.10);
 
   /* Verdict semantic */
   --positive:      var(--green-600);
@@ -106,7 +107,7 @@
   --info-text:     var(--blue-600);
   --info-soft:     rgba(77,141,255,0.12);
   --confidence:    var(--teal-600);
-  --confidence-text: var(--teal-600);
+  --confidence-text: var(--teal-700);
   --confidence-soft: rgba(14,156,156,0.13);
   --focus-ring:    var(--orange-500);
 
@@ -119,8 +120,8 @@
   --glow-accent:     0 0 0 4px var(--orange-soft), 0 2px 8px var(--orange-glow);
 
   /* Shadows */
-  --shadow-card: 0 1px 0 rgba(24,31,24,0.07), 0 4px 8px -6px rgba(24,31,24,0.30);
-  --shadow-md:   0 1px 0 rgba(24,31,24,0.10), 0 7px 8px -7px rgba(24,31,24,0.34);
+  --shadow-card: none;
+  --shadow-md:   0 4px 8px -6px rgba(20,24,31,0.24);
   --shadow-accent-glow: 0 0 0 1px rgba(255,90,31,0.28), 0 5px 8px -6px rgba(255,90,31,0.48);
   --shadow-focus: 0 0 0 3px rgba(244,98,31,0.25);
 
@@ -132,16 +133,16 @@
   --duration-slow: 320ms;
 
   /* Layout */
-  --sidebar-width: 232px;
-  --topbar-height: 56px;
+  --sidebar-width: 220px;
+  --topbar-height: 60px;
   --panel-gap: 16px;
   --content-max: 1440px;
   --sidebar-collapsed: 60px;
 
-  /* Fonts */
-  --font-display: 'Saira Semi Condensed', system-ui, sans-serif;
-  --font-sans:    'Commissioner', system-ui, sans-serif;
-  --font-mono:    'Azeret Mono', ui-monospace, monospace;
+  /* Fonts — loaded via next/font in app/layout.tsx (variable weight axes) */
+  --font-display: var(--font-sans);
+  --font-sans:    var(--font-commissioner), 'Commissioner', system-ui, sans-serif;
+  --font-mono:    var(--font-azeret-mono), 'Azeret Mono', ui-monospace, monospace;
 
   /* Radii */
   --radius-xs: 3px;
@@ -163,23 +164,23 @@
 }
 
 [data-theme="dark"] {
-  --bg-app:      #080A08;
-  --bg-backdrop: #050605;
-  --bg-inset:    #0D100D;
-  --bg-panel:    #111510;
-  --bg-elevated: #171C16;
-  --bg-hover:    #1C231B;
-  --bg-active:   #263025;
+  --bg-app:      #0B0D10;
+  --bg-backdrop: #080A0D;
+  --bg-inset:    #101318;
+  --bg-panel:    #14181D;
+  --bg-elevated: #191E24;
+  --bg-hover:    #1D232A;
+  --bg-active:   #252D36;
 
-  --border-subtle:  rgba(223,232,214,0.09);
-  --border-default: rgba(223,232,214,0.17);
-  --border-strong:  rgba(223,232,214,0.28);
+  --border-subtle:  rgba(232,237,243,0.08);
+  --border-default: rgba(232,237,243,0.15);
+  --border-strong:  rgba(232,237,243,0.25);
 
-  --text-primary:   #F4F6EE;
-  --text-secondary: #C5CCBC;
-  --text-muted:     #9DA691;
-  --text-faint:     #737E6B;
-  --text-on-accent: #FFFFFF;
+  --text-primary:   #F3F5F7;
+  --text-secondary: #B9C1CB;
+  --text-muted:     #8D98A5;
+  --text-faint:     #84909E;
+  --text-on-accent: #151922;
 
   --accent:       var(--orange-500);
   --accent-hover: var(--orange-400);
@@ -187,7 +188,7 @@
   --accent-soft:  var(--orange-soft);
   --accent-glow:  var(--orange-glow);
   --accent-text:  #FFB08A;
-  --nav-active-bg: linear-gradient(90deg, rgba(255,90,31,0.18), rgba(31,193,193,0.08));
+  --nav-active-bg: rgba(255,90,31,0.12);
 
   --positive:      var(--green-500);
   --positive-text: var(--green-300);
@@ -206,8 +207,8 @@
   --confidence-soft: var(--teal-soft);
   --focus-ring:    var(--orange-400);
 
-  --shadow-card: 0 1px 0 rgba(255,255,255,0.045), 0 5px 8px -6px rgba(0,0,0,0.76);
-  --shadow-md:   0 1px 0 rgba(255,255,255,0.06), 0 7px 8px -6px rgba(0,0,0,0.86);
+  --shadow-card: none;
+  --shadow-md:   0 5px 8px -6px rgba(0,0,0,0.78);
   --shadow-accent-glow: 0 0 0 1px rgba(255,90,31,0.32), 0 5px 8px -6px rgba(255,90,31,0.78);
 }
 
@@ -290,57 +291,42 @@ textarea::placeholder {
 /* ---- Responsive cockpit layout ---- */
 .siq-shell {
   display: flex;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   position: relative;
-  background:
-    linear-gradient(118deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 34%),
-    linear-gradient(242deg, color-mix(in srgb, var(--confidence) 7%, transparent), transparent 38%),
-    linear-gradient(180deg, var(--bg-backdrop), var(--bg-app) 42%);
+  background: var(--bg-app);
 }
 
-/* Ambient glow behind the workspace — warmth only; the court geometry itself
-   lives on .siq-main below so it tracks the scroll frame and stays coherent. */
-.siq-shell::before {
-  content: '';
-  position: absolute;
-  inset: var(--topbar-height) 0 0 var(--sidebar-width);
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 64% 46% at 50% -6%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%),
-    radial-gradient(ellipse 80% 60% at 50% 120%, color-mix(in srgb, var(--confidence) 5%, transparent), transparent 64%);
-  opacity: 0.9;
-  transition: opacity var(--duration-base) var(--ease-out);
+.siq-skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform var(--duration-fast) var(--ease-out);
 }
 
-.siq-shell--sidebar-collapsed::before {
-  left: var(--sidebar-collapsed);
-}
+.siq-skip-link:focus { transform: translateY(0); }
+.siq-mobile-nav { display: none; }
 
 .siq-sidebar {
   width: var(--sidebar-width);
   flex-shrink: 0;
   position: relative;
   z-index: 3;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 82%, var(--confidence) 5%), var(--bg-panel)),
-    var(--bg-panel);
+  background: var(--bg-panel);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   height: 100%;
   transition: background var(--duration-base) var(--ease-out);
-}
-
-.siq-sidebar::after {
-  content: '';
-  position: absolute;
-  inset: 0 0 0 auto;
-  width: 1px;
-  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--accent) 48%, transparent), transparent);
-  opacity: 0.75;
-  pointer-events: none;
 }
 
 .siq-sidebar-logo {
@@ -356,22 +342,84 @@ textarea::placeholder {
 .siq-brand-mark {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
-  background:
-    linear-gradient(135deg, transparent 0 42%, rgba(255,255,255,0.26) 42% 46%, transparent 46%),
-    linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 50%, var(--confidence)));
+  border-radius: var(--radius-md);
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent);
+  box-shadow: none;
+}
+
+.siq-brand-mark span {
+  color: var(--text-on-accent);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.siq-logo-text {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.siq-logo-text span { color: var(--accent); }
+
+.siq-sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 10px;
+}
+
+.siq-nav-eyebrow {
+  padding: 7px 10px 6px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.siq-sidebar-link {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 550;
+  text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+.siq-sidebar-link:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.siq-sidebar-link--active {
+  background: var(--nav-active-bg);
+  color: var(--accent-text);
+  font-weight: 700;
 }
 
 .siq-sidebar-footer {
-  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 14px 16px;
   border-top: 1px solid var(--border-subtle);
-  background:
-    linear-gradient(180deg, transparent, color-mix(in srgb, var(--confidence) 6%, transparent));
+  background: transparent;
+}
+
+.siq-sidebar-footer-label {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 650;
 }
 
 .siq-sidebar--collapsed {
@@ -405,6 +453,10 @@ textarea::placeholder {
 .siq-shell-workspace {
   position: relative;
   z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .siq-topbar {
@@ -412,24 +464,74 @@ textarea::placeholder {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 0 22px;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--bg-app) 88%, var(--confidence) 5%), color-mix(in srgb, var(--bg-app) 89%, var(--accent) 4%));
+  gap: 12px;
+  padding: 0 20px;
+  background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-app));
   border-bottom: 1px solid var(--border-subtle);
   position: relative;
 }
 
-.siq-topbar::after {
-  content: '';
-  position: absolute;
-  left: 22px;
-  right: 22px;
-  bottom: -1px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--confidence) 48%, transparent) 18%, color-mix(in srgb, var(--accent) 56%, transparent) 52%, transparent 86%);
-  pointer-events: none;
+.siq-topbar-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
+
+.siq-topbar-search {
+  flex: 1;
+  max-width: 360px;
+  min-width: 180px;
+  margin-left: 4px;
+}
+
+.siq-search-field {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  color: var(--text-muted);
+  transition: border-color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.siq-search-field:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border-strong));
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-focus);
+}
+
+.siq-search-field input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: 500 13px var(--font-sans);
+}
+
+.siq-search-clear {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.siq-search-clear:hover { background: var(--bg-active); color: var(--text-primary); }
+
+.siq-topbar-actions { display: flex; align-items: center; gap: 8px; }
 
 .siq-main {
   flex: 1;
@@ -450,8 +552,8 @@ textarea::placeholder {
   height: 32px;
   padding: 0;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-panel);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   transition:
@@ -462,30 +564,100 @@ textarea::placeholder {
 }
 
 .siq-icon-button:hover {
-  border-color: var(--border-default);
+  border-color: var(--border-subtle);
   color: var(--text-primary);
   background: var(--bg-inset);
 }
 
+.siq-icon-button:disabled,
+.siq-primary-button:disabled,
+.siq-secondary-button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .siq-card {
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 44%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 92%, var(--confidence) 2%), var(--bg-panel));
+  background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   overflow: hidden;
-  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
   transition:
     border-color var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out),
     background var(--duration-fast) var(--ease-out);
 }
 
 .siq-card:hover {
   border-color: var(--border-default);
-  transform: translateY(-1px);
 }
+
+.siq-card__head,
+.siq-card__head-main {
+  display: flex;
+  align-items: center;
+}
+
+.siq-card__head {
+  min-height: 42px;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.siq-card__head-main { gap: 7px; min-width: 0; }
+.siq-card__head .ds-eyebrow,
+.siq-surface__head .ds-eyebrow { margin: 0; }
+.siq-card__icon { display: flex; color: var(--text-muted); }
+.siq-card__action { flex-shrink: 0; }
+.siq-card__body { padding: 14px 16px 16px; }
+.siq-card__body--padded { padding: 16px; }
+.siq-card__body--flush { padding: 0; }
+
+.siq-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-weight: 650;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.siq-badge--sm { padding: 2px 7px; font-size: 10px; }
+.siq-badge--md { padding: 4px 9px; font-size: 11px; }
+.siq-badge--neutral { --badge-bg: var(--bg-inset); --badge-text: var(--text-secondary); }
+.siq-badge--accent { --badge-bg: var(--accent-soft); --badge-text: var(--accent-text); }
+.siq-badge--positive { --badge-bg: var(--positive-soft); --badge-text: var(--positive-text); }
+.siq-badge--negative { --badge-bg: var(--negative-soft); --badge-text: var(--negative-text); }
+.siq-badge--warning { --badge-bg: var(--warning-soft); --badge-text: var(--warning-text); }
+.siq-badge--confidence { --badge-bg: var(--confidence-soft); --badge-text: var(--confidence-text); }
+.siq-badge--solid { background: var(--badge-bg); color: var(--badge-text); }
+.siq-badge--outline { border-color: color-mix(in srgb, var(--badge-text) 30%, transparent); background: transparent; color: var(--badge-text); }
+.siq-badge__dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: currentColor; }
+.siq-badge__icon { display: flex; opacity: 0.85; }
+
+.siq-stat { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.siq-stat__label { display: flex; align-items: center; gap: 5px; }
+.siq-stat__label-icon { display: flex; color: var(--text-muted); }
+.siq-stat__readout { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+.siq-stat__value { color: var(--text-primary); font-weight: 700; line-height: 1.1; transition: color var(--duration-base) var(--ease-out); }
+.siq-stat--sm .siq-stat__value { font-size: 18px; }
+.siq-stat--md .siq-stat__value { font-size: 25px; }
+.siq-stat--lg .siq-stat__value { font-size: 34px; }
+.siq-stat__unit { color: var(--text-muted); font-size: 12px; }
+.siq-stat--lg .siq-stat__unit { font-size: 14px; }
+.siq-stat__value--positive { color: var(--positive-text); }
+.siq-stat__value--negative { color: var(--negative-text); }
+.siq-stat__value--warning { color: var(--warning-text); }
+.siq-stat__value--neutral { color: var(--text-primary); }
+.siq-stat__delta { margin-left: 2px; font-size: 11px; font-weight: 650; }
+.siq-stat__delta--up { color: var(--positive-text); }
+.siq-stat__delta--down { color: var(--negative-text); }
+.siq-stat__sub { color: var(--text-muted); font-size: 11px; line-height: 1.35; }
 
 .siq-profile-grid {
   display: grid;
@@ -1802,7 +1974,7 @@ textarea::placeholder {
   justify-content: center;
   gap: 8px;
   padding: 9px 16px;
-  min-height: 38px;
+  min-height: 40px;
   border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--text-on-accent);
@@ -1811,17 +1983,15 @@ textarea::placeholder {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: var(--shadow-accent-glow);
-  transition: background var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+  box-shadow: none;
+  transition: background var(--duration-fast) var(--ease-out);
 }
 
 .siq-primary-button:hover {
   background: var(--accent-hover);
-  transform: translateY(-1px);
 }
 .siq-primary-button:active {
   background: var(--accent-press);
-  transform: translateY(1px);
 }
 
 .siq-secondary-button {
@@ -1830,7 +2000,7 @@ textarea::placeholder {
   justify-content: center;
   gap: 7px;
   padding: 8px 12px;
-  min-height: 38px;
+  min-height: 40px;
   border-radius: var(--radius-md);
   background: var(--bg-panel);
   color: var(--text-secondary);
@@ -1839,17 +2009,17 @@ textarea::placeholder {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+  transition: border-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
 }
 
 .siq-secondary-button:hover {
   color: var(--text-primary);
   border-color: var(--border-strong);
-  transform: translateY(-1px);
+  background: var(--bg-hover);
 }
 
 .siq-secondary-button:active {
-  transform: translateY(1px);
+  background: var(--bg-active);
 }
 
 .siq-slider {
@@ -1944,41 +2114,10 @@ textarea::placeholder {
 }
 
 /* ============================================================
-   Basketball intelligence console — court field + surface system
+   Shared analytical surfaces
    ============================================================ */
-:root {
-  --court-line:        rgba(24,31,24,0.06);
-  --court-line-strong: rgba(24,31,24,0.11);
-  --court-felt:        rgba(255,90,31,0.06);
-  --bezel-light:       rgba(255,255,255,0.6);
-  /* Top-of-the-key court field (NBA proportions, basket bled off the top edge):
-     the painted lane rising toward the hoop, the free-throw circle on its line,
-     the restricted-area arc, and the three-point wings sweeping in from the
-     corners. Framed to read as a basketball key inside the header band, where
-     it isn't occluded by content. Stroke fades downward into the workspace. */
-  --court-art: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 300'%3E%3Cdefs%3E%3ClinearGradient id='c' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='rgba(16,22,16,0.6)'/%3E%3Cstop offset='0.74' stop-color='rgba(16,22,16,0.5)'/%3E%3Cstop offset='1' stop-color='rgba(16,22,16,0)'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg fill='none' stroke='url(%23c)' stroke-width='2'%3E%3Cpath d='M0 1 H500'/%3E%3Crect x='170' y='1' width='160' height='189'/%3E%3Ccircle cx='250' cy='190' r='60'/%3E%3Cpath d='M218 40 H282'/%3E%3Ccircle cx='250' cy='54' r='9'/%3E%3Cpath d='M211 54 A39 39 0 0 0 289 54'/%3E%3Cpath d='M30 1 V143'/%3E%3Cpath d='M470 1 V143'/%3E%3Cpath d='M30 143 A237.5 237.5 0 0 0 470 143'/%3E%3C/g%3E%3C/svg%3E");
-}
-
-[data-theme="dark"] {
-  --court-line:        rgba(223,232,214,0.045);
-  --court-line-strong: rgba(255,90,31,0.18);
-  --court-felt:        rgba(255,90,31,0.07);
-  --bezel-light:       rgba(223,232,214,0.05);
-  --court-art: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 300'%3E%3Cdefs%3E%3ClinearGradient id='c' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='rgba(216,228,208,0.5)'/%3E%3Cstop offset='0.74' stop-color='rgba(216,228,208,0.42)'/%3E%3Cstop offset='1' stop-color='rgba(216,228,208,0)'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg fill='none' stroke='url(%23c)' stroke-width='2'%3E%3Cpath d='M0 1 H500'/%3E%3Crect x='170' y='1' width='160' height='189'/%3E%3Ccircle cx='250' cy='190' r='60'/%3E%3Cpath d='M218 40 H282'/%3E%3Ccircle cx='250' cy='54' r='9'/%3E%3Cpath d='M211 54 A39 39 0 0 0 289 54'/%3E%3Cpath d='M30 1 V143'/%3E%3Cpath d='M470 1 V143'/%3E%3Cpath d='M30 143 A237.5 237.5 0 0 0 470 143'/%3E%3C/g%3E%3C/svg%3E");
-}
-
-/* Half-court field behind the scroll content. The diagram bleeds up off the top
-   edge so the hoop and key sit above the fold and the three-point arc descends
-   into the workspace, fading out. Fixed in the scroll box so it stays put as a
-   stable court the data sits on — basketball-native structure, not a backdrop. */
 .siq-main {
   background-color: var(--bg-app);
-  background-image:
-    radial-gradient(ellipse 30% 22% at 50% 5%, var(--court-felt), transparent 62%),
-    var(--court-art);
-  background-repeat: no-repeat, no-repeat;
-  background-position: center top, center -172px;
-  background-size: auto, 620px auto;
 }
 
 /* ---- Surface base ---- */
@@ -1986,23 +2125,17 @@ textarea::placeholder {
   position: relative;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--surface-accent, var(--accent)) 5%, transparent), transparent 42%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 88%, var(--confidence) 2%), var(--bg-panel));
+  background: var(--bg-panel);
   box-shadow: var(--shadow-card);
   overflow: hidden;
   isolation: isolate;
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
   transition:
     border-color var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .siq-surface:hover {
-  border-color: color-mix(in srgb, var(--surface-accent, var(--accent)) 20%, var(--border-default));
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  border-color: var(--border-default);
 }
 
 .siq-surface__head {
@@ -2010,7 +2143,9 @@ textarea::placeholder {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 12px 16px 0;
+  min-height: 42px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-subtle);
   position: relative;
   z-index: 2;
 }
@@ -2028,7 +2163,7 @@ textarea::placeholder {
 }
 
 .siq-surface__body {
-  padding: 12px 16px 16px;
+  padding: 14px 16px 16px;
   position: relative;
   z-index: 2;
 }
@@ -2037,46 +2172,13 @@ textarea::placeholder {
   padding: 0;
 }
 
-/* ---- Instrument panel: the Decision Brief reads like a console readout ---- */
-.siq-surface--instrument {
-  /* Registration marks (the two corner L-ticks) brand the panel as a calibrated
-     plate; the inset top light is the instrument bezel catching the room. */
-  background:
-    linear-gradient(110deg, color-mix(in srgb, var(--confidence) 6%, transparent), transparent 36%),
-    linear-gradient(180deg, color-mix(in srgb, var(--surface-accent, var(--accent)) 6%, transparent), transparent 140px),
-    linear-gradient(var(--court-line-strong), var(--court-line-strong)) right 10px top 10px / 9px 1px no-repeat,
-    linear-gradient(var(--court-line-strong), var(--court-line-strong)) right 10px top 10px / 1px 9px no-repeat,
-    linear-gradient(var(--court-line-strong), var(--court-line-strong)) left 10px bottom 12px / 9px 1px no-repeat,
-    linear-gradient(var(--court-line-strong), var(--court-line-strong)) left 10px bottom 12px / 1px 9px no-repeat,
-    var(--bg-panel);
-  box-shadow: inset 0 1px 0 var(--bezel-light);
-}
-
-/* Baseline tick strip along the bottom edge — the panel's "instrument" footer */
-.siq-surface--instrument::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 3px;
-  background: linear-gradient(90deg,
-    transparent 0,
-    color-mix(in srgb, var(--surface-accent, var(--accent)) 55%, transparent) 18%,
-    color-mix(in srgb, var(--surface-accent, var(--accent)) 55%, transparent) 82%,
-    transparent 100%);
-  opacity: 0.7;
-  z-index: 1;
-}
 
 .siq-gauge-well {
   position: relative;
   margin: 6px 0 16px;
   padding: 16px 18px 6px;
   border-radius: var(--radius-md);
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--surface-accent, var(--accent)) 6%, transparent), transparent 48%),
-    var(--bg-inset);
+  background: var(--bg-inset);
   border: 1px solid var(--border-subtle);
   box-shadow: inset 0 1px 3px rgba(16,24,40,0.07);
 }
@@ -2140,41 +2242,11 @@ textarea::placeholder {
   line-height: 1.3;
 }
 
-/* ---- Board: the Market Signal comp board, with a team-tinted left rail ---- */
 .siq-surface--board {
-  border-color: color-mix(in srgb, var(--surface-accent, var(--accent)) 26%, var(--border-subtle));
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--surface-accent, var(--accent)) 8%, transparent), transparent 38%),
-    var(--bg-panel);
+  border-color: color-mix(in srgb, var(--surface-accent, var(--accent)) 22%, var(--border-subtle));
+  background: var(--bg-panel);
 }
 
-.siq-surface--board::before {
-  content: '';
-  position: absolute;
-  inset: 9px 10px auto 10px;
-  height: 2px;
-  border-radius: var(--radius-pill);
-  background: linear-gradient(90deg,
-    transparent,
-    color-mix(in srgb, var(--surface-accent, var(--accent)) 58%, transparent),
-    color-mix(in srgb, var(--confidence) 42%, transparent),
-    transparent);
-  z-index: 1;
-}
-
-/* ---- Dossier: Confidence Notes, framed like a clipped case file ---- */
-.siq-surface--dossier::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 22px 22px 0 0;
-  border-color: color-mix(in srgb, var(--surface-accent, var(--confidence)) 26%, var(--bg-inset)) transparent transparent transparent;
-  z-index: 1;
-}
 
 /* Bracket-framed confidence lines — the "[ ]" confidence motif */
 .siq-confidence-bracket {
@@ -2223,32 +2295,63 @@ textarea::placeholder {
 @media (max-width: 720px) {
   :root { --panel-gap: 12px; }
 
-  .siq-sidebar {
-    width: var(--sidebar-collapsed);
+  .siq-shell {
+    display: block;
   }
 
-  .siq-logo-text,
-  .siq-nav-eyebrow,
-  .siq-nav-label,
-  .siq-sidebar-footer {
+  .siq-sidebar { display: none; }
+
+  .siq-mobile-nav {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-around;
+    gap: 2px;
+    position: fixed;
+    inset: auto 0 0;
+    width: 100%;
+    min-height: calc(64px + env(safe-area-inset-bottom));
+    padding: 5px 6px env(safe-area-inset-bottom);
+    border-top: 1px solid var(--border-default);
+    background: color-mix(in srgb, var(--bg-panel) 94%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    z-index: 30;
+  }
+
+  .siq-mobile-nav__link {
+    min-width: 0;
+    min-height: 52px;
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 4px 2px;
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 650;
+    line-height: 1;
+    text-decoration: none;
+  }
+
+  .siq-mobile-nav__link--active {
+    background: var(--nav-active-bg);
+    color: var(--accent-text);
+  }
+
+  .siq-shell-workspace {
+    height: 100%;
+  }
+
+  .siq-sidebar-toggle,
+  .siq-topbar-title {
     display: none;
   }
 
-  .siq-sidebar-logo {
-    justify-content: center;
-    padding: 0;
-  }
-
-  .siq-sidebar-nav {
-    padding: 10px 8px;
-    align-items: center;
-  }
-
-  .siq-sidebar-link {
-    width: 44px;
-    height: 44px;
-    justify-content: center;
-    padding: 0;
+  .siq-topbar--compact .siq-topbar-title {
+    display: block;
   }
 
   .siq-icon-button {
@@ -2261,24 +2364,20 @@ textarea::placeholder {
     padding: 0 12px;
   }
 
-  .siq-topbar-title {
-    font-size: 17px;
-  }
-
   .siq-topbar-search {
+    flex: 1;
     max-width: none;
     min-width: 0;
     margin-left: 0;
   }
 
   .siq-season-badge,
-  .siq-bell-button,
   .siq-topbar-spacer {
     display: none !important;
   }
 
   .siq-main {
-    padding: 16px 12px;
+    padding: 16px 16px calc(80px + env(safe-area-inset-bottom));
   }
 
   .siq-model-metrics-grid {
@@ -2404,17 +2503,6 @@ textarea::placeholder {
   position: relative;
 }
 
-.siq-watchlist-command::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: -8px;
-  width: min(520px, 48vw);
-  height: 1px;
-  background: linear-gradient(90deg, var(--accent), var(--confidence), transparent);
-  opacity: 0.55;
-  pointer-events: none;
-}
 
 .siq-pressure-board {
   position: relative;
@@ -2424,36 +2512,6 @@ textarea::placeholder {
   isolation: isolate;
 }
 
-.siq-pressure-board::before {
-  content: '';
-  position: absolute;
-  inset: -16px -18px;
-  z-index: -1;
-  border-radius: var(--radius-xl);
-  background:
-    linear-gradient(90deg, transparent 0 23%, rgba(31,193,193,0.09) 23.1% 23.4%, transparent 23.5% 50%, rgba(255,90,31,0.10) 50.1% 50.35%, transparent 50.45% 78%, rgba(238,71,71,0.08) 78.1% 78.4%, transparent 78.5%),
-    radial-gradient(ellipse 48% 42% at 50% 0%, rgba(255,90,31,0.09), transparent 62%);
-  opacity: 0.85;
-  pointer-events: none;
-}
-
-.siq-pressure-board::after {
-  content: '';
-  position: absolute;
-  inset: -12px -18px;
-  z-index: -1;
-  border-radius: var(--radius-xl);
-  background: linear-gradient(100deg, transparent 0 42%, rgba(244,246,238,0.075) 48%, transparent 54% 100%);
-  transform: translateX(-40%);
-  animation: siq-board-scan 7.5s var(--ease-expo) infinite;
-  pointer-events: none;
-}
-
-@keyframes siq-board-scan {
-  0%, 18% { transform: translateX(-55%); opacity: 0; }
-  34% { opacity: 1; }
-  58%, 100% { transform: translateX(55%); opacity: 0; }
-}
 
 @keyframes siqPulse {
   0%, 100% { transform: scale(0.88); opacity: 0.55; }
@@ -2465,43 +2523,6 @@ textarea::placeholder {
   100% { background-position: -120% 0; }
 }
 
-/* Sheen spot: the moving glint a card sleeve catches. Paper-soft graphite in
-   the light theme, arena light in the dark one. Local to the holo cards. */
-:root { --sheen-spot: rgba(26,32,26,0.055); }
-[data-theme="dark"] { --sheen-spot: rgba(255,255,255,0.10); }
-
-/* Case-card lift: the cards were sitting too close to the canvas (dark: card
-   floor #111510 on #080A08; light: #FBFCFA on #F0F2F0 with a whisper shadow).
-   Card stock gets its own surface step above the panel scale, a border seated
-   on border-default instead of subtle, and a theme-true shadow — paper drops a
-   real soft shadow in daylight; in the cockpit, depth is ambient darkness
-   under the card plus a hairline top light. Scoped to the cards only. */
-:root {
-  --case-surface:      #FFFFFF;
-  --case-surface-2:    #FCFDFC;
-  --case-shadow:
-    0 1px 0 rgba(24,31,24,0.08),
-    0 3px 7px -4px rgba(24,31,24,0.18),
-    0 14px 26px -16px rgba(24,31,24,0.42);
-  --case-shadow-hover:
-    0 1px 0 rgba(24,31,24,0.10),
-    0 5px 10px -5px rgba(24,31,24,0.22),
-    0 20px 34px -18px rgba(24,31,24,0.48);
-}
-
-[data-theme="dark"] {
-  --case-surface:      #1C221B;
-  --case-surface-2:    #151A13;
-  --case-shadow:
-    0 1px 0 rgba(255,255,255,0.055),
-    0 3px 10px -4px rgba(0,0,0,0.55),
-    0 16px 32px -16px rgba(0,0,0,0.9);
-  --case-shadow-hover:
-    0 1px 0 rgba(255,255,255,0.07),
-    0 5px 14px -5px rgba(0,0,0,0.6),
-    0 22px 40px -18px rgba(0,0,0,0.95);
-}
-
 .siq-case-card {
   --case-accent: var(--accent);
   width: 100%;
@@ -2509,7 +2530,7 @@ textarea::placeholder {
   content-visibility: auto;
   contain-intrinsic-size: 234px;
   text-align: left;
-  border: 1px solid color-mix(in srgb, var(--case-accent) 28%, var(--border-default));
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 16px;
   cursor: pointer;
@@ -2518,21 +2539,11 @@ textarea::placeholder {
   flex-direction: column;
   gap: 13px;
   color: var(--text-primary);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--case-accent) 14%, transparent), transparent 36%),
-    linear-gradient(180deg, color-mix(in srgb, var(--case-surface) 95%, var(--case-accent) 5%), var(--case-surface-2));
-  box-shadow: var(--case-shadow);
+  background: var(--bg-panel);
   position: relative;
   overflow: hidden;
-  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
-  /* Trading-card tilt: --rx/--ry are written per-frame by the pointer handler;
-     the transition keeps the follow damped so it reads as card stock, not jelly. */
-  transform: perspective(950px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
   transition:
     border-color var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out),
-    transform 200ms var(--ease-out),
-    clip-path var(--duration-fast) var(--ease-out),
     background var(--duration-fast) var(--ease-out);
 }
 
@@ -2542,57 +2553,75 @@ textarea::placeholder {
   top: 0;
   left: 16px;
   right: 16px;
-  height: 3px;
-  border-radius: 0 0 3px 3px;
-  background: linear-gradient(90deg, var(--case-accent), color-mix(in srgb, var(--case-accent) 25%, var(--confidence)));
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: var(--case-accent);
 }
 
-/* Folded ticket corner — the crease line makes it read as paper, and the fold
-   deepens slightly while the card is held (hover). */
-.siq-case-card::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 0;
-  width: 18px;
-  height: 18px;
-  background:
-    linear-gradient(135deg, transparent 44%, rgba(16,22,16,0.12) 49%, transparent 56%),
-    color-mix(in srgb, var(--case-accent) 22%, var(--bg-inset));
-  border-left: 1px solid color-mix(in srgb, var(--case-accent) 26%, var(--border-subtle));
-  border-bottom: 1px solid color-mix(in srgb, var(--case-accent) 26%, var(--border-subtle));
-  transition: width var(--duration-fast) var(--ease-out), height var(--duration-fast) var(--ease-out);
+/* Production stat strip — scoreboard columns: mono value over a tiny caption.
+   Grounds the verdict without competing with it. */
+.siq-statline {
+  display: grid;
+  gap: 4px 6px;
 }
+
+.siq-statline--card {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.siq-statline__cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.siq-statline__value {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.siq-statline__label {
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+/* Season production strip inside the decision brief — same columns, one step up */
+.siq-production-line {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.siq-statline--brief {
+  grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
+  gap: 8px 6px;
+}
+
+.siq-statline--brief .siq-statline__value {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
 
 .siq-case-card:hover {
-  border-color: color-mix(in srgb, var(--case-accent) 62%, var(--border-strong));
-  box-shadow: var(--case-shadow-hover);
-  transform: perspective(950px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-2px);
-  clip-path: polygon(0 0, calc(100% - 23px) 0, 100% 23px, 100% 100%, 0 100%);
+  border-color: color-mix(in srgb, var(--case-accent) 34%, var(--border-default));
+  background: var(--bg-hover);
 }
 
-.siq-case-card:hover::after {
-  width: 23px;
-  height: 23px;
-}
-
-/* Verdict-tinted holo glint riding the pointer (--mx/--my). It sits above the
-   print like light on a card sleeve — green cards glint green, overpays red. */
-.siq-case-card__sheen {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  opacity: 0;
-  background:
-    radial-gradient(300px circle at var(--mx, 75%) var(--my, 18%), var(--sheen-spot), transparent 62%),
-    radial-gradient(190px circle at var(--mx, 75%) var(--my, 18%), color-mix(in srgb, var(--case-accent) 9%, transparent), transparent 70%);
-  transition: opacity var(--duration-base) var(--ease-out);
-}
-
-.siq-case-card:hover .siq-case-card__sheen {
-  opacity: 1;
-}
 
 .siq-case-card__head {
   display: flex;
@@ -2627,7 +2656,7 @@ textarea::placeholder {
   }
 
   .siq-main {
-    padding: 12px 10px;
+    padding: 12px 10px calc(76px + env(safe-area-inset-bottom));
   }
 
   .siq-decision-hero {
@@ -2698,88 +2727,6 @@ textarea::placeholder {
 }
 
 /* ============================================================
-   Boot sequence — orchestrated cockpit entrance
-   One staged reveal on load (chrome cascades, content rises,
-   the pressure board deals in) reads more like an instrument
-   powering up than a page painting. All transform/opacity,
-   so it composes cheaply and degrades to a clean snap under
-   reduced motion. Stagger is driven by --i on each element.
-   ============================================================ */
-@keyframes siq-rise {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes siq-slide-in {
-  from { opacity: 0; transform: translateX(-9px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes siq-pop-in {
-  0%   { opacity: 0; transform: scale(0.86); }
-  64%  { opacity: 1; transform: scale(1.04); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-/* One-shot light sweep across the brand mark — the scan motif, on boot only */
-@keyframes siq-mark-sweep {
-  0%, 36% { transform: translateX(-130%) skewX(-18deg); opacity: 0; }
-  52%     { opacity: 0.85; }
-  78%     { transform: translateX(130%) skewX(-18deg); opacity: 0; }
-  100%    { transform: translateX(130%) skewX(-18deg); opacity: 0; }
-}
-
-/* Entrance fills are `backwards`, not `both`: every entrance ends at the
-   element's natural state anyway, and a finished forwards-fill can keep
-   overriding cascade transforms in some engines (Safari notably), which would
-   pin entered cards and block their hover lift/tilt. `backwards` still hides
-   the element through its stagger delay, then returns control to the sheet. */
-.siq-enter {
-  animation: siq-rise var(--duration-slow) var(--ease-expo) backwards;
-  animation-delay: calc(var(--enter-base, 60ms) + var(--i, 0) * 55ms);
-}
-
-.siq-enter-x {
-  animation: siq-slide-in var(--duration-base) var(--ease-out) backwards;
-  animation-delay: calc(var(--enter-base, 90ms) + var(--i, 0) * 48ms);
-}
-
-/* Inherits --i / --enter-base from an ancestor card so the verdict number
-   pops just as its card finishes landing — the decision state hits last. */
-.siq-enter-pop {
-  animation: siq-pop-in var(--duration-slow) var(--ease-expo) backwards;
-  animation-delay: calc(var(--enter-base, 0ms) + var(--i, 0) * 55ms + 120ms);
-  transform-origin: right center;
-}
-
-@keyframes siq-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-/* Per-route content reveal — keyed wrapper remounts on navigation, so every
-   page settles in rather than snapping. Fade only: inner elements (board
-   cards, hero verdict) carry their own rise/pop so nothing double-moves. */
-.siq-route-enter {
-  animation: siq-fade-in var(--duration-base) var(--ease-out) backwards;
-}
-
-/* Brand mark boot sweep */
-.siq-brand-mark {
-  position: relative;
-  overflow: hidden;
-}
-
-.siq-brand-mark::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(100deg, transparent 38%, rgba(255,255,255,0.55) 50%, transparent 62%);
-  animation: siq-mark-sweep 2.6s var(--ease-expo) 0.5s 1 both;
-  pointer-events: none;
-}
-
-/* ============================================================
    Verdict moment — the simulator's state change, made felt
    --sim-verdict (set on the page root) carries the live read:
    green bargain / red overpay / teal priced-at-model / brand
@@ -2818,7 +2765,7 @@ textarea::placeholder {
 }
 
 /* ============================================================
-   Console craft — repricing flash, skeleton board, arena lights
+   State feedback — repricing and loading
    ============================================================ */
 
 /* Live readout repricing: when a figure changes, it glints in its own color
@@ -2836,9 +2783,7 @@ textarea::placeholder {
   animation: siq-reprice 640ms var(--ease-out);
 }
 
-/* Skeleton case cards — the watchlist deals in ghost cards that breathe in a
-   wave (delay rides the card's --i) instead of announcing "Loading…". The
-   reduced-motion clamp caps iterations, so the breathe degrades to a still. */
+/* Skeleton cards use a restrained opacity pulse; reduced motion clamps it. */
 .siq-case-skel {
   pointer-events: none;
 }
@@ -2879,16 +2824,6 @@ textarea::placeholder {
 
 ::view-transition-old(root) { z-index: 1; }
 ::view-transition-new(root) { z-index: 2; }
-
-/* Quiet half-court etched into the sidebar's dead space — structure, not décor */
-.siq-sidebar-court {
-  display: block;
-  width: 100%;
-  height: auto;
-  margin-bottom: 10px;
-  color: var(--text-primary);
-  opacity: 0.09;
-}
 
 .siq-icon-button:active {
   transform: translateY(1px);

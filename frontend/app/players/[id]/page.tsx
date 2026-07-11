@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, use, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -620,21 +620,73 @@ function WorkspaceTabs({
   active: WorkspaceTab;
   onChange: (tab: WorkspaceTab) => void;
 }) {
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let nextIndex = index;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % WORKSPACE_TABS.length;
+    else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + WORKSPACE_TABS.length) % WORKSPACE_TABS.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = WORKSPACE_TABS.length - 1;
+    else return;
+
+    event.preventDefault();
+    onChange(WORKSPACE_TABS[nextIndex].key);
+    tabRefs.current[nextIndex]?.focus();
+  };
+
   return (
     <div className="siq-workspace-tabs" role="tablist" aria-label="Player case sections">
-      {WORKSPACE_TABS.map((tab) => (
+      {WORKSPACE_TABS.map((tab, index) => (
         <button
           key={tab.key}
+          id={`player-tab-${tab.key}`}
+          ref={(el) => { tabRefs.current[index] = el; }}
           type="button"
           role="tab"
           aria-selected={active === tab.key}
+          aria-controls="player-workspace-panel"
+          tabIndex={active === tab.key ? 0 : -1}
           onClick={() => onChange(tab.key)}
+          onKeyDown={(event) => onKeyDown(event, index)}
           className={active === tab.key ? 'is-active' : undefined}
         >
           {tab.icon}
           {tab.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+function ProductionRow({ features }: { features: Record<string, number> | null }) {
+  if (!features) return null;
+  const gp = features.gp;
+  const mpg = features.minutes != null && gp ? features.minutes / gp : null;
+  const signedStat = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(1)}`;
+
+  const items: Array<{ value: string; label: string }> = [];
+  if (gp != null) items.push({ value: String(Math.round(gp)), label: 'gp' });
+  if (mpg != null) items.push({ value: mpg.toFixed(1), label: 'mpg' });
+  if (features.pts_pg != null) items.push({ value: features.pts_pg.toFixed(1), label: 'pts' });
+  if (features.reb_pg != null) items.push({ value: features.reb_pg.toFixed(1), label: 'reb' });
+  if (features.ast_pg != null) items.push({ value: features.ast_pg.toFixed(1), label: 'ast' });
+  if (features.TS_PCT != null) items.push({ value: (features.TS_PCT * 100).toFixed(1), label: 'ts%' });
+  if (features.BPM != null) items.push({ value: signedStat(features.BPM), label: 'bpm' });
+  if (features.NET_RATING != null) items.push({ value: signedStat(features.NET_RATING), label: 'net' });
+  if (items.length === 0) return null;
+
+  return (
+    <div className="siq-production-line">
+      <span className="ds-eyebrow">Season production</span>
+      <div className="siq-statline siq-statline--brief">
+        {items.map(({ value, label }) => (
+          <span key={label} className="siq-statline__cell">
+            <span className="siq-statline__value ds-tnum">{value}</span>
+            <span className="siq-statline__label">{label}</span>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -716,6 +768,7 @@ function FrontOfficeRead({
             sub={contract ? `${contract.years} listed yrs` : 'loading'}
           />
         </div>
+        <ProductionRow features={val.features} />
       </Surface>
 
       <Surface variant="board" teamAccent eyebrow="Market signal" icon={<GitCompare size={15} />}>
@@ -1113,7 +1166,12 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
         <section className="siq-workspace-main" aria-label="Player workspace">
           <WorkspaceTabs active={activeTab} onChange={setActiveTab} />
 
-          <div className="siq-workspace-panel">
+          <div
+            id="player-workspace-panel"
+            className="siq-workspace-panel"
+            role="tabpanel"
+            aria-labelledby={`player-tab-${activeTab}`}
+          >
             {activeTab === 'brief' && (
               <FrontOfficeRead
                 val={val}

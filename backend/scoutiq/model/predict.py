@@ -63,6 +63,20 @@ def predict_from_features(features: dict[str, Any]) -> dict:
     return predict_many_from_features([features])[0]
 
 
+def _as_float(value: Any) -> float | None:
+    """Stat inputs are loosely typed — bbref loads store some numerics as strings
+    (e.g. BPM "0.5", WS48 ".116") and Numeric columns yield Decimal. Coerce or
+    drop, so every downstream consumer (model, API responses, verdict flags)
+    sees float | None."""
+    if isinstance(value, bool):
+        return None
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) else None
+
+
 def build_features_from_season(ps: PlayerSeason, player: Player | None) -> dict[str, Any]:
     """Build model features from already-loaded ORM rows."""
     box = ps.box or {}
@@ -72,18 +86,18 @@ def build_features_from_season(ps: PlayerSeason, player: Player | None) -> dict[
     features: dict[str, Any] = {
         "age": ps.age,
         "gp": gp,
-        "minutes": float(ps.minutes) if ps.minutes is not None else None,
+        "minutes": _as_float(ps.minutes),
     }
 
     for col, src in _PER_GAME_SRC.items():
-        val = box.get(src)
+        val = _as_float(box.get(src))
         features[col] = val / gp if (val is not None and gp > 0) else None
 
     for col in NBA_ADV:
-        features[col] = adv.get(col)
+        features[col] = _as_float(adv.get(col))
 
     for col in BBREF_ADV:
-        features[col] = adv.get(col)
+        features[col] = _as_float(adv.get(col))
 
     pos = primary_position(player.position) if player else None
     for p in POSITIONS:

@@ -25,6 +25,8 @@ export function Avatar({ name, size = 'md', position, playerId }: AvatarProps) {
   return (
     <div
       title={name}
+      role="img"
+      aria-label={name}
       style={{
         width: px,
         height: px,
@@ -52,7 +54,8 @@ export function Avatar({ name, size = 'md', position, playerId }: AvatarProps) {
         // Overlays initials; on load error it hides itself, revealing the fallback.
         <img
           src={headshotUrl(playerId)}
-          alt={name}
+          alt=""
+          aria-hidden="true"
           loading="lazy"
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
           style={{

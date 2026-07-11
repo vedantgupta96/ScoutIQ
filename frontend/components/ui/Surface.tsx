@@ -14,6 +14,7 @@ interface SurfaceProps {
   flush?: boolean;
   className?: string;
   style?: CSSProperties;
+  headingLevel?: 'h2' | 'h3';
 }
 
 /**
@@ -33,7 +34,9 @@ export function Surface({
   flush = false,
   className = '',
   style,
+  headingLevel = 'h2',
 }: SurfaceProps) {
+  const Heading = headingLevel;
   const accentStyle = teamAccent
     ? ({ '--surface-accent': 'var(--team-primary, var(--accent))' } as CSSProperties)
     : undefined;
@@ -47,7 +50,7 @@ export function Surface({
         <div className="siq-surface__head">
           <div className="siq-surface__head-l">
             {icon && <span className="siq-surface__icon">{icon}</span>}
-            <span className="ds-eyebrow">{eyebrow}</span>
+            <Heading className="ds-eyebrow">{eyebrow}</Heading>
           </div>
           {action && <div>{action}</div>}
         </div>

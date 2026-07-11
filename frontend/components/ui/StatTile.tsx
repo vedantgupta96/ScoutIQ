@@ -15,59 +15,28 @@ interface StatTileProps {
   live?: boolean;
 }
 
-const SIZE = {
-  sm: { label: 11, value: 20, unit: 13 },
-  md: { label: 12, value: 28, unit: 14 },
-  lg: { label: 13, value: 38, unit: 16 },
-};
-
-const TONE_COLOR = {
-  positive: 'var(--positive-text)',
-  negative: 'var(--negative-text)',
-  warning: 'var(--warning-text)',
-  neutral: 'var(--text-primary)',
-};
-
 export function StatTile({ label, value, unit, sub, delta, deltaDir, size = 'md', labelIcon, valueTone, live = false }: StatTileProps) {
-  const s = SIZE[size];
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        {labelIcon && <span style={{ color: 'var(--text-muted)', display: 'flex' }}>{labelIcon}</span>}
+    <div className={`siq-stat siq-stat--${size}`}>
+      <div className="siq-stat__label">
+        {labelIcon && <span className="siq-stat__label-icon">{labelIcon}</span>}
         <span className="ds-eyebrow">{label}</span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+      <div className="siq-stat__readout" aria-live={live ? 'polite' : undefined} aria-atomic={live || undefined}>
         <span
-          // Keyed by value when live: a change remounts the span, replaying the
-          // glint. currentColor keeps the flash in the figure's own tone.
           key={live ? String(value) : undefined}
-          className={live ? 'ds-tnum siq-reprice' : 'ds-tnum'}
-          style={{
-            fontSize: s.value, fontWeight: 700,
-            color: valueTone ? TONE_COLOR[valueTone] : 'var(--text-primary)',
-            lineHeight: 1.1,
-            fontFamily: 'var(--font-display)',
-            transition: 'color var(--duration-slow) var(--ease-out)',
-          }}>
+          className={`siq-stat__value ds-tnum${valueTone ? ` siq-stat__value--${valueTone}` : ''}${live ? ' siq-reprice' : ''}`}
+        >
           {value}
         </span>
-        {unit && (
-          <span className="ds-tnum" style={{ fontSize: s.unit, color: 'var(--text-muted)' }}>{unit}</span>
-        )}
+        {unit && <span className="siq-stat__unit ds-tnum">{unit}</span>}
         {delta && (
-          <span className="ds-tnum" style={{
-            fontSize: 12, fontWeight: 600,
-            color: deltaDir === 'up' ? 'var(--positive-text)' : 'var(--negative-text)',
-            marginLeft: 2,
-          }}>
+          <span className={`siq-stat__delta siq-stat__delta--${deltaDir === 'up' ? 'up' : 'down'} ds-tnum`}>
             {delta}
           </span>
         )}
       </div>
-      {sub && (
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.3 }}>{sub}</span>
-      )}
+      {sub && <span className="siq-stat__sub">{sub}</span>}
     </div>
   );
 }

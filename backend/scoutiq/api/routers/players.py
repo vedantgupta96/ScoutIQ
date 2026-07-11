@@ -65,6 +65,18 @@ class PlayerSummary(BaseModel):
     team_data_note: str | None
 
 
+class PlayerCardStats(BaseModel):
+    """Compact production context for card surfaces; season-consistent with the valuation."""
+
+    gp: int | None
+    mpg: float | None
+    pts_pg: float | None
+    reb_pg: float | None
+    ast_pg: float | None
+    ts_pct: float | None
+    bpm: float | None
+
+
 class PlayerCardValuation(BaseModel):
     season: str
     value_pct: float
@@ -79,6 +91,7 @@ class PlayerCardValuation(BaseModel):
     verdict_tone: Literal["positive", "negative", "neutral", "warning"]
     caution_flags: list[str]
     caveat: str | None
+    stats: PlayerCardStats | None = None
 
 
 class PlayerCard(PlayerSummary):
@@ -405,6 +418,30 @@ def search_players(
     return [summaries[p.player_id] for p in players]
 
 
+def _card_stats_from_features(features: dict) -> PlayerCardStats | None:
+    """Pull the card's production line out of the already-built model features."""
+    gp = _num(features.get("gp"))
+    minutes = _num(features.get("minutes"))
+    ts_pct = _num(features.get("TS_PCT"))
+
+    def _rounded(key: str) -> float | None:
+        value = _num(features.get(key))
+        return round(value, 1) if value is not None else None
+
+    stats = PlayerCardStats(
+        gp=int(gp) if gp else None,
+        mpg=round(minutes / gp, 1) if (minutes is not None and gp) else None,
+        pts_pg=_rounded("pts_pg"),
+        reb_pg=_rounded("reb_pg"),
+        ast_pg=_rounded("ast_pg"),
+        ts_pct=round(ts_pct, 3) if ts_pct is not None else None,
+        bpm=_rounded("BPM"),
+    )
+    if all(value is None for value in stats.model_dump().values()):
+        return None
+    return stats
+
+
 def _card_valuations(
     players: list[Player],
     summaries: dict[int, PlayerSummary],
@@ -488,6 +525,7 @@ def _card_valuations(
             verdict_tone=verdict_tone,
             caution_flags=caution_flags,
             caveat=caveat,
+            stats=_card_stats_from_features(features_by_key[(player_id, season)]),
         )
     return valuations
 

@@ -17,6 +17,7 @@ export function TeamLogo({ teamId, abbreviation, name, size = 'md', muted = fals
   return (
     <div
       title={label}
+      role="img"
       aria-label={label}
       className="siq-team-logo"
       style={{
