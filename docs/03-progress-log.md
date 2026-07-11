@@ -10,9 +10,10 @@ _Last updated: 2026-07-10. Snapshot of what's built, what works, what broke, and
 | 3 | Cap simulator + FastAPI + dashboard | ✅ core complete |
 | 3.5 | Free-agency board + option decisions | ✅ complete |
 | 3.6 | Multi-move offseason planner | ✅ complete |
+| 3.7 | Deterministic roster needs + candidate fit | ✅ complete |
 | 4 | Official rights data + cap holds + plan comparison | ⏳ next |
 
-Twenty-one PRs are merged to `main`; the current unmerged work adds the offseason planner. Workflow is
+PR #56 is merged to `main`; the current unmerged work adds the roster-fit engine. Workflow is
 feature branch → PR → squash-merge per phase. Database is a live hosted **Neon** Postgres.
 
 ---
@@ -222,6 +223,29 @@ The discovery-to-decision loop now continues from team targets into an executabl
   tax owed, and repeater history remain explicitly out of the calculation until sourced correctly.
 - **Testing:** pure planner tests cover replacement accounting, option removal, roster counts, room, and
   apron transitions; the live Neon smoke path prices both an empty team baseline and a real FA signing.
+
+---
+
+## Roster needs and candidate fit (2026-07-10)
+
+The target list now accounts for what the selected projected roster lacks instead of treating model
+value as a proxy for basketball fit.
+
+- **Deterministic role model:** league-normalized player contributions roll up into creation, spacing,
+  scoring, rebounding/size, defensive activity, and availability/depth. Team coverage is benchmarked to
+  the median league roster, with explicit low-data confidence and a defense-metric caution.
+- **Candidate scoring:** fit is the severity-adjusted share of current deficits a candidate reduces.
+  Contract value and cap feasibility remain independent signals; no LLM participates in scoring.
+- **Product loop:** `GET /teams/{team_id}/needs` exposes the profile; fit-ranked team targets accept
+  staged add/remove IDs; offseason plans return before/after needs; and the planner reranks the remaining
+  market whenever its projected roster changes.
+- **Evaluation:** synthetic directional tests verify that a shooter outranks a redundant rebounder for a
+  spacing-poor roster, adding a player cannot worsen measured coverage, small input perturbations preserve
+  the ranking direction, minor residual gaps cannot produce a perfect score, and missing data degrades to
+  low confidence. Full backend suite: 109 passing; frontend production build and responsive Chromium pass.
+- **Performance:** normalized league context and the static free-agent market are cached for five minutes.
+  Live Neon testing reduced repeated target reranks from roughly 19 seconds to 3.6 seconds; the cold load
+  still pays the remote market-assembly cost.
 
 ---
 

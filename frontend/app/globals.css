@@ -1011,6 +1011,80 @@ textarea::placeholder {
 .siq-fa-option-row:first-child { border-top: none; }
 .siq-fa-option-gauge { min-width: 0; }
 
+/* Roster role coverage: six stable decision dimensions, benchmarked to league median. */
+.siq-needs {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.siq-needs-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.siq-needs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 18px;
+}
+
+.siq-need { min-width: 0; }
+
+.siq-need-head,
+.siq-need-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.siq-need-head {
+  margin-bottom: 7px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.siq-need-head > span:last-child {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.siq-need-track {
+  display: block;
+  width: 100%;
+  height: 7px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--bg-inset);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+
+.siq-need-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.siq-need-fill--critical { background: var(--negative); }
+.siq-need-fill--need { background: var(--warning); }
+.siq-need-fill--covered { background: var(--positive); }
+
+.siq-need-foot {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.siq-need-foot > span:last-child { color: var(--positive-text); }
+
 @media (max-width: 720px) {
   .siq-fa-option-row { grid-template-columns: minmax(0, 1fr) auto; }
   .siq-fa-option-gauge { grid-column: 1 / -1; }
@@ -1142,7 +1216,7 @@ textarea::placeholder {
 }
 
 .siq-offseason-target-row {
-  grid-template-columns: 36px minmax(120px, 1fr) 90px 34px;
+  grid-template-columns: 36px minmax(110px, 1fr) 82px 82px 34px;
   min-height: 58px;
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -1294,6 +1368,7 @@ textarea::placeholder {
 }
 
 @media (max-width: 720px) {
+  .siq-needs-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .siq-offseason-toolbar { align-items: stretch; }
   .siq-offseason-toolbar .ds-eyebrow { width: 100%; }
   .siq-offseason-toolbar select,
@@ -1325,13 +1400,17 @@ textarea::placeholder {
 }
 
 @media (max-width: 460px) {
+  .siq-needs-grid { grid-template-columns: minmax(0, 1fr); }
   .siq-offseason-hero { align-items: flex-start; }
   .siq-offseason-team { align-items: flex-start; }
   .siq-offseason-hero-payroll strong { font-size: 20px; }
   .siq-offseason-summary-grid { grid-template-columns: minmax(0, 1fr); }
-  .siq-offseason-target-row { grid-template-columns: 32px minmax(0, 1fr) 32px; padding: 7px 0; }
-  .siq-offseason-target-value { grid-column: 2; text-align: left; }
-  .siq-offseason-add { grid-column: 3; grid-row: 1 / span 2; }
+  .siq-offseason-target-row { grid-template-columns: 32px minmax(0, 1fr) minmax(66px, auto) 32px; padding: 7px 0; }
+  .siq-offseason-target-row > :first-child { grid-row: 1 / span 2; }
+  .siq-offseason-target-row .siq-offseason-target-id { grid-column: 2; grid-row: 1; }
+  .siq-offseason-target-fit { grid-column: 2; grid-row: 2; text-align: left; }
+  .siq-offseason-target-model { grid-column: 3; grid-row: 1 / span 2; }
+  .siq-offseason-add { grid-column: 4; grid-row: 1 / span 2; }
 }
 
 /* Selected-player identity links to the full profile */

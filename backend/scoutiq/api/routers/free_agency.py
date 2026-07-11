@@ -12,7 +12,10 @@ is no market-price model, so a free agent's expiring AAV is shown only as a refe
 """
 from __future__ import annotations
 
+import threading
+import time
 from dataclasses import dataclass
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -21,6 +24,13 @@ from sqlalchemy import desc, func, select
 from scoutiq.api import free_agency as fa
 from scoutiq.api.cap_simulator import SeasonCapData, build_season_sequence, classify_tier
 from scoutiq.api.deps import DB
+from scoutiq.api.roster_fit import (
+    CandidateFitResponse,
+    TeamNeedsResponse,
+    candidate_fit_response,
+    load_fit_context,
+    needs_response,
+)
 from scoutiq.api.season import is_valid_season, next_season
 from scoutiq.api.routers.players import (
     LATEST_SEASON,
@@ -32,6 +42,7 @@ from scoutiq.api.routers.players import (
 from scoutiq.api.routers.teams import _apron, team_cap_hits
 from scoutiq.config import settings
 from scoutiq.model.predict import build_features_from_season, predict_many_from_features
+from scoutiq.model.roster_fit import profile_roster, score_candidate
 from scoutiq.models import CapConstants, Contract, ContractYear, Player, PlayerSeason, Team
 
 router = APIRouter(prefix="/free-agency", tags=["free-agency"])
@@ -46,7 +57,8 @@ TARGETS_CAVEAT = (
     "Projected room applies the 4.5% cap escalator to future seasons and counts only guaranteed "
     "contract salary already on the books. It excludes cap holds, incomplete-roster charges, "
     "dead money, Bird rights, and exceptions. 'Fits room' compares a target's model value (not a "
-    "market price) to projected cap space."
+    "market price) to projected cap space. Roster fit is deterministic latest-season deficit "
+    "reduction against a median-team benchmark, with recent minutes as a role proxy."
 )
 
 
@@ -116,6 +128,7 @@ class ProjectedCapContext(BaseModel):
 
 class TeamFaTarget(FreeAgentEntry):
     fits_room: bool | None             # model value ≤ projected cap space
+    fit: CandidateFitResponse
 
 
 class TeamFaTargetsResponse(BaseModel):
@@ -123,9 +136,15 @@ class TeamFaTargetsResponse(BaseModel):
     entering_season: str
     cap_context: ProjectedCapContext
     committed_player_count: int
+    needs: TeamNeedsResponse
     targets: list[TeamFaTarget]
     limit: int
     caveat: str
+
+
+_TARGET_POOL_TTL_SECONDS = 300
+_target_pool_cache: dict[tuple[object, str, str | None], tuple[float, list[FreeAgentEntry]]] = {}
+_target_pool_cache_lock = threading.Lock()
 
 
 # --------------------------------------------------------------------------- internal assembly
@@ -357,6 +376,31 @@ def _sorted_by_value(entries: list[FreeAgentEntry]) -> list[FreeAgentEntry]:
     )
 
 
+def _target_pool_entries(
+    db: DB,
+    entering: str,
+    position: str | None,
+    caps: dict[str, SeasonCapData],
+) -> list[FreeAgentEntry]:
+    """Cache the static market pool while keeping team fit and cap checks live."""
+    bind = db.get_bind() if hasattr(db, "get_bind") else db
+    cache_key = (bind, entering, position)
+    now = time.monotonic()
+    with _target_pool_cache_lock:
+        cached = _target_pool_cache.get(cache_key)
+        if cached is not None and cached[0] > now:
+            return cached[1]
+
+    pool = _assemble_pool(db, entering, type_filter=None, position=position)
+    entries = _sorted_by_value(_entry_models(db, pool, caps, with_option=False))
+    with _target_pool_cache_lock:
+        _target_pool_cache[cache_key] = (now + _TARGET_POOL_TTL_SECONDS, entries)
+        expired = [key for key, (expires_at, _) in _target_pool_cache.items() if expires_at <= now]
+        for key in expired:
+            _target_pool_cache.pop(key, None)
+    return entries
+
+
 def _resolve_entering(season: str | None) -> str:
     """Default to the next free-agency summer; validate an explicit season."""
     if season is None:
@@ -366,6 +410,18 @@ def _resolve_entering(season: str | None) -> str:
             status_code=422, detail="season must be a 'YYYY-YY' label, e.g. '2026-27'."
         )
     return season
+
+
+def _player_id_set(value: str | None, field: str) -> set[int]:
+    if value is None or not value.strip():
+        return set()
+    try:
+        player_ids = {int(item.strip()) for item in value.split(",") if item.strip()}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"{field} must be comma-separated player IDs.") from exc
+    if len(player_ids) > 10 or any(player_id <= 0 for player_id in player_ids):
+        raise HTTPException(status_code=422, detail=f"{field} must contain 1-10 positive player IDs.")
+    return player_ids
 
 
 # --------------------------------------------------------------------------- endpoints
@@ -433,6 +489,9 @@ def get_team_fa_targets(
     team_id: int,
     season: str | None = Query(None, description="Entering season, e.g. '2026-27'. Defaults to next summer."),
     position: str | None = Query(None, min_length=1, max_length=8),
+    sort: Literal["fit", "value"] = Query("fit"),
+    add: str | None = Query(None, description="Comma-separated staged player IDs to add to the fit roster."),
+    remove: str | None = Query(None, description="Comma-separated staged player IDs to remove from the fit roster."),
     limit: int = Query(15, ge=1, le=50),
     db: DB = None,
 ):
@@ -456,6 +515,9 @@ def get_team_fa_targets(
     ]
     cap_hits, _ = team_cap_hits(db, roster_ids, entering)
     committed = sum(cap_hits.values())
+    add_ids = _player_id_set(add, "add")
+    remove_ids = _player_id_set(remove, "remove")
+    fit_roster_ids = (set(cap_hits) - remove_ids) | add_ids
 
     tier = classify_tier(committed, tax_line, first_apron, second_apron)
     cap_context = ProjectedCapContext(
@@ -474,21 +536,36 @@ def get_team_fa_targets(
     )
 
     room_to_cap = cap_context.room_to_cap
-    pool = _assemble_pool(db, entering, type_filter=None, position=position)
-    ranked = _sorted_by_value(_entry_models(db, pool, caps, with_option=False))[:limit]
+    ranked = [
+        entry
+        for entry in _target_pool_entries(db, entering, position, caps)
+        if entry.player_id not in add_ids
+    ]
+    fit_context = load_fit_context(db, LATEST_SEASON)
+    needs = needs_response(profile_roster(fit_context, fit_roster_ids), LATEST_SEASON)
 
     targets = [
         TeamFaTarget(
             **entry.model_dump(),
             fits_room=(entry.value_usd <= room_to_cap) if (entry.value_usd is not None and room_to_cap is not None) else None,
+            fit=candidate_fit_response(
+                score_candidate(fit_context, fit_roster_ids, entry.player_id)
+            ),
         )
         for entry in ranked
     ]
+    if sort == "fit":
+        targets.sort(
+            key=lambda entry: (entry.fit.fit_score, entry.value_pct or 0.0),
+            reverse=True,
+        )
+    targets = targets[:limit]
     return TeamFaTargetsResponse(
         team=_team_summary(team),
         entering_season=entering,
         cap_context=cap_context,
         committed_player_count=len(cap_hits),
+        needs=needs,
         targets=targets,
         limit=limit,
         caveat=TARGETS_CAVEAT,

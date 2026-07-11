@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, Suspense, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Handshake, Users, Scale, TriangleAlert, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Handshake, Users, Scale, TriangleAlert, ChevronLeft, ChevronRight, Radar } from 'lucide-react';
 import {
   getFreeAgencyBoard,
   getFreeAgencyOptions,
@@ -25,6 +25,7 @@ import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { VerdictPill } from '@/components/ui/VerdictPill';
 import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
 import { CapBar } from '@/components/cap/CapBar';
+import { RosterNeeds } from '@/components/teams/RosterNeeds';
 import { fmtM, fmtPct, roundedDomainMax } from '@/lib/utils';
 
 type TabId = 'board' | 'options' | 'targets';
@@ -340,6 +341,7 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
     ? parsedTeamId
     : (teams[0]?.team_id ?? null);
   const [selectedId, setSelectedId] = useState<number | null>(selectedFromUrl);
+  const [sort, setSort] = useState<'fit' | 'value'>('fit');
 
   const [data, setData] = useState<TeamFaTargetsResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -352,7 +354,7 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    getTeamFaTargets(selectedId, { season }, controller.signal)
+    getTeamFaTargets(selectedId, { season, sort }, controller.signal)
       .then((res) => { setData(res); setLoading(false); })
       .catch((e: unknown) => {
         if (e instanceof DOMException && e.name === 'AbortError') return;
@@ -361,7 +363,7 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
         setLoading(false);
       });
     return () => controller.abort();
-  }, [selectedId, season]);
+  }, [selectedId, season, sort]);
 
   const setTeam = (id: string) => {
     setSelectedId(Number(id));
@@ -377,11 +379,16 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--panel-gap)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span className="ds-eyebrow">Team</span>
         <SelectBox value={selectedId != null ? String(selectedId) : ''} onChange={setTeam} ariaLabel="Select team">
           {teams.length === 0 && <option value="">Loading teams…</option>}
           {teams.map((t) => <option key={t.team_id} value={t.team_id}>{t.name ?? t.abbreviation}</option>)}
+        </SelectBox>
+        <span className="ds-eyebrow" style={{ marginLeft: 4 }}>Rank by</span>
+        <SelectBox value={sort} onChange={(value) => setSort(value as 'fit' | 'value')} ariaLabel="Rank targets by">
+          <option value="fit">Roster need fit</option>
+          <option value="value">Model value</option>
         </SelectBox>
       </div>
 
@@ -422,18 +429,28 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
             )}
           </Surface>
 
+          <Surface
+            variant="instrument"
+            eyebrow="Projected roster needs"
+            icon={<Radar size={15} />}
+            action={<Badge tone="neutral" variant="outline" size="sm">vs league median</Badge>}
+          >
+            <RosterNeeds before={data.needs} />
+          </Surface>
+
           <div className="siq-summary-tile-grid">
             <Card padded><StatTile label="Committed payroll" value={fmtM(ctx.committed_payroll_usd)} sub={`${data.committed_player_count} under contract`} size="sm" /></Card>
             <Card padded><StatTile label="Projected cap" value={ctx.salary_cap != null ? fmtM(ctx.salary_cap) : '—'} sub={ctx.is_projected ? '4.5% escalator' : 'from cap constants'} size="sm" /></Card>
             <Card padded><StatTile label="Targets that fit" value={data.targets.filter((t) => t.fits_room).length} sub={`of ${data.targets.length} ranked`} size="sm" /></Card>
+            <Card padded><StatTile label="Top roster need" value={data.needs.needs[0]?.label ?? '—'} sub={data.needs.needs[0] ? `${data.needs.needs[0].deficit_pct.toFixed(1)}-point coverage gap` : 'No measured gap'} size="sm" /></Card>
           </div>
 
-          <Card className="siq-roster-ledger" eyebrow="Top available by model value" icon={<Handshake size={15} />}>
+          <Card className="siq-roster-ledger" eyebrow={sort === 'fit' ? 'Team-fit targets' : 'Top available by model value'} icon={<Handshake size={15} />}>
             <div className="siq-roster-ledger-head">
               <span className="ds-eyebrow">Player</span>
-              <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Expiring pay</span>
+              <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Need fit</span>
               <span className="ds-eyebrow">Value vs pay</span>
-              <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Fit</span>
+              <span className="ds-eyebrow" style={{ textAlign: 'right' }}>Cap</span>
             </div>
             {data.targets.length === 0 && (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>No free agents for {data.entering_season}.</div>
@@ -443,10 +460,10 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
                 <PlayerCell entry={entry} />
                 <div style={{ textAlign: 'right' }}>
                   <div className="ds-tnum" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {entry.value_usd != null ? fmtM(entry.value_usd) : '—'}
+                    {entry.fit.fit_score.toFixed(1)}
                   </div>
-                  <div className="ds-tnum" style={{ fontSize: 12, color: 'var(--confidence-text)' }}>
-                    {entry.value_pct != null ? `${fmtPct(entry.value_pct)} value` : '—'}
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {entry.fit.fills[0]?.label ?? 'Depth only'}
                   </div>
                 </div>
                 <div className="siq-roster-gauge-cell">

@@ -71,7 +71,9 @@ curl 'http://127.0.0.1:8000/players/1630217/scout-ratings'
 curl 'http://127.0.0.1:8000/players/1630217/rationale?consensus=fusion'   # LIVE Claude (cached after); ?consensus=multi_source for cross-source
 curl 'http://127.0.0.1:8000/free-agency/board?season=2026-27&limit=25'
 curl 'http://127.0.0.1:8000/free-agency/options?season=2026-27'
-curl 'http://127.0.0.1:8000/free-agency/teams/1610612747/targets?season=2026-27'
+curl 'http://127.0.0.1:8000/teams/1610612747/needs?season=2026-27'
+curl 'http://127.0.0.1:8000/free-agency/teams/1610612747/targets?season=2026-27&sort=fit'
+curl 'http://127.0.0.1:8000/free-agency/teams/1610612747/targets?season=2026-27&sort=fit&add=1630595&remove=1628389'
 curl -X POST 'http://127.0.0.1:8000/offseason/plan' \
   -H 'content-type: application/json' \
   -d '{"team_id":1610612747,"start_season":"2026-27","horizon":4,"contracts":[{"player_id":201935,"aav_pct":25,"years":4,"team_option_years":1}],"option_declines":[]}'
@@ -98,9 +100,17 @@ images are negative-cached and the frontend falls back to initials.
 
 Free-agency endpoints derive status from the current contract structure, not an official league feed.
 The board ranks pending free agents by production-implied model value; the options endpoint compares
-player/team option salary to model value; team targets combine projected room with the same value lens.
+player/team option salary to model value; team targets expose roster fit, model value, and cap feasibility
+as separate signals. `sort=fit` ranks deterministic marginal deficit reduction, while `sort=value`
+preserves the model-value ordering. Staged `add`/`remove` player IDs rerank the remaining market.
 UFA/RFA labels are service-time estimates, and projected room intentionally excludes cap holds, Bird
 rights, exceptions, incomplete-roster charges, and dead money.
+
+`GET /teams/{team_id}/needs` compares the projected committed roster with median league team coverage
+across creation, spacing, scoring, rebounding/size, defensive activity, and availability/depth. The fit
+engine uses league-normalized latest-season role statistics and recent minutes as a workload proxy. It
+does not call an LLM, predict lineups, or mix fit into contract value. Directional ranking, deficit
+reduction, perturbation stability, and missing-data behavior are covered by deterministic tests.
 
 `POST /offseason/plan` turns that target view into a multi-move ledger. Proposed contracts replace an
 existing team figure for re-signings, valid option removals reduce the baseline, and each projected
@@ -173,9 +183,9 @@ scoutiq/
   sources/   nba.py  bbref.py  crosswalk.py
   etl/       load_cap_constants.py  load_stats.py  load_bbref.py  load_current_rosters.py
              repair_team_history.py  load_contracts.py  bridge_contract_salaries.py  check_coverage.py
-  api/       main.py  free_agency.py  routers/players.py  routers/simulator.py
+  api/       main.py  free_agency.py  roster_fit.py  routers/players.py  routers/simulator.py
              routers/backtest.py  routers/free_agency.py  routers/headshots.py
-  model/     train.py  predict.py  artifacts/
+  model/     train.py  predict.py  roster_fit.py  artifacts/
   llm/       schemas.py  scoring.py  eval_scout_ratings.py  eval_data/  artifacts/
   data/      cap_constants_seed.csv   raw/ (cached HTML, gitignored)
 alembic/     versions/0001_initial.py  versions/0002_contracts.py

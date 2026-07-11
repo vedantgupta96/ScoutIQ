@@ -16,11 +16,13 @@ from sqlalchemy import select
 from scoutiq.api.cap_simulator import build_season_sequence, simulate
 from scoutiq.api.deps import DB
 from scoutiq.api.offseason import PlannedContract, apply_plan
+from scoutiq.api.roster_fit import TeamNeedsResponse, load_fit_context, needs_response
 from scoutiq.api.routers.free_agency import _season_caps
 from scoutiq.api.routers.players import LATEST_SEASON, TeamSummary, _team_summary
 from scoutiq.api.routers.teams import team_cap_hits
 from scoutiq.api.season import is_valid_season
 from scoutiq.model.predict import build_features_from_season, predict_many_from_features
+from scoutiq.model.roster_fit import profile_roster
 from scoutiq.models import Contract, ContractYear, Player, PlayerSeason, Team
 
 router = APIRouter(prefix="/offseason", tags=["offseason"])
@@ -29,7 +31,8 @@ PLAN_CAVEAT = (
     "Planning baseline uses current-roster contract hits and proposed deals at a constant share "
     "of the cap. It excludes cap holds, incomplete-roster charges, dead money, Bird rights, "
     "exceptions, waivers, trades, luxury tax owed, and repeater-tax history. Player-option "
-    "removals are scenarios, not predictions of the player's decision."
+    "removals are scenarios, not predictions of the player's decision. Roster needs use "
+    "latest-season role statistics and recent minutes as a proxy, not a lineup forecast."
 )
 
 
@@ -127,6 +130,8 @@ class OffseasonPlanResponse(BaseModel):
     valuation_season: str
     moves: list[OffseasonMoveResponse]
     seasons: list[OffseasonPlanSeason]
+    needs_before: TeamNeedsResponse
+    needs_after: TeamNeedsResponse
     caveat: str
 
 
@@ -286,11 +291,22 @@ def build_offseason_plan(req: OffseasonPlanRequest, db: DB = None):
         planned_contracts,
         set(req.option_declines),
     )
+    baseline_role_ids = set(baseline_hits[req.start_season])
+    planned_role_ids = (
+        baseline_role_ids - set(req.option_declines)
+    ) | {move.player_id for move in req.contracts}
+    fit_context = load_fit_context(db, valuation_season)
     return OffseasonPlanResponse(
         team=_team_summary(team),
         start_season=req.start_season,
         valuation_season=valuation_season,
         moves=move_responses,
         seasons=[OffseasonPlanSeason(**vars(season)) for season in seasons],
+        needs_before=needs_response(
+            profile_roster(fit_context, baseline_role_ids), valuation_season
+        ),
+        needs_after=needs_response(
+            profile_roster(fit_context, planned_role_ids), valuation_season
+        ),
         caveat=PLAN_CAVEAT,
     )
