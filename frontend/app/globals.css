@@ -673,12 +673,6 @@ textarea::placeholder {
   align-items: start;
 }
 
-.siq-model-metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--panel-gap);
-}
-
 .siq-model-grid,
 .siq-leader-grid {
   display: grid;
@@ -1134,10 +1128,84 @@ textarea::placeholder {
   flex-wrap: wrap;
 }
 
-.siq-summary-tile-grid {
+/* Cross-route decision hierarchy: one lead decision, then constraint and uncertainty. */
+.siq-decision-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-  gap: 10px;
+  grid-template-columns: minmax(210px, 1.25fr) minmax(0, 2fr) auto;
+  align-items: stretch;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+
+.siq-decision-strip__item {
+  min-width: 0;
+  padding: 13px 16px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+}
+
+.siq-decision-strip__item--lead {
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border-default);
+}
+
+.siq-decision-strip__support {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.siq-decision-strip__support .siq-decision-strip__item + .siq-decision-strip__item {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.siq-decision-strip__label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.siq-decision-strip__value {
+  color: var(--text-primary);
+  font-size: 17px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.siq-decision-strip__item--lead .siq-decision-strip__value { font-size: 20px; }
+.siq-decision-strip__item[data-tone='positive'] .siq-decision-strip__value { color: var(--positive-text); }
+.siq-decision-strip__item[data-tone='negative'] .siq-decision-strip__value { color: var(--negative-text); }
+.siq-decision-strip__item[data-tone='warning'] .siq-decision-strip__value { color: var(--warning-text); }
+.siq-decision-strip__item[data-tone='confidence'] .siq-decision-strip__value { color: var(--confidence-text); }
+
+.siq-decision-strip__detail {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.siq-decision-strip__actions {
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-left: 1px solid var(--border-default);
+}
+
+@media (max-width: 980px) {
+  .siq-decision-strip { grid-template-columns: minmax(190px, 1fr) minmax(0, 2fr); }
+  .siq-decision-strip__actions { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--border-default); }
+}
+
+@media (max-width: 680px) {
+  .siq-decision-strip { grid-template-columns: minmax(0, 1fr); }
+  .siq-decision-strip__item--lead { border-right: 0; border-bottom: 1px solid var(--border-default); }
+  .siq-decision-strip__support { grid-template-columns: minmax(0, 1fr); }
+  .siq-decision-strip__support .siq-decision-strip__item + .siq-decision-strip__item { border-left: 0; border-top: 1px solid var(--border-subtle); }
+  .siq-decision-strip__actions { grid-column: auto; flex-wrap: wrap; }
 }
 
 .siq-roster-ledger .siq-card {
@@ -1344,13 +1412,6 @@ textarea::placeholder {
 
 .siq-offseason-updating { opacity: 0.58; }
 
-.siq-offseason-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 18px;
-}
-
 .siq-offseason-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.85fr);
@@ -1526,9 +1587,7 @@ textarea::placeholder {
 
 @media (max-width: 1050px) {
   .siq-offseason-grid { grid-template-columns: minmax(0, 1fr); }
-  .siq-offseason-plan-column { position: static; }
-  .siq-offseason-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+  .siq-offseason-plan-column { position: static; }}
 
 @media (max-width: 720px) {
   .siq-needs-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1539,9 +1598,7 @@ textarea::placeholder {
   .siq-offseason-toolbar__link { width: 100%; justify-content: center; margin-left: 0; }
   .siq-offseason-hero { align-items: center; }
   .siq-offseason-team h1 { font-size: 20px; }
-  .siq-offseason-hero-payroll strong { font-size: 24px; }
-  .siq-offseason-summary-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .siq-offseason-option-row { grid-template-columns: 36px minmax(0, 1fr) auto; padding: 9px 0; }
+  .siq-offseason-hero-payroll strong { font-size: 24px; }  .siq-offseason-option-row { grid-template-columns: 36px minmax(0, 1fr) auto; padding: 9px 0; }
   .siq-offseason-option-verdict { grid-column: 2; }
   .siq-offseason-option-row > button { grid-column: 3; grid-row: 1 / span 2; }
   .siq-offseason-move-head { grid-template-columns: 36px minmax(0, 1fr) 32px; }
@@ -1566,9 +1623,7 @@ textarea::placeholder {
   .siq-needs-grid { grid-template-columns: minmax(0, 1fr); }
   .siq-offseason-hero { align-items: flex-start; }
   .siq-offseason-team { align-items: flex-start; }
-  .siq-offseason-hero-payroll strong { font-size: 20px; }
-  .siq-offseason-summary-grid { grid-template-columns: minmax(0, 1fr); }
-  .siq-offseason-target-row { grid-template-columns: 32px minmax(0, 1fr) minmax(66px, auto) 32px; padding: 7px 0; }
+  .siq-offseason-hero-payroll strong { font-size: 20px; }  .siq-offseason-target-row { grid-template-columns: 32px minmax(0, 1fr) minmax(66px, auto) 32px; padding: 7px 0; }
   .siq-offseason-target-row > :first-child { grid-row: 1 / span 2; }
   .siq-offseason-target-row .siq-offseason-target-id { grid-column: 2; grid-row: 1; }
   .siq-offseason-target-fit { grid-column: 2; grid-row: 2; text-align: left; }
@@ -2449,9 +2504,7 @@ textarea::placeholder {
   border-radius: 3px 0 0 3px;
 }
 
-@media (max-width: 1180px) {
-  .siq-model-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .siq-decision-hero,
+@media (max-width: 1180px) {  .siq-decision-hero,
   .siq-workspace-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2561,10 +2614,6 @@ textarea::placeholder {
 
   .siq-main {
     padding: 16px 16px calc(80px + env(safe-area-inset-bottom));
-  }
-
-  .siq-model-metrics-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .siq-decision-hero {

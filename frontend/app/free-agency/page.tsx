@@ -23,7 +23,7 @@ import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
-import { StatTile } from '@/components/ui/StatTile';
+import { DecisionStrip } from '@/components/ui/DecisionStrip';
 import { Avatar } from '@/components/ui/Avatar';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { VerdictPill } from '@/components/ui/VerdictPill';
@@ -412,12 +412,35 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
             <RosterNeeds before={data.needs} />
           </Surface>
 
-          <div className="siq-summary-tile-grid">
-            <Card padded><StatTile label="Committed payroll" value={fmtM(ctx.committed_payroll_usd)} sub={`${data.committed_player_count} under contract`} size="sm" /></Card>
-            <Card padded><StatTile label="Projected cap" value={ctx.salary_cap != null ? fmtM(ctx.salary_cap) : '—'} sub={ctx.is_projected ? '4.5% escalator' : 'from cap constants'} size="sm" /></Card>
-            <Card padded><StatTile label="Targets that fit" value={data.targets.filter((t) => t.fits_room).length} sub={`of ${data.targets.length} ranked`} size="sm" /></Card>
-            <Card padded><StatTile label="Top roster need" value={data.needs.needs[0]?.label ?? '—'} sub={data.needs.needs[0] ? `${data.needs.needs[0].deficit_pct.toFixed(1)}-point coverage gap` : 'No measured gap'} size="sm" /></Card>
-          </div>
+          <DecisionStrip
+            ariaLabel={`${data.team.name ?? data.team.abbreviation} free-agency decision status`}
+            lead={{
+              label: sort === 'fit' ? 'Best roster target' : 'Highest model value',
+              value: data.targets[0]?.full_name ?? 'No eligible target',
+              detail: data.targets[0] ? `${data.targets[0].fit.fit_score.toFixed(1)} fit · ${data.targets[0].fit.fills[0]?.label ?? 'depth'}` : `No free agents for ${data.entering_season}`,
+              tone: data.targets[0]?.fits_room === false ? 'warning' : 'positive',
+            }}
+            items={[
+              {
+                label: 'Primary roster need',
+                value: data.needs.needs[0]?.label ?? 'No measured gap',
+                detail: data.needs.needs[0] ? `${data.needs.needs[0].deficit_pct.toFixed(1)}-point deficit versus league median` : 'Projected roster clears measured needs',
+                tone: data.needs.needs[0] ? 'warning' : 'positive',
+              },
+              {
+                label: 'Cap feasibility',
+                value: `${data.targets.filter((target) => target.fits_room).length}/${data.targets.length} fit`,
+                detail: ctx.room_to_cap != null ? `${ctx.room_to_cap >= 0 ? fmtM(ctx.room_to_cap) + ' room' : fmtM(Math.abs(ctx.room_to_cap)) + ' over cap'}` : 'Room unavailable',
+                tone: data.targets.some((target) => target.fits_room) ? 'positive' : 'negative',
+              },
+              {
+                label: 'Value uncertainty',
+                value: data.targets[0]?.value_pct != null ? fmtPct(data.targets[0].value_pct) : 'Not priced',
+                detail: data.targets[0]?.lo_pct != null && data.targets[0]?.hi_pct != null ? `${data.targets[0].lo_pct.toFixed(1)}–${data.targets[0].hi_pct.toFixed(1)}% of cap interval` : `${data.targets.length} targets ranked`,
+                tone: 'confidence',
+              },
+            ]}
+          />
 
           <Card className="siq-roster-ledger" eyebrow={sort === 'fit' ? 'Team-fit targets' : 'Top available by model value'} icon={<Handshake size={15} />}>
             <div className="siq-roster-ledger-head">

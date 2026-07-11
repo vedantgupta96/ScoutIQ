@@ -36,7 +36,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Select';
 import { Card } from '@/components/ui/Card';
 import { CapBar, CAP_TIER_LABEL, CapTierKey, capTierBadgeTone } from '@/components/cap/CapBar';
-import { StatTile } from '@/components/ui/StatTile';
+import { DecisionStrip } from '@/components/ui/DecisionStrip';
 import { Surface } from '@/components/ui/Surface';
 import { TeamLogo } from '@/components/ui/TeamLogo';
 import { RosterNeeds } from '@/components/teams/RosterNeeds';
@@ -469,12 +469,35 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
             showLabels
             valueLabel="Plan"
           />
-          <div className="siq-offseason-summary-grid">
-            <Card padded><StatTile label="Plan payroll" value={fmtM(firstYear.payroll_after_usd)} sub={`${fmtPct(firstYear.payroll_after_usd / firstYear.salary_cap * 100)} of cap`} size="sm" /></Card>
-            <Card padded><StatTile label="Cap room" value={firstYear.room_to_cap_after >= 0 ? fmtM(firstYear.room_to_cap_after) : `−${fmtM(Math.abs(firstYear.room_to_cap_after))}`} sub={firstYear.room_to_cap_after >= 0 ? 'below salary cap' : 'over salary cap'} size="sm" /></Card>
-            <Card padded><StatTile label="To first apron" value={firstYear.room_to_first_apron_after >= 0 ? fmtM(firstYear.room_to_first_apron_after) : `−${fmtM(Math.abs(firstYear.room_to_first_apron_after))}`} sub={firstYear.crosses_a_line ? `from ${CAP_TIER_LABEL[firstYear.tier_before as CapTierKey]}` : 'tier unchanged'} size="sm" /></Card>
-            <Card padded><StatTile label="Committed" value={firstYear.roster_count_after} sub={`${firstYear.baseline_roster_count} baseline`} size="sm" /></Card>
-          </div>
+          <DecisionStrip
+            ariaLabel={`${plan.team.name ?? plan.team.abbreviation} offseason decision status`}
+            lead={{
+              label: plan.moves.length ? 'Plan consequence' : 'Baseline decision state',
+              value: firstYear.crosses_a_line ? `Crosses into ${CAP_TIER_LABEL[firstYear.tier_after as CapTierKey]}` : `${CAP_TIER_LABEL[firstYear.tier_after as CapTierKey]} maintained`,
+              detail: `${plan.moves.length} staged ${plan.moves.length === 1 ? 'move' : 'moves'} · ${moneyDelta(firstYear.payroll_delta_usd)} versus baseline`,
+              tone: firstYear.crosses_a_line ? 'warning' : plan.moves.length ? 'confidence' : 'neutral',
+            }}
+            items={[
+              {
+                label: 'Remaining roster gap',
+                value: plan.needs_after.needs[0]?.label ?? 'No measured gap',
+                detail: plan.needs_after.needs[0] ? `${plan.needs_after.needs[0].deficit_pct.toFixed(1)}-point deficit after moves` : 'Measured needs clear league median',
+                tone: plan.needs_after.needs[0] ? 'warning' : 'positive',
+              },
+              {
+                label: 'First-apron room',
+                value: firstYear.room_to_first_apron_after >= 0 ? fmtM(firstYear.room_to_first_apron_after) : `−${fmtM(Math.abs(firstYear.room_to_first_apron_after))}`,
+                detail: firstYear.room_to_first_apron_after >= 0 ? 'remaining flexibility' : 'plan exceeds first apron',
+                tone: firstYear.room_to_first_apron_after >= 0 ? 'positive' : 'negative',
+              },
+              {
+                label: 'Plan payroll',
+                value: fmtM(firstYear.payroll_after_usd),
+                detail: `${fmtPct(firstYear.payroll_after_usd / firstYear.salary_cap * 100)} of cap · ${firstYear.roster_count_after} committed`,
+                tone: 'neutral',
+              },
+            ]}
+          />
         </Surface>
       ) : (
         <div className="siq-offseason-loading">Pricing baseline…</div>
