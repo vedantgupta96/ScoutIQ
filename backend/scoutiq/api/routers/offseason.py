@@ -28,14 +28,15 @@ from scoutiq.model.predict import (
     previous_seasons_for,
 )
 from scoutiq.model.roster_fit import profile_roster
-from scoutiq.models import Contract, ContractYear, Player, PlayerSeason, Team
+from scoutiq.models import Contract, ContractYear, FreeAgentRight, Player, PlayerSeason, Team
 
 router = APIRouter(prefix="/offseason", tags=["offseason"])
 
 PLAN_CAVEAT = (
-    "Planning baseline uses current-roster contract hits and proposed deals at a constant share "
-    "of the cap. It excludes cap holds, incomplete-roster charges, dead money, Bird rights, "
-    "exceptions, waivers, trades, luxury tax owed, and repeater-tax history. Player-option "
+    "Planning baseline uses contract hits, loaded retained cap holds, the official offseason "
+    "incomplete-roster charge, and proposed deals at a constant share of the cap. It excludes "
+    "dead money, draft-pick holds, exceptions, waivers, trades, luxury tax owed, repeater history, "
+    "and sign-and-trade restrictions. Player-option "
     "removals are scenarios, not predictions of the player's decision. Roster needs use "
     "latest-season role statistics and recent minutes as a proxy, not a lineup forecast."
 )
@@ -67,6 +68,7 @@ class OffseasonPlanRequest(BaseModel):
     valuation_season: str | None = None
     contracts: list[ProposedContractRequest] = Field(default_factory=list, max_length=10)
     option_declines: list[int] = Field(default_factory=list, max_length=10)
+    renounced_rights: list[int] = Field(default_factory=list, max_length=30)
 
     @model_validator(mode="after")
     def validate_plan(self):
@@ -80,9 +82,13 @@ class OffseasonPlanRequest(BaseModel):
             raise ValueError("each player can have only one proposed contract")
         if len(self.option_declines) != len(set(self.option_declines)):
             raise ValueError("option_declines cannot contain duplicate players")
+        if len(self.renounced_rights) != len(set(self.renounced_rights)):
+            raise ValueError("renounced_rights cannot contain duplicate players")
         overlap = set(contract_ids) & set(self.option_declines)
         if overlap:
             raise ValueError("a player cannot have both a proposed contract and an option decline")
+        if set(contract_ids) & set(self.renounced_rights):
+            raise ValueError("a player cannot have both a proposed contract and renounced rights")
         if any(move.years > self.horizon for move in self.contracts):
             raise ValueError("proposed contract years cannot exceed the plan horizon")
         return self
@@ -127,6 +133,25 @@ class OffseasonPlanSeason(BaseModel):
     room_to_tax_after: int
     room_to_first_apron_after: int
     room_to_second_apron_after: int
+    baseline_contract_payroll_usd: int
+    contract_payroll_after_usd: int
+    baseline_cap_holds_usd: int
+    cap_holds_after_usd: int
+    baseline_incomplete_roster_charges_usd: int
+    incomplete_roster_charges_after_usd: int
+    baseline_team_salary_player_count: int
+    team_salary_player_count_after: int
+
+
+class OffseasonRightResponse(BaseModel):
+    player_id: int
+    player_name: str
+    fa_status: Literal["ufa", "rfa"] | None
+    bird_rights: Literal["bird", "early-bird", "non-bird", "two-way"] | None
+    cap_hold_usd: int | None
+    qualifying_offer_usd: int | None
+    retained: bool
+    source: str
 
 
 class OffseasonPlanResponse(BaseModel):
@@ -137,6 +162,7 @@ class OffseasonPlanResponse(BaseModel):
     seasons: list[OffseasonPlanSeason]
     needs_before: TeamNeedsResponse
     needs_after: TeamNeedsResponse
+    rights: list[OffseasonRightResponse]
     caveat: str
 
 
@@ -204,6 +230,45 @@ def build_offseason_plan(req: OffseasonPlanRequest, db: DB = None):
         cap.season: team_cap_hits(db, roster_ids, cap.season)[0]
         for cap in plan_caps
     }
+    plan_season_labels = [cap.season for cap in plan_caps]
+    rights_rows = db.scalars(
+        select(FreeAgentRight)
+        .where(FreeAgentRight.rights_team_id == req.team_id)
+        .where(FreeAgentRight.entering_season.in_(plan_season_labels))
+    ).all()
+    rights_by_season = {
+        season: {
+            row.player_id: row
+            for row in rights_rows
+            if row.entering_season == season
+        }
+        for season in plan_season_labels
+    }
+    start_rights_by_id = rights_by_season[req.start_season]
+    rights_players = (
+        {
+            player.player_id: player
+            for player in db.scalars(
+                select(Player).where(Player.player_id.in_(start_rights_by_id))
+            ).all()
+        }
+        if start_rights_by_id
+        else {}
+    )
+    invalid_renounced = sorted(set(req.renounced_rights) - set(start_rights_by_id))
+    if invalid_renounced:
+        raise HTTPException(
+            status_code=422,
+            detail=f"No matching free-agent rights to renounce: {invalid_renounced}.",
+        )
+    holds = {
+        season: {
+            player_id: row.cap_hold_usd
+            for player_id, row in season_rights.items()
+            if row.cap_hold_usd
+        }
+        for season, season_rights in rights_by_season.items()
+    }
 
     requested_ids = {move.player_id for move in req.contracts} | set(req.option_declines)
     requested_players = (
@@ -246,7 +311,12 @@ def build_offseason_plan(req: OffseasonPlanRequest, db: DB = None):
             OffseasonMoveResponse(
                 player_id=move.player_id,
                 player_name=player.full_name,
-                kind="re-sign" if player.current_team_id == req.team_id else "signing",
+                kind=(
+                    "re-sign"
+                    if player.current_team_id == req.team_id
+                    or move.player_id in start_rights_by_id
+                    else "signing"
+                ),
                 value_pct=simulation.value_pct,
                 value_gap_pct=simulation.value_gap_pct,
                 removed_existing_usd=baseline_hits[req.start_season].get(move.player_id, 0),
@@ -303,6 +373,8 @@ def build_offseason_plan(req: OffseasonPlanRequest, db: DB = None):
         baseline_hits,
         planned_contracts,
         set(req.option_declines),
+        holds,
+        set(req.renounced_rights),
     )
     baseline_role_ids = set(baseline_hits[req.start_season])
     planned_role_ids = (
@@ -321,5 +393,25 @@ def build_offseason_plan(req: OffseasonPlanRequest, db: DB = None):
         needs_after=needs_response(
             profile_roster(fit_context, planned_role_ids), valuation_season
         ),
+        rights=[
+            OffseasonRightResponse(
+                player_id=player_id,
+                player_name=(
+                    rights_players[player_id].full_name
+                    if player_id in rights_players
+                    else str(player_id)
+                ),
+                fa_status=row.fa_status,
+                bird_rights=row.bird_rights,
+                cap_hold_usd=row.cap_hold_usd,
+                qualifying_offer_usd=row.qualifying_offer_usd,
+                retained=(
+                    player_id not in req.renounced_rights
+                    and player_id not in {move.player_id for move in req.contracts}
+                ),
+                source=row.source,
+            )
+            for player_id, row in start_rights_by_id.items()
+        ],
         caveat=PLAN_CAVEAT,
     )

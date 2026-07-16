@@ -299,6 +299,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
   const [teamOptions, setTeamOptions] = useState<FreeAgentEntry[]>([]);
   const [contracts, setContracts] = useState<DraftContract[]>([]);
   const [declines, setDeclines] = useState<number[]>([]);
+  const [renouncedRights, setRenouncedRights] = useState<number[]>([]);
   const [plan, setPlan] = useState<OffseasonPlanResponse | null>(null);
   const [marketLoading, setMarketLoading] = useState(true);
   const [optionsLoading, setOptionsLoading] = useState(true);
@@ -365,7 +366,8 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
     option_declines: declines.filter((playerId) => (
       !contracts.some((draft) => draft.player.player_id === playerId)
     )),
-  }), [contracts, declines, season, teamId]);
+    renounced_rights: renouncedRights.filter((playerId) => !contracts.some((draft) => draft.player.player_id === playerId)),
+  }), [contracts, declines, renouncedRights, season, teamId]);
   const requestKey = JSON.stringify(request);
 
   useEffect(() => {
@@ -382,7 +384,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
         .finally(() => {
           if (!controller.signal.aborted) setPlanLoading(false);
         });
-    }, contracts.length || declines.length ? 180 : 0);
+    }, contracts.length || declines.length || renouncedRights.length ? 180 : 0);
     return () => {
       window.clearTimeout(timeout);
       controller.abort();
@@ -395,6 +397,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
     [plan?.moves],
   );
   const firstYear = plan?.seasons[0] ?? null;
+  const stagedDecisionCount = (plan?.moves.length ?? 0) + renouncedRights.length;
   const visual = teamVisual(plan?.team.abbreviation ?? market?.team.abbreviation);
 
   function addTarget(player: TeamFaTarget) {
@@ -427,6 +430,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
   function resetPlan() {
     setContracts([]);
     setDeclines([]);
+    setRenouncedRights([]);
   }
 
   return (
@@ -453,12 +457,13 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
               <TeamLogo teamId={plan.team.team_id} abbreviation={plan.team.abbreviation} name={plan.team.name} size="lg" />
               <div>
                 <h1>{plan.team.name ?? plan.team.abbreviation}</h1>
-                <span>{plan.moves.length} staged {plan.moves.length === 1 ? 'move' : 'moves'} · {firstYear.roster_count_after} committed players</span>
+                <span>{stagedDecisionCount} staged {stagedDecisionCount === 1 ? 'decision' : 'decisions'} · {firstYear.roster_count_after} contracted players</span>
               </div>
             </div>
             <div className="siq-offseason-hero-payroll">
               <strong className={`ds-tnum${planLoading ? ' siq-offseason-updating' : ''}`}>{fmtM(firstYear.payroll_after_usd)}</strong>
               <span className="ds-tnum">{moneyDelta(firstYear.payroll_delta_usd)} vs baseline</span>
+              <span className="ds-note ds-tnum">{fmtM(firstYear.contract_payroll_after_usd)} contracts · {fmtM(firstYear.cap_holds_after_usd)} holds · {fmtM(firstYear.incomplete_roster_charges_after_usd)} roster charges</span>
             </div>
           </div>
           <CapBar
@@ -473,10 +478,10 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
           <DecisionStrip
             ariaLabel={`${plan.team.name ?? plan.team.abbreviation} offseason decision status`}
             lead={{
-              label: plan.moves.length ? 'Plan consequence' : 'Baseline decision state',
+              label: stagedDecisionCount ? 'Plan consequence' : 'Baseline decision state',
               value: firstYear.crosses_a_line ? `Crosses into ${CAP_TIER_LABEL[firstYear.tier_after as CapTierKey]}` : `${CAP_TIER_LABEL[firstYear.tier_after as CapTierKey]} maintained`,
-              detail: `${plan.moves.length} staged ${plan.moves.length === 1 ? 'move' : 'moves'} · ${moneyDelta(firstYear.payroll_delta_usd)} versus baseline`,
-              tone: firstYear.crosses_a_line ? 'warning' : plan.moves.length ? 'confidence' : 'neutral',
+              detail: `${stagedDecisionCount} staged ${stagedDecisionCount === 1 ? 'decision' : 'decisions'} · ${moneyDelta(firstYear.payroll_delta_usd)} versus baseline`,
+              tone: firstYear.crosses_a_line ? 'warning' : stagedDecisionCount ? 'confidence' : 'neutral',
             }}
             items={[
               {
@@ -543,14 +548,30 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
               </div>
             ) : <EmptyState title="No option decisions for this team and season." />}
           </Panel>
+
+          <Panel variant="instrument" eyebrow="Free-agent rights" icon={<Shield size={15} />}
+            action={<Badge tone="neutral" variant="outline" size="sm">{plan?.rights.length ?? 0}</Badge>}>
+            {plan?.rights.length ? <div className="siq-offseason-options">
+              {plan.rights.map((right) => {
+                const renounced = renouncedRights.includes(right.player_id);
+                return <div className="siq-offseason-option-row" key={right.player_id}>
+                  <Avatar name={right.player_name} playerId={right.player_id} size="sm" />
+                  <div className="siq-offseason-target-id"><strong>{right.player_name}</strong><span>{right.fa_status?.toUpperCase() ?? 'Status unavailable'}{right.bird_rights ? ` · ${right.bird_rights.replace('-', ' ')}` : ''} · {right.cap_hold_usd != null ? fmtM(right.cap_hold_usd) : 'No loaded hold'}</span></div>
+                  <Button size="sm" variant={renounced ? 'secondary' : 'primary'} aria-pressed={renounced} onClick={() => setRenouncedRights((current) => renounced ? current.filter((id) => id !== right.player_id) : [...current, right.player_id])}>
+                    {renounced ? 'Keep' : 'Renounce'}
+                  </Button>
+                </div>;
+              })}
+            </div> : <EmptyState title="No loaded rights for this team and season." />}
+          </Panel>
         </div>
 
         <div className="siq-offseason-plan-column">
           <Panel variant="instrument" eyebrow="Staged moves" icon={<CalendarRange size={15} />}
-            action={(contracts.length || declines.length) ? (
+            action={(contracts.length || declines.length || renouncedRights.length) ? (
               <IconButton onClick={resetPlan} label="Reset offseason plan" title="Reset plan"><RotateCcw size={15} /></IconButton>
             ) : undefined}>
-            {contracts.length === 0 && declines.length === 0 ? (
+            {contracts.length === 0 && declines.length === 0 && renouncedRights.length === 0 ? (
               <EmptyState
                 icon={<CalendarRange size={22} />}
                 title="No moves staged"

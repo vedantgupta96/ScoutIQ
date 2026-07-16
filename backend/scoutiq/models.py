@@ -147,6 +147,31 @@ class ContractYear(Base):
     contract: Mapped[Contract] = relationship(back_populates="contract_years")
 
 
+class FreeAgentRight(Base):
+    """Spotrac-sourced free-agent status and team-salary rights for one offseason."""
+    __tablename__ = "free_agent_rights"
+    __table_args__ = (
+        UniqueConstraint("player_id", "entering_season", name="uq_free_agent_right_player_season"),
+        Index("ix_free_agent_rights_season_team", "entering_season", "rights_team_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.player_id"), index=True)
+    entering_season: Mapped[str] = mapped_column(String(7))
+    rights_team_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("teams.team_id"), index=True)
+    # Controlled values: ufa | rfa. Null is allowed for cap-hold-only source rows.
+    fa_status: Mapped[str | None] = mapped_column(String(8))
+    # Controlled values: bird | early-bird | non-bird | two-way.
+    bird_rights: Mapped[str | None] = mapped_column(String(16))
+    qualifying_offer_usd: Mapped[int | None] = mapped_column(BigInteger)
+    cap_hold_usd: Mapped[int | None] = mapped_column(BigInteger)
+    previous_aav_usd: Mapped[int | None] = mapped_column(BigInteger)
+    source_player_id: Mapped[str | None] = mapped_column(String(32))
+    source: Mapped[str] = mapped_column(String(32), default="spotrac")
+    source_url: Mapped[str | None] = mapped_column(String(512))
+    scraped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ScoutReport(Base):
     """A qualitative scouting narrative sourced from Perplexity Sonar (WORDS only, with citations).
 

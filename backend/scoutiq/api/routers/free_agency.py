@@ -23,6 +23,7 @@ from sqlalchemy import desc, func, select
 
 from scoutiq.api import free_agency as fa
 from scoutiq.api.cap_simulator import SeasonCapData, build_season_sequence, classify_tier
+from scoutiq.api.offseason import incomplete_roster_charge
 from scoutiq.api.deps import DB
 from scoutiq.api.roster_fit import (
     CandidateFitResponse,
@@ -48,20 +49,20 @@ from scoutiq.model.predict import (
     previous_seasons_for,
 )
 from scoutiq.model.roster_fit import profile_roster, score_candidate
-from scoutiq.models import CapConstants, Contract, ContractYear, Player, PlayerSeason, Team
+from scoutiq.models import CapConstants, Contract, ContractYear, FreeAgentRight, Player, PlayerSeason, Team
 
 router = APIRouter(prefix="/free-agency", tags=["free-agency"])
 
 BOARD_CAVEAT = (
-    "Free-agency status is derived from contract structure, not an official league feed: a "
-    "player is listed for the summer after their final contract year, and UFA/RFA is a service-"
-    "time estimate. Ranking uses production-implied model value at the player's latest stats "
+    "UFA/RFA status, Bird category, cap holds, and qualifying offers use loaded Spotrac rows when "
+    "available; uncovered players retain the service-time estimate. Ranking uses production-"
+    "implied model value at the player's latest stats "
     "season; expiring AAV is a reference point, not a projected market price."
 )
 TARGETS_CAVEAT = (
-    "Projected room applies the 4.5% cap escalator to future seasons and counts only guaranteed "
-    "contract salary already on the books. It excludes cap holds, incomplete-roster charges, "
-    "dead money, Bird rights, and exceptions. 'Fits room' compares a target's model value (not a "
+    "Projected room applies the 4.5% cap escalator and counts contract salary, loaded retained cap "
+    "holds, and the offseason incomplete-roster charge. It excludes dead money, draft-pick holds, "
+    "exceptions, trades, and tax owed. 'Fits room' compares a target's model value (not a "
     "market price) to projected cap space. Roster fit is deterministic latest-season deficit "
     "reduction against a median-team benchmark, with recent minutes as a role proxy."
 )
@@ -95,6 +96,12 @@ class FreeAgentEntry(PlayerSummary):
     valuation_season: str | None
     valuation_status: str        # ready | unavailable
     option: OptionDecisionModel | None = None
+    fa_status: Literal["ufa", "rfa"]
+    fa_status_source: Literal["spotrac", "estimated"]
+    rights_team: TeamSummary | None = None
+    bird_rights: Literal["bird", "early-bird", "non-bird", "two-way"] | None = None
+    qualifying_offer_usd: int | None = None
+    cap_hold_usd: int | None = None
 
 
 class FreeAgencyBoardResponse(BaseModel):
@@ -124,6 +131,10 @@ class ProjectedCapContext(BaseModel):
     first_apron: int | None
     second_apron: int | None
     committed_payroll_usd: int
+    contract_payroll_usd: int
+    cap_holds_usd: int
+    incomplete_roster_charges_usd: int
+    incomplete_roster_spots: int
     tier: str
     room_to_cap: int | None            # cap space; negative = over the cap
     room_to_tax: int | None
@@ -315,10 +326,32 @@ def _entry_models(
     value_by_player = _value_pool(db, pool)
     entering_cap = _cap_for(pool[0].entering_season, caps) if pool else None
     entering_salary_cap = entering_cap.salary_cap if entering_cap else None
+    rights_rows = (
+        db.scalars(
+            select(FreeAgentRight)
+            .where(FreeAgentRight.player_id.in_([e.player.player_id for e in pool]))
+            .where(FreeAgentRight.entering_season == pool[0].entering_season)
+        ).all()
+        if pool
+        else []
+    )
+    rights_by_player = {row.player_id: row for row in rights_rows}
+    rights_team_ids = {row.rights_team_id for row in rights_rows if row.rights_team_id}
+    rights_teams = (
+        {
+            team.team_id: _team_summary(team)
+            for team in db.scalars(
+                select(Team).where(Team.team_id.in_(rights_team_ids))
+            ).all()
+        }
+        if rights_team_ids
+        else {}
+    )
 
     entries: list[FreeAgentEntry] = []
     for e in pool:
         pid = e.player.player_id
+        right = rights_by_player.get(pid)
         summary = summaries[pid]
         pred = value_by_player.get(pid)
         value_pct = pred["value_pct"] if pred else None
@@ -340,7 +373,11 @@ def _entry_models(
         )
 
         option = None
-        if with_option and e.fa_type in (fa.FA_PLAYER_OPTION, fa.FA_TEAM_OPTION) and expiring_cap_pct is not None:
+        if (
+            with_option
+            and e.fa_type in (fa.FA_PLAYER_OPTION, fa.FA_TEAM_OPTION)
+            and expiring_cap_pct is not None
+        ):
             verdict = fa.option_decision(value_pct, expiring_cap_pct, e.fa_type)
             option = OptionDecisionModel(
                 fa_type=verdict.fa_type,
@@ -371,6 +408,16 @@ def _entry_models(
                 valuation_season=e.latest_season_row.season if e.latest_season_row else None,
                 valuation_status="ready" if pred else "unavailable",
                 option=option,
+                fa_status=(
+                    right.fa_status
+                    if right and right.fa_status
+                    else "rfa" if fa.rfa_estimate(e.seasons_played) else "ufa"
+                ),
+                fa_status_source="spotrac" if right and right.fa_status else "estimated",
+                rights_team=rights_teams.get(right.rights_team_id) if right else None,
+                bird_rights=right.bird_rights if right else None,
+                qualifying_offer_usd=right.qualifying_offer_usd if right else None,
+                cap_hold_usd=right.cap_hold_usd if right else None,
             )
         )
     return entries
@@ -523,7 +570,24 @@ def get_team_fa_targets(
         for p in db.scalars(select(Player).where(Player.current_team_id == team_id)).all()
     ]
     cap_hits, _ = team_cap_hits(db, roster_ids, entering)
-    committed = sum(cap_hits.values())
+    contract_payroll = sum(cap_hits.values())
+    rights = db.scalars(
+        select(FreeAgentRight)
+        .where(FreeAgentRight.rights_team_id == team_id)
+        .where(FreeAgentRight.entering_season == entering)
+    ).all()
+    retained_holds = {
+        row.player_id: row.cap_hold_usd
+        for row in rights
+        if row.cap_hold_usd and row.player_id not in cap_hits
+    }
+    cap_holds = sum(retained_holds.values())
+    incomplete, incomplete_spots = (
+        incomplete_roster_charge(salary_cap, len(cap_hits) + len(retained_holds))
+        if salary_cap
+        else (0, 0)
+    )
+    committed = contract_payroll + cap_holds + incomplete
     add_ids = _player_id_set(add, "add")
     remove_ids = _player_id_set(remove, "remove")
     fit_roster_ids = (set(cap_hits) - remove_ids) | add_ids
@@ -537,6 +601,10 @@ def get_team_fa_targets(
         first_apron=first_apron,
         second_apron=second_apron,
         committed_payroll_usd=committed,
+        contract_payroll_usd=contract_payroll,
+        cap_holds_usd=cap_holds,
+        incomplete_roster_charges_usd=incomplete,
+        incomplete_roster_spots=incomplete_spots,
         tier=tier,
         room_to_cap=(salary_cap - committed) if salary_cap else None,
         room_to_tax=(tax_line - committed) if tax_line else None,
