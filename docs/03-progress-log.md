@@ -1,6 +1,6 @@
 # ScoutIQ — Progress Log
 
-_Last updated: 2026-07-10. Snapshot of what's built, what works, what broke, and what's next._
+_Last updated: 2026-07-16. Snapshot of what's built, what works, what broke, and what's next._
 
 ## Status at a glance
 | Phase | Scope | Status |
@@ -11,7 +11,7 @@ _Last updated: 2026-07-10. Snapshot of what's built, what works, what broke, and
 | 3.5 | Free-agency board + option decisions | ✅ complete |
 | 3.6 | Multi-move offseason planner | ✅ complete |
 | 3.7 | Deterministic roster needs + candidate fit | ✅ complete |
-| 4 | Official rights data + cap holds + plan comparison | ⏳ next |
+| 4 | Sourced rights + cap accounting | 🚧 accounting slice complete; comparison next |
 
 PR #56 is merged to `main`; the current unmerged work adds the roster-fit engine. Workflow is
 feature branch → PR → squash-merge per phase. Database is a live hosted **Neon** Postgres.
@@ -250,7 +250,8 @@ value as a proxy for basketball fit.
 ---
 
 ## Next
-The next credibility step is **official free-agent and rights data**: persist UFA/RFA status, qualifying
-offers, rights team, and Bird-right category, then add cap holds and incomplete-roster charges to the
-planner. After that: compare and share two or three offseason plans, then run a backtest-gated one-to-two-
+The Phase 4 accounting slice persists Spotrac UFA/RFA status, source-provided qualifying offers, rights
+team, Bird category, and cap holds. Free-agency responses prefer sourced status with an explicit estimated
+fallback; team room and offseason plans now include retained/renounced holds and the official offseason
+incomplete-roster charge. It does not claim a full CBA engine. Next: compare and share two or three offseason plans, then run a backtest-gated one-to-two-
 year aging forecast before adding any long-horizon risk claims.

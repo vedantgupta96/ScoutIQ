@@ -98,13 +98,15 @@ network. Run `load_current_rosters` separately when you want current roster/team
 Player headshots are served through a backend proxy/cache at `GET /players/{player_id}/headshot`; missing
 images are negative-cached and the frontend falls back to initials.
 
-Free-agency endpoints derive status from the current contract structure, not an official league feed.
+Free-agency endpoints combine contract structure with persisted Spotrac free-agent-rights rows.
 The board ranks pending free agents by production-implied model value; the options endpoint compares
 player/team option salary to model value; team targets expose roster fit, model value, and cap feasibility
 as separate signals. `sort=fit` ranks deterministic marginal deficit reduction, while `sort=value`
 preserves the model-value ordering. Staged `add`/`remove` player IDs rerank the remaining market.
-UFA/RFA labels are service-time estimates, and projected room intentionally excludes cap holds, Bird
-rights, exceptions, incomplete-roster charges, and dead money.
+Loaded rows supply explicit UFA/RFA status, rights team, Bird category, cap hold, and any source-provided
+qualifying offer; uncovered players are clearly marked as service-time estimates. Projected room counts
+retained cap holds and the offseason incomplete-roster charge. It still excludes draft-pick holds,
+exceptions, dead money, trades, tax owed, and repeater history.
 
 `GET /teams/{team_id}/needs` compares the projected committed roster with median league team coverage
 across creation, spacing, scoring, rebounding/size, defensive activity, and availability/depth. The fit
@@ -114,8 +116,9 @@ reduction, perturbation stability, and missing-data behavior are covered by dete
 
 `POST /offseason/plan` turns that target view into a multi-move ledger. Proposed contracts replace an
 existing team figure for re-signings, valid option removals reduce the baseline, and each projected
-season returns payroll, roster count, cap room, and tax/apron tier. It deliberately shares the same
-simplified-CBA assumptions as the team cap sheet and simulator.
+season returns a contract/hold/incomplete-charge breakdown, roster count, cap room, and tax/apron tier.
+Rights can be retained, renounced, or replaced by a re-signing. This is a credible accounting slice,
+not a complete CBA transaction engine.
 
 The v0 simulator is intentionally narrow: it models a standalone proposed contract against cap constants
 and the valuation model, not full team payroll, luxury tax owed, Bird rights, MLE/BAE, repeater tax, or

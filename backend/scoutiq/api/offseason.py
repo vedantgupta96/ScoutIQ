@@ -37,6 +37,28 @@ class PlannedSeason:
     room_to_tax_after: int
     room_to_first_apron_after: int
     room_to_second_apron_after: int
+    baseline_contract_payroll_usd: int
+    contract_payroll_after_usd: int
+    baseline_cap_holds_usd: int
+    cap_holds_after_usd: int
+    baseline_incomplete_roster_charges_usd: int
+    incomplete_roster_charges_after_usd: int
+    baseline_team_salary_player_count: int
+    team_salary_player_count_after: int
+
+
+ZERO_YEAR_MINIMUM_2024_25 = 1_157_153
+SALARY_CAP_2024_25 = 140_588_000
+
+
+def zero_year_minimum(salary_cap: int) -> int:
+    """Scale the official 2024-25 zero-YOS minimum with the salary cap."""
+    return round(ZERO_YEAR_MINIMUM_2024_25 * salary_cap / SALARY_CAP_2024_25)
+
+
+def incomplete_roster_charge(salary_cap: int, team_salary_player_count: int) -> tuple[int, int]:
+    spots = max(0, 12 - team_salary_player_count)
+    return spots * zero_year_minimum(salary_cap), spots
 
 
 def apply_plan(
@@ -44,6 +66,8 @@ def apply_plan(
     baseline_hits_by_season: dict[str, dict[int, int]],
     contracts: list[PlannedContract],
     removed_player_ids: set[int],
+    holds_by_season: dict[str, dict[int, int]] | None = None,
+    renounced_player_ids: set[int] | None = None,
 ) -> list[PlannedSeason]:
     """Apply proposed deals and option removals to a team's payroll baseline.
 
@@ -62,6 +86,8 @@ def apply_plan(
             if year.season in proposed_by_season:
                 proposed_by_season[year.season][contract.player_id] = year.cap_hit_usd
 
+    holds_by_season = holds_by_season or {}
+    renounced_player_ids = renounced_player_ids or set()
     results: list[PlannedSeason] = []
     for cap in season_caps:
         baseline = dict(baseline_hits_by_season.get(cap.season, {}))
@@ -71,8 +97,18 @@ def apply_plan(
             after.pop(player_id, None)
         after.update(proposed_by_season[cap.season])
 
-        baseline_payroll = sum(baseline.values())
-        payroll_after = sum(after.values())
+        baseline_holds = {pid: amount for pid, amount in holds_by_season.get(cap.season, {}).items() if pid not in baseline}
+        after_holds = {pid: amount for pid, amount in baseline_holds.items() if pid not in renounced_player_ids and pid not in proposed_player_ids}
+        baseline_contract_payroll = sum(baseline.values())
+        contract_payroll_after = sum(after.values())
+        baseline_hold_total = sum(baseline_holds.values())
+        after_hold_total = sum(after_holds.values())
+        baseline_count = len(baseline) + len(baseline_holds)
+        after_count = len(after) + len(after_holds)
+        baseline_incomplete, _ = incomplete_roster_charge(cap.salary_cap, baseline_count)
+        after_incomplete, _ = incomplete_roster_charge(cap.salary_cap, after_count)
+        baseline_payroll = baseline_contract_payroll + baseline_hold_total + baseline_incomplete
+        payroll_after = contract_payroll_after + after_hold_total + after_incomplete
         tier_before = classify_tier(
             baseline_payroll, cap.tax_line, cap.first_apron, cap.second_apron
         )
@@ -100,6 +136,14 @@ def apply_plan(
                 room_to_tax_after=cap.tax_line - payroll_after,
                 room_to_first_apron_after=cap.first_apron - payroll_after,
                 room_to_second_apron_after=cap.second_apron - payroll_after,
+                baseline_contract_payroll_usd=baseline_contract_payroll,
+                contract_payroll_after_usd=contract_payroll_after,
+                baseline_cap_holds_usd=baseline_hold_total,
+                cap_holds_after_usd=after_hold_total,
+                baseline_incomplete_roster_charges_usd=baseline_incomplete,
+                incomplete_roster_charges_after_usd=after_incomplete,
+                baseline_team_salary_player_count=baseline_count,
+                team_salary_player_count_after=after_count,
             )
         )
 

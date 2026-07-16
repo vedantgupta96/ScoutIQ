@@ -561,6 +561,12 @@ export interface FreeAgentEntry extends PlayerSummary {
   valuation_season: string | null;
   valuation_status: ValuationStatus;
   option: OptionDecision | null;
+  fa_status: 'ufa' | 'rfa';
+  fa_status_source: 'spotrac' | 'estimated';
+  rights_team: TeamSummary | null;
+  bird_rights: 'bird' | 'early-bird' | 'non-bird' | 'two-way' | null;
+  qualifying_offer_usd: number | null;
+  cap_hold_usd: number | null;
 }
 
 export interface FreeAgencyBoardResponse {
@@ -590,6 +596,10 @@ export interface ProjectedCapContext {
   first_apron: number | null;
   second_apron: number | null;
   committed_payroll_usd: number;
+  contract_payroll_usd: number;
+  cap_holds_usd: number;
+  incomplete_roster_charges_usd: number;
+  incomplete_roster_spots: number;
   tier: CapTier;
   room_to_cap: number | null;
   room_to_tax: number | null;
@@ -666,6 +676,7 @@ export interface OffseasonPlanRequest {
   valuation_season?: string | null;
   contracts: ProposedOffseasonContract[];
   option_declines: number[];
+  renounced_rights: number[];
 }
 
 export interface OffseasonContractYear {
@@ -713,6 +724,25 @@ export interface OffseasonPlanSeason {
   room_to_tax_after: number;
   room_to_first_apron_after: number;
   room_to_second_apron_after: number;
+  baseline_contract_payroll_usd: number;
+  contract_payroll_after_usd: number;
+  baseline_cap_holds_usd: number;
+  cap_holds_after_usd: number;
+  baseline_incomplete_roster_charges_usd: number;
+  incomplete_roster_charges_after_usd: number;
+  baseline_team_salary_player_count: number;
+  team_salary_player_count_after: number;
+}
+
+export interface OffseasonRight {
+  player_id: number;
+  player_name: string;
+  fa_status: 'ufa' | 'rfa' | null;
+  bird_rights: 'bird' | 'early-bird' | 'non-bird' | 'two-way' | null;
+  cap_hold_usd: number | null;
+  qualifying_offer_usd: number | null;
+  retained: boolean;
+  source: string;
 }
 
 export interface OffseasonPlanResponse {
@@ -723,6 +753,7 @@ export interface OffseasonPlanResponse {
   seasons: OffseasonPlanSeason[];
   needs_before: TeamNeedsResponse;
   needs_after: TeamNeedsResponse;
+  rights: OffseasonRight[];
   caveat: string;
 }
 

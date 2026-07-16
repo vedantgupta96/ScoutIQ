@@ -3,11 +3,11 @@ from pydantic import ValidationError
 
 from scoutiq.api.cap_simulator import ContractYear, SeasonCapData
 from scoutiq.api.main import app
-from scoutiq.api.offseason import PlannedContract, apply_plan
+from scoutiq.api.offseason import PlannedContract, apply_plan, incomplete_roster_charge, zero_year_minimum
 from scoutiq.api.routers import offseason as offseason_router
 from scoutiq.api.routers.offseason import OffseasonPlanRequest, ProposedContractRequest
 from scoutiq.model.roster_fit import build_fit_context
-from scoutiq.models import Player, Team
+from scoutiq.models import FreeAgentRight, Player, Team
 
 
 CAPS = [
@@ -47,12 +47,12 @@ def test_apply_plan_replaces_existing_hit_and_tracks_apron_change():
 
     result = apply_plan(CAPS, baseline, contracts, set())
 
-    assert result[0].baseline_payroll_usd == 110
-    assert result[0].payroll_after_usd == 135  # 80 + 55, not 80 + 30 + 55
+    assert result[0].baseline_payroll_usd == 120  # includes ten minimum-roster charges
+    assert result[0].payroll_after_usd == 145  # 80 + 55 + ten minimum-roster charges
     assert result[0].payroll_delta_usd == 25
     assert result[0].baseline_roster_count == result[0].roster_count_after == 2
-    assert result[0].tier_before == "below-tax"
-    assert result[0].tier_after == "first-apron"
+    assert result[0].tier_before == "taxpayer"
+    assert result[0].tier_after == "second-apron"
     assert result[0].crosses_a_line is True
     assert result[1].is_projected_cap is True
 
@@ -65,9 +65,16 @@ def test_apply_plan_removes_option_player_across_horizon():
 
     result = apply_plan(CAPS, baseline, [], {2})
 
-    assert [row.payroll_after_usd for row in result] == [80, 75]
+    assert [row.payroll_after_usd for row in result] == [91, 86]
     assert [row.roster_count_after for row in result] == [1, 1]
-    assert result[0].room_to_cap_after == 20
+    assert result[0].room_to_cap_after == 9
+
+
+def test_zero_year_minimum_and_incomplete_roster_charge():
+    assert zero_year_minimum(140_588_000) == 1_157_153
+    assert zero_year_minimum(154_647_000) == 1_272_870
+    assert incomplete_roster_charge(154_647_000, 12) == (0, 0)
+    assert incomplete_roster_charge(154_647_000, 10) == (2_545_740, 2)
 
 
 def test_plan_request_rejects_conflicting_moves_and_short_horizon():
@@ -89,6 +96,25 @@ def test_plan_request_rejects_conflicting_moves_and_short_horizon():
             horizon=3,
             contracts=[contract],
         )
+
+    with pytest.raises(ValidationError, match="proposed contract and renounced rights"):
+        OffseasonPlanRequest(
+            team_id=1,
+            start_season="2026-27",
+            contracts=[contract],
+            renounced_rights=[7],
+        )
+
+
+def test_apply_plan_renounces_hold_and_adds_missing_slot_charge():
+    caps = [SeasonCapData("2025-26", 154_647_000, 180_000_000, 190_000_000, 200_000_000)]
+    baseline = {"2025-26": {pid: 1_000_000 for pid in range(1, 12)}}
+    result = apply_plan(caps, baseline, [], set(), {"2025-26": {20: 8_000_000}}, {20})[0]
+    assert result.baseline_cap_holds_usd == 8_000_000
+    assert result.baseline_incomplete_roster_charges_usd == 0
+    assert result.cap_holds_after_usd == 0
+    assert result.incomplete_roster_charges_after_usd == 1_272_870
+    assert result.baseline_roster_count == result.roster_count_after == 11
 
 
 def test_offseason_plan_route_is_registered():
@@ -113,6 +139,8 @@ def test_build_offseason_plan_prices_proposed_signing(monkeypatch):
 
         def scalars(self, statement):
             sql = str(statement)
+            if "FROM free_agent_rights" in sql:
+                return ScalarResult([])
             if "WHERE players.current_team_id" in sql:
                 return ScalarResult([roster_player])
             return ScalarResult([target])
@@ -150,8 +178,94 @@ def test_build_offseason_plan_prices_proposed_signing(monkeypatch):
 
     assert response.moves[0].kind == "signing"
     assert response.moves[0].value_gap_pct == 5.0
-    assert response.seasons[0].baseline_payroll_usd == 110
-    assert response.seasons[0].payroll_after_usd == 130
-    assert response.seasons[0].tier_after == "first-apron"
+    assert response.seasons[0].baseline_payroll_usd == 121
+    assert response.seasons[0].payroll_after_usd == 140
+    assert response.seasons[0].tier_after == "second-apron"
     assert response.needs_before.roster_player_count == 1
     assert response.needs_after.roster_player_count == 2
+
+
+def test_plan_batches_horizon_holds_and_resigning_replaces_hold(monkeypatch):
+    team = Team(team_id=1, abbreviation="TST", name="Test Team")
+    rights_player = Player(player_id=20, full_name="Rights Player", current_team_id=2)
+    rights = [
+        FreeAgentRight(
+            player_id=20,
+            entering_season="2026-27",
+            rights_team_id=1,
+            fa_status="rfa",
+            bird_rights="bird",
+            cap_hold_usd=30,
+            source="spotrac",
+        ),
+        FreeAgentRight(
+            player_id=20,
+            entering_season="2027-28",
+            rights_team_id=1,
+            fa_status="ufa",
+            bird_rights="bird",
+            cap_hold_usd=40,
+            source="spotrac",
+        ),
+    ]
+
+    class ScalarResult:
+        def __init__(self, values):
+            self.values = values
+
+        def all(self):
+            return self.values
+
+    class FakeDB:
+        def get(self, model, key):
+            return team if model is Team and key == team.team_id else None
+
+        def scalars(self, statement):
+            sql = str(statement)
+            if "FROM free_agent_rights" in sql:
+                return ScalarResult(rights)
+            if "WHERE players.current_team_id" in sql:
+                return ScalarResult([])
+            if "FROM players" in sql:
+                return ScalarResult([rights_player])
+            return ScalarResult([])
+
+    monkeypatch.setattr(
+        offseason_router,
+        "_season_caps",
+        lambda db: {cap.season: cap for cap in CAPS},
+    )
+    monkeypatch.setattr(
+        offseason_router,
+        "team_cap_hits",
+        lambda db, ids, season: ({}, {}),
+    )
+    monkeypatch.setattr(
+        offseason_router,
+        "_valuations",
+        lambda db, players, season: {},
+    )
+    monkeypatch.setattr(
+        offseason_router,
+        "load_fit_context",
+        lambda db, season: build_fit_context([]),
+    )
+
+    response = offseason_router.build_offseason_plan(
+        OffseasonPlanRequest(
+            team_id=1,
+            start_season="2026-27",
+            horizon=2,
+            contracts=[
+                ProposedContractRequest(player_id=20, aav_pct=20, years=2)
+            ],
+        ),
+        FakeDB(),
+    )
+
+    assert response.moves[0].kind == "re-sign"
+    assert [season.baseline_cap_holds_usd for season in response.seasons] == [30, 40]
+    assert [season.cap_holds_after_usd for season in response.seasons] == [0, 0]
+    assert [season.contract_payroll_after_usd for season in response.seasons] == [20, 21]
+    assert [right.player_id for right in response.rights] == [20]
+    assert response.rights[0].retained is False

@@ -64,10 +64,11 @@ function writeFreeAgencyUrl(searchParams: { toString: () => string }, key: strin
 }
 
 // ---- shared bits --------------------------------------------------------------
-function faTypeBadge(entry: { fa_type: FaType; rfa_estimate: boolean }): ReactNode {
+function faTypeBadge(entry: FreeAgentEntry): ReactNode {
   if (entry.fa_type === 'player-option') return <Badge tone="warning" size="sm">Player option</Badge>;
   if (entry.fa_type === 'team-option') return <Badge tone="confidence" size="sm">Team option</Badge>;
-  return <Badge tone="neutral" size="sm">{entry.rfa_estimate ? 'RFA (est.)' : 'UFA'}</Badge>;
+  const bird = entry.bird_rights ? ` · ${entry.bird_rights.replace('-', ' ')}` : '';
+  return <Badge tone="neutral" size="sm">{entry.fa_status.toUpperCase()}{entry.fa_status_source === 'estimated' ? ' (est.)' : bird}</Badge>;
 }
 
 function PlayerCell({ entry, extra }: { entry: FreeAgentEntry; extra?: ReactNode }) {
@@ -204,7 +205,7 @@ function BoardTab({ season }: { season: string }) {
         )}
       </Panel>
 
-      {data && <AssumptionFlag tone="warning" title="Derived free-agency status" icon={<TriangleAlert size={16} />}>{data.caveat}</AssumptionFlag>}
+      {data && <AssumptionFlag tone="warning" title="Free-agency data coverage" icon={<TriangleAlert size={16} />}>{data.caveat}</AssumptionFlag>}
     </div>
   );
 }

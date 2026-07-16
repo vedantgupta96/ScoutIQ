@@ -14,7 +14,7 @@ from scoutiq.api.deps import get_db
 from scoutiq.api.main import app
 from scoutiq.api.routers.players import PlayerSummary
 from scoutiq.model.roster_fit import CandidateFit
-from scoutiq.models import ContractYear, Player, PlayerSeason, Team
+from scoutiq.models import ContractYear, FreeAgentRight, Player, PlayerSeason, Team
 
 LAL_ID = 1610612747
 
@@ -117,19 +117,28 @@ def _patch_common(monkeypatch, pool=POOL):
 
 
 class _FakeDB:
-    def __init__(self, *, team=None, roster=()):
+    def __init__(self, *, team=None, roster=(), rights=(), rights_teams=()):
         self._team = team
         self._roster = list(roster)
+        self._rights = list(rights)
+        self._rights_teams = list(rights_teams)
 
     def get(self, model, key):
         return self._team if (model is Team and self._team and key == self._team.team_id) else None
 
     def scalars(self, stmt):
+        sql = str(stmt)
+
         class _R:
             def __init__(self, v): self.v = v
             def all(self_inner): return self_inner.v
             def first(self_inner): return self_inner.v[0] if self_inner.v else None
-        return _R(self._roster if "current_team_id" in str(stmt) else [])
+
+        if "FROM free_agent_rights" in sql:
+            return _R(self._rights)
+        if "FROM teams" in sql:
+            return _R(self._rights_teams)
+        return _R(self._roster if "current_team_id" in sql else [])
 
 
 def _client(fake_db):
@@ -160,6 +169,33 @@ def test_board_ranks_by_value_and_flags_rfa(monkeypatch):
     assert by_name["Expiring Vet"]["expiring_cap_pct"] == round(40_000_000 / 154_647_000 * 100, 2)
     assert by_name["Option Kid"]["value_usd"] == round(0.18 * 161_606_000)
     assert body["items"][0]["option"] is None  # board omits the verdict block
+
+
+def test_board_prefers_persisted_status_and_exposes_rights(monkeypatch):
+    _patch_common(monkeypatch)
+    rights_team = Team(team_id=LAL_ID, abbreviation="LAL", name="Los Angeles Lakers")
+    right = FreeAgentRight(
+        player_id=100,
+        entering_season="2026-27",
+        rights_team_id=LAL_ID,
+        fa_status="rfa",
+        bird_rights="early-bird",
+        cap_hold_usd=18_500_000,
+        qualifying_offer_usd=7_000_000,
+        source="spotrac",
+    )
+    body = _client(
+        _FakeDB(rights=[right], rights_teams=[rights_team])
+    ).get("/free-agency/board", params={"season": "2026-27"}).json()
+
+    veteran = next(item for item in body["items"] if item["player_id"] == 100)
+    assert veteran["rfa_estimate"] is False
+    assert veteran["fa_status"] == "rfa"
+    assert veteran["fa_status_source"] == "spotrac"
+    assert veteran["rights_team"]["abbreviation"] == "LAL"
+    assert veteran["bird_rights"] == "early-bird"
+    assert veteran["cap_hold_usd"] == 18_500_000
+    assert veteran["qualifying_offer_usd"] == 7_000_000
 
 
 def test_board_rejects_bad_season(monkeypatch):
@@ -201,12 +237,53 @@ def test_team_targets_room_and_fit(monkeypatch):
 
     assert body["team"]["abbreviation"] == "LAL"
     ctx = body["cap_context"]
-    assert ctx["committed_payroll_usd"] == 80_000_000
-    assert ctx["room_to_cap"] == 161_606_000 - 80_000_000
+    assert ctx["contract_payroll_usd"] == 80_000_000
+    assert ctx["incomplete_roster_spots"] == 10
+    assert ctx["committed_payroll_usd"] > 80_000_000
+    assert ctx["room_to_cap"] == 161_606_000 - ctx["committed_payroll_usd"]
     # both targets' model value is well under the ~$81M of room → both fit
     assert all(t["fits_room"] is True for t in body["targets"])
     assert body["committed_player_count"] == 2
     assert body["needs"]["roster_player_count"] == 2
+
+
+def test_team_targets_include_hold_without_double_counting_contracted_player(monkeypatch):
+    _patch_common(monkeypatch)
+    monkeypatch.setattr(
+        far,
+        "team_cap_hits",
+        lambda db, ids, season: ({1: 50_000_000, 2: 30_000_000}, {}),
+    )
+    team = Team(team_id=LAL_ID, abbreviation="LAL", name="Los Angeles Lakers")
+    rights = [
+        FreeAgentRight(
+            player_id=1,
+            entering_season="2026-27",
+            rights_team_id=LAL_ID,
+            cap_hold_usd=20_000_000,
+        ),
+        FreeAgentRight(
+            player_id=99,
+            entering_season="2026-27",
+            rights_team_id=LAL_ID,
+            cap_hold_usd=10_000_000,
+        ),
+    ]
+    fake = _FakeDB(
+        team=team,
+        roster=[Player(player_id=1, current_team_id=LAL_ID)],
+        rights=rights,
+    )
+
+    body = _client(fake).get(
+        f"/free-agency/teams/{LAL_ID}/targets",
+        params={"season": "2026-27"},
+    ).json()
+
+    context = body["cap_context"]
+    assert context["contract_payroll_usd"] == 80_000_000
+    assert context["cap_holds_usd"] == 10_000_000
+    assert context["incomplete_roster_spots"] == 9
 
 
 def test_team_targets_fit_sort_and_staged_roster_overrides(monkeypatch):
