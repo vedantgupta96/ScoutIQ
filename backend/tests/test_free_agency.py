@@ -14,6 +14,7 @@ from scoutiq.api.deps import get_db
 from scoutiq.api.main import app
 from scoutiq.api import rosters
 from scoutiq.api.rosters import PlayerSummary
+from fakes import FakeScalarResult
 from scoutiq.api.valuation import Valuation
 from scoutiq.model.roster_fit import CandidateFit
 from scoutiq.models import ContractYear, FreeAgentRight, Player, PlayerSeason, Team
@@ -137,17 +138,11 @@ class _FakeDB:
 
     def scalars(self, stmt):
         sql = str(stmt)
-
-        class _R:
-            def __init__(self, v): self.v = v
-            def all(self_inner): return self_inner.v
-            def first(self_inner): return self_inner.v[0] if self_inner.v else None
-
         if "FROM free_agent_rights" in sql:
-            return _R(self._rights)
+            return FakeScalarResult(self._rights)
         if "FROM teams" in sql:
-            return _R(self._rights_teams)
-        return _R(self._roster if "current_team_id" in sql else [])
+            return FakeScalarResult(self._rights_teams)
+        return FakeScalarResult(self._roster if "current_team_id" in sql else [])
 
 
 def _client(fake_db):

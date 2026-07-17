@@ -1,6 +1,7 @@
 """Tests for the teams cap-sheet router."""
 import scoutiq.api.routers.teams as teams_router
 from scoutiq.api import rosters
+from fakes import FakeScalarResult
 import scoutiq.api.valuation as valuation_module
 from fastapi.testclient import TestClient
 
@@ -10,17 +11,6 @@ from scoutiq.model.roster_fit import build_fit_context
 from scoutiq.models import CapConstants, ContractYear, Player, PlayerSalary, PlayerSeason, Team
 
 ATL_ID = 1610612737
-
-
-class FakeScalarResult:
-    def __init__(self, values):
-        self.values = values
-
-    def all(self):
-        return self.values
-
-    def first(self):
-        return self.values[0] if self.values else None
 
 
 class FakeDB:
