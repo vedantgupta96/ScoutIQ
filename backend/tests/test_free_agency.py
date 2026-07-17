@@ -13,6 +13,7 @@ from scoutiq.api.cap_simulator import SeasonCapData
 from scoutiq.api.deps import get_db
 from scoutiq.api.main import app
 from scoutiq.api.routers.players import PlayerSummary
+from scoutiq.api.valuation import Valuation
 from scoutiq.model.roster_fit import CandidateFit
 from scoutiq.models import ContractYear, FreeAgentRight, Player, PlayerSeason, Team
 
@@ -98,9 +99,18 @@ POOL = [
                 cap_pct=0.10, aav=16_000_000, seasons_played=2, age=23),
 ]
 SUMMARIES = {100: _summary(100, "Expiring Vet", "SF"), 200: _summary(200, "Option Kid", "PG")}
+def _pred(value_pct, lo_pct, hi_pct):
+    return Valuation(
+        season="2025-26", value_pct=value_pct, lo_pct=lo_pct, hi_pct=hi_pct,
+        actual_usd=None, actual_pct=None, gap_pct=None, salary_cap=None, value_usd=None,
+        model_version="test", verdict_label="", verdict_tone="neutral",
+        caution_flags=[], caveat=None, stats=None,
+    )
+
+
 PREDS = {
-    100: {"value_pct": 15.0, "lo_pct": 11.0, "hi_pct": 19.0, "model_version": "test"},
-    200: {"value_pct": 18.0, "lo_pct": 14.0, "hi_pct": 22.0, "model_version": "test"},
+    100: _pred(15.0, 11.0, 19.0),
+    200: _pred(18.0, 14.0, 22.0),
 }
 
 

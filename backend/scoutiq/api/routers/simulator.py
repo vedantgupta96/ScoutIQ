@@ -11,13 +11,8 @@ from scoutiq.api.cap_simulator import SeasonCapData, apron_outlook, simulate
 from scoutiq.api.deps import DB
 from scoutiq.api.season import is_valid_season
 from scoutiq.api.routers.teams import team_cap_hits
-from scoutiq.model.predict import (
-    build_features_from_season,
-    predict_from_features,
-    prev_season_label,
-    previous_seasons_for,
-)
-from scoutiq.models import CapConstants, Player, PlayerSeason, Team
+from scoutiq.api.valuation import value_players
+from scoutiq.models import CapConstants, Player, Team
 
 router = APIRouter(tags=["simulator"])
 
@@ -150,22 +145,17 @@ def _simulate_cap(req: SimulatorRequest, db: DB = None) -> dict:
 
     # run valuation model on player's most recent stats
     val_season = req.valuation_season or VALUATION_SEASON
-    valuation: dict | None = None
-
-    ps_check = db.scalars(
-        select(PlayerSeason).where(
-            PlayerSeason.player_id == req.player_id,
-            PlayerSeason.season == val_season,
-        )
-    ).first()
-
-    if ps_check is not None:
-        try:
-            prev_by_key = previous_seasons_for([ps_check], db)
-            prev = prev_by_key.get((req.player_id, prev_season_label(val_season)))
-            valuation = predict_from_features(build_features_from_season(ps_check, player, prev=prev))
-        except (LookupError, FileNotFoundError):
-            valuation = None
+    v = value_players(db, [(req.player_id, val_season)]).get((req.player_id, val_season))
+    valuation = (
+        {
+            "value_pct": v.value_pct,
+            "lo_pct": v.lo_pct,
+            "hi_pct": v.hi_pct,
+            "model_version": v.model_version,
+        }
+        if v is not None
+        else None
+    )
 
     try:
         result = simulate(

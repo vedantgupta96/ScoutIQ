@@ -1,5 +1,6 @@
 """Tests for the teams cap-sheet router."""
 import scoutiq.api.routers.teams as teams_router
+import scoutiq.api.valuation as valuation_module
 from fastapi.testclient import TestClient
 
 from scoutiq.api.deps import get_db
@@ -98,7 +99,7 @@ def _patch_model(monkeypatch):
         {"value_pct": 25.0, "lo_pct": 20.0, "hi_pct": 30.0, "model_version": "test"},
         {"value_pct": 8.0, "lo_pct": 5.0, "hi_pct": 11.0, "model_version": "test"},
     ])
-    monkeypatch.setattr(teams_router, "predict_many_from_features", lambda rows: [next(preds) for _ in rows])
+    monkeypatch.setattr(valuation_module, "predict_many_from_features", lambda rows: [next(preds) for _ in rows])
 
 
 def test_list_teams():
@@ -143,7 +144,7 @@ def test_cap_sheet_happy_path(monkeypatch):
 
 def test_cap_sheet_keeps_roster_when_model_artifact_missing(monkeypatch):
     monkeypatch.setattr(
-        teams_router,
+        valuation_module,
         "predict_many_from_features",
         lambda rows: (_ for _ in ()).throw(FileNotFoundError("model.joblib missing")),
     )

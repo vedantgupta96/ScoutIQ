@@ -24,12 +24,7 @@ from scoutiq.api.routers.players import (
     _batched_summaries,
     _team_summary,
 )
-from scoutiq.model.predict import (
-    build_features_from_season,
-    predict_many_from_features,
-    prev_season_label,
-    previous_seasons_for,
-)
+from scoutiq.api.valuation import classify_gap, value_players
 from scoutiq.model.roster_fit import profile_roster
 from scoutiq.config import settings
 from scoutiq.models import (
@@ -222,7 +217,6 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
 
     roster = db.scalars(select(Player).where(Player.current_team_id == team_id)).all()
     player_ids = [p.player_id for p in roster]
-    player_by_id = {p.player_id: p for p in roster}
     # Batch every player's summary (latest season + team) in two queries instead
     # of one latest-season lookup per rostered player inside the loop below.
     summaries = _batched_summaries(roster, db)
@@ -236,7 +230,7 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     # Cap hit precedence: contract year for the season (later contracts win), else realized salary.
     cap_hit_by_player, pay_source_by_player = team_cap_hits(db, player_ids, target)
 
-    # Model value: batch over rostered players that have a stats season.
+    # season_rows stays for age only; value_players batches the model value itself.
     season_rows = (
         db.scalars(
             select(PlayerSeason)
@@ -247,21 +241,7 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
         else []
     )
     season_by_player = {r.player_id: r for r in season_rows}
-    prev_by_key = previous_seasons_for(season_rows, db)
-
-    feature_rows: list[dict] = []
-    feature_ids: list[int] = []
-    for pid in player_ids:
-        sr = season_by_player.get(pid)
-        if sr is None:
-            continue
-        prev = prev_by_key.get((pid, prev_season_label(sr.season)))
-        feature_rows.append(build_features_from_season(sr, player_by_id[pid], prev=prev))
-        feature_ids.append(pid)
-    try:
-        value_by_player = dict(zip(feature_ids, predict_many_from_features(feature_rows)))
-    except FileNotFoundError:
-        value_by_player = {}
+    vals = value_players(db, [(pid, target) for pid in player_ids])
 
     players: list[TeamCapSheetPlayer] = []
     total_payroll = 0
@@ -277,9 +257,9 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
         pay_source = pay_source_by_player.get(p.player_id)
         salary_pct = round(cap_hit / salary_cap * 100, 2) if (cap_hit and salary_cap) else None
 
-        pred = value_by_player.get(p.player_id)
-        value_pct = pred["value_pct"] if pred else None
-        value_usd = int(round(value_pct / 100 * salary_cap)) if (value_pct is not None and salary_cap) else None
+        val = vals.get((p.player_id, target))
+        value_pct = val.value_pct if val else None
+        value_usd = val.value_usd if val else None
         gap_pct = (
             round(value_pct - salary_pct, 2)
             if (value_pct is not None and salary_pct is not None)
@@ -295,9 +275,10 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
             total_value += value_usd
             valued_count += 1
         if gap_pct is not None:
-            if gap_pct >= 1:
+            tone = classify_gap(gap_pct)[1]
+            if tone == "positive":
                 bargains += 1
-            elif gap_pct <= -1:
+            elif tone == "negative":
                 overpays += 1
 
         players.append(
@@ -309,7 +290,7 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
                 value_pct=value_pct,
                 value_usd=value_usd,
                 gap_pct=gap_pct,
-                valuation_status="ready" if pred else "unavailable",
+                valuation_status="ready" if val else "unavailable",
                 pay_source=pay_source,
             )
         )

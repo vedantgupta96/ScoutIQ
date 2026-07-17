@@ -21,14 +21,9 @@ from scoutiq.api.routers.free_agency import _season_caps
 from scoutiq.api.routers.players import LATEST_SEASON, TeamSummary, _team_summary
 from scoutiq.api.routers.teams import team_cap_hits
 from scoutiq.api.season import is_valid_season
-from scoutiq.model.predict import (
-    build_features_from_season,
-    predict_many_from_features,
-    prev_season_label,
-    previous_seasons_for,
-)
+from scoutiq.api.valuation import Valuation, value_players
 from scoutiq.model.roster_fit import profile_roster
-from scoutiq.models import Contract, ContractYear, FreeAgentRight, Player, PlayerSeason, Team
+from scoutiq.models import Contract, ContractYear, FreeAgentRight, Player, Team
 
 router = APIRouter(prefix="/offseason", tags=["offseason"])
 
@@ -181,32 +176,12 @@ def _option_rows(db: DB, player_ids: list[int], season: str) -> dict[int, Contra
 
 def _valuations(
     db: DB, players_by_id: dict[int, Player], season: str
-) -> dict[int, dict]:
+) -> dict[int, Valuation]:
     player_ids = list(players_by_id)
     if not player_ids:
         return {}
-    season_rows = db.scalars(
-        select(PlayerSeason)
-        .where(PlayerSeason.player_id.in_(player_ids))
-        .where(PlayerSeason.season == season)
-    ).all()
-    if not season_rows:
-        return {}
-    prev_by_key = previous_seasons_for(season_rows, db)
-    try:
-        predictions = predict_many_from_features(
-            [
-                build_features_from_season(
-                    row,
-                    players_by_id[row.player_id],
-                    prev=prev_by_key.get((row.player_id, prev_season_label(row.season))),
-                )
-                for row in season_rows
-            ]
-        )
-    except FileNotFoundError:
-        return {}
-    return {row.player_id: pred for row, pred in zip(season_rows, predictions)}
+    vals = value_players(db, [(pid, season) for pid in player_ids])
+    return {pid: vals[(pid, season)] for pid in player_ids if (pid, season) in vals}
 
 
 @router.post("/plan", response_model=OffseasonPlanResponse)
@@ -302,7 +277,16 @@ def build_offseason_plan(req: OffseasonPlanRequest, db: DB = None):
             team_option_years=move.team_option_years,
             start_season=req.start_season,
             cap_by_season=caps,
-            valuation=valuation,
+            valuation=(
+                {
+                    "value_pct": valuation.value_pct,
+                    "lo_pct": valuation.lo_pct,
+                    "hi_pct": valuation.hi_pct,
+                    "model_version": valuation.model_version,
+                }
+                if valuation is not None
+                else None
+            ),
         )
         planned_contracts.append(
             PlannedContract(player_id=move.player_id, years=simulation.years)

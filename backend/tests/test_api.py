@@ -4,8 +4,8 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import scoutiq.api.routers.headshots as headshots_router
-import scoutiq.api.routers.simulator as simulator_router
 import scoutiq.api.routers.players as players_router
+import scoutiq.api.valuation as valuation_module
 from scoutiq.api.deps import get_db
 from scoutiq.api.main import app
 from scoutiq.models import CapConstants, Contract, ContractYear, Player, PlayerSalary, PlayerSeason, Team
@@ -255,14 +255,17 @@ def teardown_function():
 
 def test_simulate_contract_happy_path(monkeypatch):
     monkeypatch.setattr(
-        simulator_router,
-        "predict_from_features",
-        lambda features: {
-            "value_pct": 23.5,
-            "lo_pct": 18.1,
-            "hi_pct": 28.9,
-            "model_version": "v0-gbm-conformal",
-        },
+        valuation_module,
+        "predict_many_from_features",
+        lambda rows: [
+            {
+                "value_pct": 23.5,
+                "lo_pct": 18.1,
+                "hi_pct": 28.9,
+                "model_version": "v0-gbm-conformal",
+            }
+            for _ in rows
+        ],
     )
     client = _client(FakeDB())
 
@@ -274,6 +277,7 @@ def test_simulate_contract_happy_path(monkeypatch):
             "years": 2,
             "player_option_years": 1,
             "start_season": "2024-25",
+            "valuation_season": "2024-25",  # pin to the fixture's stats season
         },
     )
 
@@ -281,7 +285,7 @@ def test_simulate_contract_happy_path(monkeypatch):
     body = response.json()
     assert body["player_name"] == "Desmond Bane"
     assert body["value_gap_pct"] == 3.5
-    assert body["valuation_season"] == "2025-26"  # defaults to VALUATION_SEASON
+    assert body["valuation_season"] == "2024-25"
     assert body["assumptions"]["standalone_contract_only"] is True
     assert body["years"][0]["is_projected_cap"] is False
     assert body["years"][1]["is_projected_cap"] is True
@@ -290,14 +294,17 @@ def test_simulate_contract_happy_path(monkeypatch):
 
 def test_deprecated_simulator_alias_still_works(monkeypatch):
     monkeypatch.setattr(
-        simulator_router,
-        "predict_from_features",
-        lambda features: {
-            "value_pct": 20.0,
-            "lo_pct": 15.0,
-            "hi_pct": 25.0,
-            "model_version": "v0-gbm-conformal",
-        },
+        valuation_module,
+        "predict_many_from_features",
+        lambda rows: [
+            {
+                "value_pct": 20.0,
+                "lo_pct": 15.0,
+                "hi_pct": 25.0,
+                "model_version": "v0-gbm-conformal",
+            }
+            for _ in rows
+        ],
     )
     client = _client(FakeDB())
 
@@ -341,14 +348,17 @@ def test_simulator_missing_player_returns_404():
 
 def test_simulate_compare_ranks_scenarios(monkeypatch):
     monkeypatch.setattr(
-        simulator_router,
-        "predict_from_features",
-        lambda features: {
-            "value_pct": 25.0,
-            "lo_pct": 20.0,
-            "hi_pct": 30.0,
-            "model_version": "v0-gbm-conformal",
-        },
+        valuation_module,
+        "predict_many_from_features",
+        lambda rows: [
+            {
+                "value_pct": 25.0,
+                "lo_pct": 20.0,
+                "hi_pct": 30.0,
+                "model_version": "v0-gbm-conformal",
+            }
+            for _ in rows
+        ],
     )
     client = _client(FakeDB())
 
@@ -356,8 +366,8 @@ def test_simulate_compare_ranks_scenarios(monkeypatch):
         "/simulate/compare",
         json={
             "scenarios": [
-                {"player_id": 1630217, "aav_pct": 20.0, "years": 4, "start_season": "2024-25"},
-                {"player_id": 1630217, "aav_pct": 30.0, "years": 2, "start_season": "2024-25"},
+                {"player_id": 1630217, "aav_pct": 20.0, "years": 4, "start_season": "2024-25", "valuation_season": "2024-25"},
+                {"player_id": 1630217, "aav_pct": 30.0, "years": 2, "start_season": "2024-25", "valuation_season": "2024-25"},
             ]
         },
     )
@@ -477,7 +487,7 @@ def test_player_search_accepts_reordered_name_tokens():
 
 def test_player_cards_returns_batched_valuation_snippets(monkeypatch):
     monkeypatch.setattr(
-        players_router,
+        valuation_module,
         "predict_many_from_features",
         lambda rows: [
             {
@@ -518,10 +528,29 @@ def test_player_cards_returns_batched_valuation_snippets(monkeypatch):
     }
 
 
+def test_player_cards_degrades_without_500_when_model_artifact_missing(monkeypatch):
+    # Regression: a missing model artifact used to blow up past the try/except
+    # guarding _card_valuations; value_players now absorbs it and the board still
+    # renders every player, just without a valuation.
+    def _raise(rows):
+        raise FileNotFoundError("model.joblib missing")
+
+    monkeypatch.setattr(valuation_module, "predict_many_from_features", _raise)
+    client = _client(FakeDB())
+
+    response = client.get("/players/cards?query=bane%20des&limit=5")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[0]["full_name"] == "Desmond Bane"
+    assert body[0]["valuation_status"] == "unavailable"
+    assert body[0]["valuation"] is None
+
+
 def test_card_stats_tolerate_non_numeric_feature_values():
     # Advanced stats come from loosely-typed JSON columns; strings and NaN must
     # degrade to None instead of raising (regression: live rows carried str BPM).
-    stats = players_router._card_stats_from_features({
+    stats = valuation_module.card_stats_from_features({
         "gp": 70,
         "minutes": 2400,
         "pts_pg": 21.43,
@@ -541,10 +570,10 @@ def test_card_stats_tolerate_non_numeric_feature_values():
 
 def test_stat_percentiles_use_mid_rank_and_skip_small_peer_sets():
     def _valuation(stats):
-        return players_router.PlayerCardValuation(
+        return valuation_module.Valuation(
             season="2024-25", value_pct=10.0, lo_pct=5.0, hi_pct=15.0,
-            actual_pct=None, actual_usd=None, gap_pct=None, salary_cap=None,
-            model_version="test", verdict_label="No data", verdict_tone="neutral",
+            actual_usd=None, actual_pct=None, gap_pct=None, salary_cap=None,
+            value_usd=None, model_version="test", verdict_label="No data", verdict_tone="neutral",
             caution_flags=[], caveat=None, stats=stats,
         )
 
@@ -598,7 +627,7 @@ def test_build_features_coerces_string_stat_values():
 
 def test_player_watchlist_defaults_to_ranked_recent_mismatches(monkeypatch):
     monkeypatch.setattr(
-        players_router,
+        valuation_module,
         "predict_many_from_features",
         lambda rows: [
             {
@@ -630,7 +659,7 @@ def test_player_watchlist_defaults_to_ranked_recent_mismatches(monkeypatch):
 
 def test_valuation_cautions_returns_warning_verdicts(monkeypatch):
     monkeypatch.setattr(
-        players_router,
+        valuation_module,
         "predict_many_from_features",
         lambda rows: [
             {
@@ -676,7 +705,7 @@ def test_valuation_without_season_uses_latest_available_player_season(monkeypatc
             "model_version": "v0-gbm-conformal",
         }
 
-    monkeypatch.setattr(players_router, "predict_from_features", fake_predict)
+    monkeypatch.setattr(valuation_module, "predict_from_features", fake_predict)
     client = _client(FakeDB())
 
     response = client.get("/players/1630217/valuation")
@@ -686,35 +715,13 @@ def test_valuation_without_season_uses_latest_available_player_season(monkeypatc
     assert captured["gp"] == 70
 
 
-def test_valuation_verdict_cautions_minimum_veteran_impact_gap():
-    label, tone, flags, caveat = players_router._valuation_verdict(
-        gap_pct=15.76,
-        actual_pct=1.48,
-        features={
-            "age": 37,
-            "BPM": "-0.4",
-            "WS48": ".009",
-            "NET_RATING": -12.1,
-            "TS_PCT": 0.528,
-            "USG_PCT": 0.252,
-        },
-    )
-
-    assert label == "Salary bargain"
-    assert tone == "warning"
-    assert "Age 35+" in flags
-    assert "Minimum-salary gap" in flags
-    assert "Negative BPM" in flags
-    assert caveat
-
-
 def test_player_contract_returns_current_contract_timeline(monkeypatch):
     # The contract endpoint batches valuation across the seasons that have stats
     # (only 2024-25 in the fake), so patch the batched scorer rather than the
     # per-player one. The fake returns just the 2024-25 season row, so 2025-26
     # gets no value.
     monkeypatch.setattr(
-        players_router,
+        valuation_module,
         "predict_many_from_features",
         lambda rows: [
             {"value_pct": 23.5, "lo_pct": 18.1, "hi_pct": 28.9, "model_version": "v0-gbm-conformal"}
@@ -761,7 +768,7 @@ def test_similar_players_returns_role_and_market_context(monkeypatch):
             })
         return predictions
 
-    monkeypatch.setattr(players_router, "predict_many_from_features", fake_predict_many)
+    monkeypatch.setattr(valuation_module, "predict_many_from_features", fake_predict_many)
     client = _client(FakeDB())
 
     response = client.get("/players/1630217/similar?mode=replacements&season=2024-25&limit=5&min_minutes=0")

@@ -6,6 +6,7 @@ from scoutiq.api.main import app
 from scoutiq.api.offseason import PlannedContract, apply_plan, incomplete_roster_charge, zero_year_minimum
 from scoutiq.api.routers import offseason as offseason_router
 from scoutiq.api.routers.offseason import OffseasonPlanRequest, ProposedContractRequest
+from scoutiq.api.valuation import Valuation
 from scoutiq.model.roster_fit import build_fit_context
 from scoutiq.models import FreeAgentRight, Player, Team
 
@@ -158,7 +159,14 @@ def test_build_offseason_plan_prices_proposed_signing(monkeypatch):
     monkeypatch.setattr(
         offseason_router,
         "_valuations",
-        lambda db, players, season: {20: {"value_pct": 25.0, "lo_pct": 20.0, "hi_pct": 30.0}},
+        lambda db, players, season: {
+            20: Valuation(
+                season=season, value_pct=25.0, lo_pct=20.0, hi_pct=30.0,
+                actual_usd=None, actual_pct=None, gap_pct=None, salary_cap=None, value_usd=None,
+                model_version="test", verdict_label="", verdict_tone="neutral",
+                caution_flags=[], caveat=None, stats=None,
+            )
+        },
     )
     monkeypatch.setattr(
         offseason_router,
