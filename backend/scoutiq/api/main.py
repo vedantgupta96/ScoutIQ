@@ -16,6 +16,7 @@ from scoutiq.api.routers import (
     players,
     simulator,
     teams,
+    trades,
 )
 from scoutiq.config import settings
 
@@ -41,6 +42,7 @@ app.include_router(players.router)
 app.include_router(teams.router)
 app.include_router(free_agency.router)
 app.include_router(offseason.router)
+app.include_router(trades.router)
 app.include_router(simulator.router)
 app.include_router(backtest.router)
 app.include_router(llm_eval.router)
