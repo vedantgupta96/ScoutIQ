@@ -3,7 +3,7 @@
 import { ReactNode, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Users, SlidersHorizontal, Target, Shield, Handshake, CalendarRange, Moon, Sun, Search, Menu, X } from 'lucide-react';
+import { Users, SlidersHorizontal, Target, Shield, Handshake, CalendarRange, ArrowLeftRight, Moon, Sun, Search, Menu, X } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { getHealth } from '@/lib/api';
 
@@ -12,6 +12,7 @@ const NAV = [
   { id: 'teams', href: '/teams', label: 'Team war room', mobileLabel: 'Teams', Icon: Shield },
   { id: 'free-agency', href: '/free-agency', label: 'Free agency', mobileLabel: 'Market', Icon: Handshake },
   { id: 'offseason', href: '/offseason', label: 'Offseason plan', mobileLabel: 'Plan', Icon: CalendarRange },
+  { id: 'trade-lab', href: '/trade-lab', label: 'Trade lab', mobileLabel: 'Trade', Icon: ArrowLeftRight },
   { id: 'simulator', href: '/simulator', label: 'Cap simulator', mobileLabel: 'Cap sim', Icon: SlidersHorizontal },
   { id: 'model', href: '/model', label: 'Model & backtest', mobileLabel: 'Model', Icon: Target },
 ];
@@ -22,6 +23,7 @@ const TITLES: Record<string, string> = {
   '/teams':     'Team war room',
   '/free-agency': 'Free agency',
   '/offseason': 'Offseason plan',
+  '/trade-lab': 'Trade lab',
   '/simulator': 'Cap simulator',
   '/model':     'Model & backtest',
 };
@@ -188,7 +190,7 @@ function TopBar({
 
       {/* Search — hidden on the simulator, which owns its own player picker
           (avoids two competing search bars on that page). */}
-      {!pathname.startsWith('/simulator') && (
+      {!pathname.startsWith('/simulator') && !pathname.startsWith('/trade-lab') && (
       <div className="siq-topbar-search">
         <div className="siq-search-field">
           <Search size={16} aria-hidden="true" />

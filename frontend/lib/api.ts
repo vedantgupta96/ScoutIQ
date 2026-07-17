@@ -953,6 +953,33 @@ export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return apiFetch<HealthResponse>('/health', { signal });
 }
 
+export interface TradeRequest { season: string; team_a_id: number; team_b_id: number; team_a_sends: number[]; team_b_sends: number[] }
+export interface TradeCapContext { salary_cap: number; tax_line: number; first_apron: number; second_apron: number }
+export interface TradeWorkspacePlayer { player_id: number; full_name: string; position: string | null; cap_hit_usd: number | null; salary_pct: number | null; pay_source: string | null }
+export interface TradeTeamWorkspace {
+  team: TeamSummary; season: string; is_projected_cap: boolean; cap_context: TradeCapContext;
+  payroll_before_usd: number; tier_before: CapTier; roster_count: number;
+  players: TradeWorkspacePlayer[]; caveat: string;
+}
+export interface TradeTeamAnalysis {
+  team: TeamSummary; cap_context: TradeCapContext; selected_outgoing: TradeWorkspacePlayer[];
+  selected_outgoing_ids: number[]; selected_incoming_ids: number[];
+  payroll_before_usd: number; payroll_after_usd: number;
+  tier_before: CapTier; tier_after: CapTier;
+  roster_count_before: number; roster_count_after: number; outgoing_salary_usd: number; incoming_salary_usd: number; salary_delta_usd: number;
+  salary_match: { status: 'pass'|'fail'|'needs-review'|'incomplete'; method: string|null; rule_label: string; incoming: number; outgoing: number; allowed_incoming: number; margin: number; reasons: string[] };
+  value: { sent_usd: number; received_usd: number; delta_usd: number; sent_coverage: number; received_coverage: number; sent_selected: number; received_selected: number };
+  fit_before: TeamNeedsResponse; fit_after: TeamNeedsResponse;
+  fit_changes: Array<{ key: string; label: string; before_pct: number; after_pct: number; delta_pct: number }>;
+}
+export interface TradeResponse { season: string; role_season: string; is_projected_cap: boolean; overall_status: string; overall_label: string; summary: string; team_a: TradeTeamAnalysis; team_b: TradeTeamAnalysis; assumptions: string[]; not_modeled: string[] }
+export function getTradeWorkspace(teamId: number, season: string, signal?: AbortSignal): Promise<TradeTeamWorkspace> {
+  return apiFetch<TradeTeamWorkspace>(`/trades/teams/${teamId}/workspace${queryString({ season })}`, { signal });
+}
+export function analyzeTrade(request: TradeRequest, signal?: AbortSignal): Promise<TradeResponse> {
+  return apiFetch<TradeResponse>('/trades/analyze', { method: 'POST', body: JSON.stringify(request), signal });
+}
+
 // Player headshot served via our backend proxy/cache instead of the NBA CDN directly.
 export function headshotUrl(playerId: number): string {
   return `${BASE}/players/${playerId}/headshot`;

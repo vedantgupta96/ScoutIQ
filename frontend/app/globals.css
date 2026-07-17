@@ -4978,3 +4978,427 @@ textarea::placeholder {
   z-index: 20;
   pointer-events: none;
 }
+/* Focused modal surface. Native dialog supplies top-layer focus containment. */
+.siq-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(720px, calc(100vw - 32px));
+  max-width: none;
+  max-height: min(780px, calc(100dvh - 32px));
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-primary);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .34);
+}
+
+.siq-dialog::backdrop {
+  background: rgba(7, 9, 12, .68);
+  backdrop-filter: blur(2px);
+}
+
+.siq-dialog__surface {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: min(780px, calc(100dvh - 32px));
+  background: var(--bg-elevated);
+}
+
+.siq-dialog__header,
+.siq-dialog__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  background: var(--bg-panel);
+}
+
+.siq-dialog__header {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.siq-dialog__header h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.siq-dialog__close {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.siq-dialog__close:hover { background: var(--bg-hover); color: var(--text-primary); }
+.siq-dialog__close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+.siq-dialog__body {
+  min-height: 0;
+  padding: 14px 18px 0;
+  overflow: hidden;
+}
+
+.siq-dialog__intro {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.siq-dialog__footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border-default);
+}
+
+/* Trade lab */
+.siq-trade-page { display: grid; gap: 14px; }
+
+.siq-trade-heading h1 {
+  margin: 4px 0;
+  font-size: clamp(26px, 3vw, 30px);
+  line-height: 1.1;
+}
+
+.siq-trade-heading p {
+  max-width: 720px;
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.siq-trade-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 58px minmax(0, 1fr);
+  align-items: start;
+}
+
+.siq-trade-package-panel { min-height: 314px; }
+
+.siq-trade-exchange {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  margin-top: 112px;
+  color: var(--accent-text);
+  font: 700 11px/1 var(--font-mono);
+  white-space: nowrap;
+}
+
+.siq-trade-team-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.siq-trade-team-select { flex: 1; min-width: 0; }
+.siq-trade-team-head select { width: 100%; }
+
+.siq-trade-team-placeholder {
+  display: grid;
+  place-items: center;
+  flex: 0 0 48px;
+  height: 48px;
+  border: 1px dashed var(--border-default);
+  border-radius: 50%;
+  color: var(--text-muted);
+  font: 700 15px/1 var(--font-mono);
+}
+
+.siq-trade-team-baseline {
+  display: grid;
+  grid-template-columns: 1.35fr .6fr 1fr;
+  gap: 10px;
+  padding: 10px 0;
+  border-block: 1px solid var(--border-subtle);
+}
+
+.siq-trade-team-baseline span,
+.siq-trade-secondary-grid span {
+  display: grid;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.siq-trade-team-baseline strong,
+.siq-trade-secondary-grid strong { color: var(--text-primary); font-size: 12px; }
+
+.siq-trade-package-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0 9px;
+}
+
+.siq-trade-package-head > div { display: grid; gap: 4px; }
+
+.siq-trade-package-empty {
+  display: grid;
+  gap: 3px;
+  padding: 14px;
+  border: 1px dashed var(--border-default);
+  border-radius: 7px;
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+}
+
+.siq-trade-package-empty small { color: var(--text-muted); }
+.siq-trade-selected-list { display: grid; border-top: 1px solid var(--border-subtle); }
+
+.siq-trade-selected-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto 44px;
+  align-items: center;
+  gap: 9px;
+  min-height: 54px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.siq-trade-selected-row > button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.siq-trade-selected-row > button:hover { background: var(--negative-soft); color: var(--negative-text); }
+.siq-trade-selected-row > button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+
+.siq-trade-player-id,
+.siq-trade-player-money { display: grid; min-width: 0; gap: 2px; }
+
+.siq-trade-player-id strong,
+.siq-trade-player-money > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.siq-trade-player-id small,
+.siq-trade-player-money small { color: var(--text-muted); font-size: 11px; }
+.siq-trade-player-money { text-align: right; }
+
+.siq-trade-action-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.siq-trade-action-bar > div { display: grid; gap: 3px; }
+.siq-trade-action-bar span { color: var(--text-muted); font-size: 12px; }
+
+.siq-trade-results { display: grid; gap: 14px; }
+.siq-trade-results.is-stale { opacity: .72; }
+
+.siq-trade-verdict {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 18px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.siq-trade-verdict--modeled-compliant { border-color: color-mix(in srgb, var(--positive) 42%, var(--border-default)); }
+.siq-trade-verdict--modeled-noncompliant { border-color: color-mix(in srgb, var(--negative) 46%, var(--border-default)); }
+.siq-trade-verdict h2 { margin: 3px 0; font-size: clamp(18px, 2vw, 22px); }
+.siq-trade-verdict p { margin: 0; color: var(--text-secondary); }
+
+.siq-trade-impacts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.siq-trade-impact {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: inset 0 1px var(--positive);
+}
+
+.siq-trade-impact--taxpayer { box-shadow: inset 0 1px var(--amber-500); }
+.siq-trade-impact--first-apron { box-shadow: inset 0 1px var(--orange-500); }
+.siq-trade-impact--second-apron { box-shadow: inset 0 1px var(--negative); }
+
+.siq-trade-impact-head,
+.siq-trade-match-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.siq-trade-impact-head h3 { margin: 3px 0 0; font-size: 16px; }
+
+.siq-trade-payroll-shift {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-inset);
+  border-radius: 6px;
+}
+
+.siq-trade-payroll-shift span { display: grid; gap: 3px; color: var(--text-muted); font-size: 11px; }
+.siq-trade-payroll-shift span:last-child { text-align: right; }
+.siq-trade-payroll-shift strong { color: var(--text-primary); font-size: 17px; }
+.siq-trade-payroll-shift svg { color: var(--text-muted); }
+
+.siq-trade-match {
+  display: grid;
+  gap: 10px;
+  padding-top: 13px;
+  border-top: 1px solid var(--border-default);
+}
+
+.siq-trade-match-grid,
+.siq-trade-secondary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+
+.siq-trade-match-grid span {
+  display: grid;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.siq-trade-match-grid strong { color: var(--text-primary); font-size: 13px; }
+.siq-trade-match-grid strong.is-positive { color: var(--positive-text); }
+.siq-trade-match-grid strong.is-negative { color: var(--negative-text); }
+.siq-trade-match .ds-note { margin: 0; }
+
+.siq-trade-details,
+.siq-trade-assumptions {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 10px;
+}
+
+.siq-trade-details summary,
+.siq-trade-assumptions summary {
+  min-height: 36px;
+  color: var(--text-secondary);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.siq-trade-secondary-grid { padding: 9px 0; }
+.siq-trade-assumptions { padding: 12px 16px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-panel); }
+.siq-trade-assumptions p { color: var(--text-secondary); font-size: 12px; }
+
+.siq-trade-player-search {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  background: var(--bg-inset);
+  color: var(--text-muted);
+}
+
+.siq-trade-player-search:focus-within { border-color: var(--focus-ring); box-shadow: 0 0 0 2px var(--accent-soft); }
+.siq-trade-player-search input { width: 100%; height: 42px; border: 0; outline: 0; background: transparent; color: var(--text-primary); font: inherit; }
+
+.siq-trade-picker-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.siq-trade-picker-summary strong { color: var(--text-primary); }
+
+.siq-trade-picker-list {
+  height: min(510px, calc(100dvh - 270px));
+  overflow: auto;
+  border-top: 1px solid var(--border-default);
+}
+
+.siq-trade-picker-row {
+  display: grid;
+  grid-template-columns: 22px 36px minmax(0, 1fr) minmax(120px, auto);
+  align-items: center;
+  gap: 10px;
+  min-height: 60px;
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.siq-trade-picker-row:hover { background: var(--bg-hover); }
+.siq-trade-picker-row:focus-within { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.siq-trade-picker-row.is-selected { background: var(--accent-soft); box-shadow: inset 1px 0 var(--accent); }
+.siq-trade-picker-row.is-disabled { opacity: .55; cursor: not-allowed; }
+.siq-trade-picker-row input { width: 17px; height: 17px; accent-color: var(--accent); }
+
+.siq-spin { animation: siq-spin 900ms linear infinite; }
+@keyframes siq-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .siq-spin { animation: none; }
+  .siq-trade-picker-row { transition: none; }
+}
+
+@media (max-width: 800px) {
+  .siq-trade-board { grid-template-columns: minmax(0, 1fr); }
+  .siq-trade-package-panel { min-height: 0; }
+  .siq-trade-exchange { display: flex; justify-content: center; margin: 0; padding: 8px; }
+  .siq-trade-exchange svg { transform: rotate(90deg); }
+  .siq-trade-impacts { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 560px) {
+  .siq-trade-page { gap: 12px; }
+  .siq-trade-action-bar { grid-template-columns: minmax(0, 1fr); }
+  .siq-trade-action-bar > button { width: 100%; min-height: 46px; }
+  .siq-trade-action-bar > .siq-badge { justify-self: start; }
+  .siq-trade-team-baseline { grid-template-columns: 1.3fr .6fr; }
+  .siq-trade-team-baseline span:last-child { grid-column: 1 / -1; }
+  .siq-trade-verdict { align-items: flex-start; flex-direction: column; }
+  .siq-trade-match-grid { grid-template-columns: 1fr 1fr; }
+
+  .siq-dialog {
+    inset: auto 0 0;
+    width: 100vw;
+    max-height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--border-strong);
+    border-radius: 12px 12px 0 0;
+  }
+
+  .siq-dialog__surface { height: min(88dvh, 780px); max-height: 100dvh; }
+  .siq-dialog__body { padding-inline: 12px; }
+  .siq-dialog__footer { padding: 10px 12px max(10px, env(safe-area-inset-bottom)); }
+  .siq-dialog__footer > button:last-child { flex: 1; min-height: 46px; }
+  .siq-trade-picker-list { height: auto; }
+  .siq-trade-picker-row { grid-template-columns: 22px 34px minmax(0, 1fr) 108px; gap: 7px; min-height: 64px; }
+  .siq-trade-player-money strong { font-size: 12px; }
+}
