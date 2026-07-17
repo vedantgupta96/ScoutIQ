@@ -6,6 +6,7 @@ from scoutiq.api.main import app
 from scoutiq.api.offseason import PlannedContract, apply_plan, incomplete_roster_charge, zero_year_minimum
 from scoutiq.api import rosters
 from scoutiq.api.routers import offseason as offseason_router
+from fakes import FakeScalarResult
 from scoutiq.api.routers.offseason import OffseasonPlanRequest, ProposedContractRequest
 from scoutiq.api.valuation import Valuation
 from scoutiq.model.roster_fit import build_fit_context
@@ -128,13 +129,6 @@ def test_build_offseason_plan_prices_proposed_signing(monkeypatch):
     roster_player = Player(player_id=10, full_name="Roster Player", current_team_id=1)
     target = Player(player_id=20, full_name="Target Player", current_team_id=2)
 
-    class ScalarResult:
-        def __init__(self, values):
-            self.values = values
-
-        def all(self):
-            return self.values
-
     class FakeDB:
         def get(self, model, key):
             return team if model is Team and key == team.team_id else None
@@ -142,10 +136,10 @@ def test_build_offseason_plan_prices_proposed_signing(monkeypatch):
         def scalars(self, statement):
             sql = str(statement)
             if "FROM free_agent_rights" in sql:
-                return ScalarResult([])
+                return FakeScalarResult([])
             if "WHERE players.current_team_id" in sql:
-                return ScalarResult([roster_player])
-            return ScalarResult([target])
+                return FakeScalarResult([roster_player])
+            return FakeScalarResult([target])
 
     monkeypatch.setattr(
         offseason_router,
@@ -218,13 +212,6 @@ def test_plan_batches_horizon_holds_and_resigning_replaces_hold(monkeypatch):
         ),
     ]
 
-    class ScalarResult:
-        def __init__(self, values):
-            self.values = values
-
-        def all(self):
-            return self.values
-
     class FakeDB:
         def get(self, model, key):
             return team if model is Team and key == team.team_id else None
@@ -232,12 +219,12 @@ def test_plan_batches_horizon_holds_and_resigning_replaces_hold(monkeypatch):
         def scalars(self, statement):
             sql = str(statement)
             if "FROM free_agent_rights" in sql:
-                return ScalarResult(rights)
+                return FakeScalarResult(rights)
             if "WHERE players.current_team_id" in sql:
-                return ScalarResult([])
+                return FakeScalarResult([])
             if "FROM players" in sql:
-                return ScalarResult([rights_player])
-            return ScalarResult([])
+                return FakeScalarResult([rights_player])
+            return FakeScalarResult([])
 
     monkeypatch.setattr(
         offseason_router,

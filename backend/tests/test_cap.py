@@ -8,22 +8,7 @@ from scoutiq.api.cap import (
     room_to_lines,
 )
 from scoutiq.models import CapConstants
-
-
-class FakeScalarResult:
-    def __init__(self, values):
-        self.values = values
-
-    def all(self):
-        return self.values
-
-
-class FakeDB:
-    def __init__(self, rows):
-        self.rows = rows
-
-    def scalars(self, stmt):
-        return FakeScalarResult(self.rows)
+from fakes import FakeDB
 
 
 # --------------------------------------------------------------------------- apron_values
@@ -61,7 +46,7 @@ def test_load_season_caps_skips_incomplete_rows_and_proxy_fills_aprons():
         season="2022-23", salary_cap=123_655_000, tax_line=150_000_000,
         first_apron=None, second_apron=None,
     )
-    db = FakeDB([complete, no_tax_line, no_salary_cap, pre_cba])
+    db = FakeDB(caps=[complete, no_tax_line, no_salary_cap, pre_cba])
 
     caps = load_season_caps(db)
 

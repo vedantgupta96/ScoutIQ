@@ -3,49 +3,8 @@ import pytest
 
 import scoutiq.api.valuation as valuation_module
 from scoutiq.api.valuation import classify_gap, value_players, valuation_verdict
-from scoutiq.models import CapConstants, Player, PlayerSeason
-
-
-class FakeScalarResult:
-    def __init__(self, values):
-        self.values = values
-
-    def all(self):
-        return self.values
-
-    def first(self):
-        return self.values[0] if self.values else None
-
-
-class FakeDB:
-    """Minimal fake tuned to value_players' queries: players, seasons, and caps."""
-
-    def __init__(self, *, players=(), seasons=(), caps=()):
-        self.players = list(players)
-        self.seasons = list(seasons)
-        self.caps = list(caps)
-
-    def get(self, model, key):
-        if model is Player:
-            return next((p for p in self.players if p.player_id == key), None)
-        if model is CapConstants:
-            return next((c for c in self.caps if c.season == key), None)
-        return None
-
-    def execute(self, stmt):
-        return FakeScalarResult([])
-
-    def scalars(self, stmt):
-        sql = str(stmt)
-        if "cap_constants" in sql:
-            return FakeScalarResult(self.caps)
-        if "player_salaries" in sql:
-            return FakeScalarResult([])
-        if "FROM players" in sql:
-            return FakeScalarResult(self.players)
-        if "player_seasons" in sql:
-            return FakeScalarResult(self.seasons)
-        return FakeScalarResult([])
+from scoutiq.models import Player, PlayerSeason
+from fakes import FakeDB
 
 
 def _season(player_id: int, season: str) -> PlayerSeason:

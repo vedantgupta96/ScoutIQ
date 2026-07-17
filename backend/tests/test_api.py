@@ -6,21 +6,11 @@ from fastapi.testclient import TestClient
 import scoutiq.api.routers.headshots as headshots_router
 import scoutiq.api.routers.players as players_router
 from scoutiq.api.season import LATEST_SEASON
+from fakes import FakeScalarResult
 import scoutiq.api.valuation as valuation_module
 from scoutiq.api.deps import get_db
 from scoutiq.api.main import app
 from scoutiq.models import CapConstants, Contract, ContractYear, Player, PlayerSalary, PlayerSeason, Team
-
-
-class FakeScalarResult:
-    def __init__(self, values):
-        self.values = values
-
-    def all(self):
-        return self.values
-
-    def first(self):
-        return self.values[0] if self.values else None
 
 
 class FakeDB:
