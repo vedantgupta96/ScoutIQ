@@ -7,12 +7,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
-from scoutiq.api.cap_simulator import SeasonCapData, apron_outlook, simulate
+from scoutiq.api.cap import SeasonCapData, load_season_caps
+from scoutiq.api.cap_simulator import apron_outlook, simulate
 from scoutiq.api.deps import DB
 from scoutiq.api.season import is_valid_season
 from scoutiq.api.routers.teams import team_cap_hits
 from scoutiq.api.valuation import value_players
-from scoutiq.models import CapConstants, Player, Team
+from scoutiq.models import Player, Team
 
 router = APIRouter(tags=["simulator"])
 
@@ -125,20 +126,7 @@ def _simulate_cap(req: SimulatorRequest, db: DB = None) -> dict:
             detail="guaranteed_years + player_option_years + team_option_years cannot exceed years.",
         )
 
-    # fetch all cap constants for season projection
-    cap_rows = db.scalars(select(CapConstants)).all()
-    cap_by_season: dict[str, SeasonCapData] = {}
-    for row in cap_rows:
-        # first_apron / second_apron may be null before 2023-24 CBA; use proxies
-        first_apron = row.first_apron or (int(row.tax_line * 1.032) if row.tax_line else 0)
-        second_apron = row.second_apron or (int(row.tax_line * 1.097) if row.tax_line else 0)
-        cap_by_season[row.season] = SeasonCapData(
-            season=row.season,
-            salary_cap=row.salary_cap or 0,
-            tax_line=row.tax_line or 0,
-            first_apron=first_apron,
-            second_apron=second_apron,
-        )
+    cap_by_season = load_season_caps(db)
 
     if not cap_by_season:
         raise HTTPException(status_code=503, detail="No cap constants found in DB.")

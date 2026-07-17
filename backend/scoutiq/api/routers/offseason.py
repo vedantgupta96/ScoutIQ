@@ -13,11 +13,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 
-from scoutiq.api.cap_simulator import build_season_sequence, simulate
+from scoutiq.api.cap import build_season_sequence, load_season_caps
+from scoutiq.api.cap_simulator import simulate
 from scoutiq.api.deps import DB
 from scoutiq.api.offseason import PlannedContract, apply_plan
 from scoutiq.api.roster_fit import TeamNeedsResponse, load_fit_context, needs_response
-from scoutiq.api.routers.free_agency import _season_caps
 from scoutiq.api.routers.players import LATEST_SEASON, TeamSummary, _team_summary
 from scoutiq.api.routers.teams import team_cap_hits
 from scoutiq.api.season import is_valid_season
@@ -191,7 +191,7 @@ def build_offseason_plan(req: OffseasonPlanRequest, db: DB = None):
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found.")
 
-    caps = _season_caps(db)
+    caps = load_season_caps(db)
     if not caps:
         raise HTTPException(status_code=503, detail="No cap constants found in DB.")
     try:

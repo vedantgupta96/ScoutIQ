@@ -8,10 +8,9 @@ from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 
-from scoutiq.api.cap_simulator import SeasonCapData, classify_tier
+from scoutiq.api.cap import SeasonCapData, cap_for, classify_tier, load_season_caps
 from scoutiq.api.deps import DB
 from scoutiq.api.roster_fit import load_fit_context, needs_response
-from scoutiq.api.routers.free_agency import _cap_for, _season_caps
 from scoutiq.api.routers.players import LATEST_SEASON, TeamSummary, _team_summary
 from scoutiq.api.routers.teams import CAVEAT, team_cap_hits
 from scoutiq.api.season import is_valid_season
@@ -122,7 +121,7 @@ def _load_trade_workspaces(
         return found
 
     if cap is None:
-        cap = _cap_for(season, _season_caps(db))
+        cap = cap_for(season, load_season_caps(db))
     if cap is None:
         raise HTTPException(503, "No cap constants available")
 
@@ -296,7 +295,7 @@ def _team_analysis(
 
 @router.post("/analyze")
 def analyze_trade(req: TradeRequest, db: DB = None):
-    cap = _cap_for(req.season, _season_caps(db))
+    cap = cap_for(req.season, load_season_caps(db))
     if cap is None:
         raise HTTPException(503, "No cap constants available")
     workspaces = _load_trade_workspaces(db, [req.team_a_id, req.team_b_id], req.season, cap=cap)

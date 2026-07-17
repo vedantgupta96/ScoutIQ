@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from scoutiq.api.cap_simulator import classify_tier
+from scoutiq.api.cap import apron_values, classify_tier, room_to_lines
 from scoutiq.api.deps import DB
 from scoutiq.api.roster_fit import TeamNeedsResponse, load_fit_context, needs_response
 from scoutiq.api.season import is_valid_season
@@ -138,16 +138,6 @@ class TeamCapSheetResponse(BaseModel):
     caveat: str
 
 
-def _apron(cap_row: CapConstants | None, field: str, proxy_mult: float) -> int | None:
-    """Apron value, falling back to a tax-line proxy before the 2023-24 CBA (mirrors simulator)."""
-    base = getattr(cap_row, field) if cap_row else None
-    if base:
-        return base
-    if cap_row and cap_row.tax_line:
-        return int(cap_row.tax_line * proxy_mult)
-    return None
-
-
 def team_cap_hits(
     db: DB, player_ids: list[int], season: str
 ) -> tuple[dict[int, int], dict[int, str]]:
@@ -224,8 +214,7 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     cap_row = db.scalars(select(CapConstants).where(CapConstants.season == target)).first()
     salary_cap = cap_row.salary_cap if cap_row else None
     tax_line = cap_row.tax_line if cap_row else None
-    first_apron = _apron(cap_row, "first_apron", 1.032)
-    second_apron = _apron(cap_row, "second_apron", 1.097)
+    first_apron, second_apron = apron_values(cap_row)
 
     # Cap hit precedence: contract year for the season (later contracts win), else realized salary.
     cap_hit_by_player, pay_source_by_player = team_cap_hits(db, player_ids, target)
@@ -302,6 +291,9 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     surplus_usd = total_value - total_payroll
     surplus_pct = round(surplus_usd / salary_cap * 100, 2) if salary_cap else None
     tier = classify_tier(total_payroll, tax_line, first_apron, second_apron)
+    rooms = room_to_lines(
+        total_payroll, salary_cap=None, tax_line=tax_line, first_apron=first_apron, second_apron=second_apron
+    )
 
     gapped = [pl for pl in players if pl.gap_pct is not None]
     top_bargain = max(gapped, key=lambda x: x.gap_pct, default=None)
@@ -321,9 +313,9 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
             first_apron=first_apron,
             second_apron=second_apron,
             tier=tier,
-            room_to_tax=(tax_line - total_payroll) if tax_line else None,
-            room_to_first_apron=(first_apron - total_payroll) if first_apron else None,
-            room_to_second_apron=(second_apron - total_payroll) if second_apron else None,
+            room_to_tax=rooms.room_to_tax,
+            room_to_first_apron=rooms.room_to_first_apron,
+            room_to_second_apron=rooms.room_to_second_apron,
         ),
         totals=TeamCapTotals(
             total_payroll_usd=total_payroll,
