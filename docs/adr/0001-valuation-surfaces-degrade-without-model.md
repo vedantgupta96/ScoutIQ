@@ -1,0 +1,3 @@
+# Valuation surfaces degrade when the model is unavailable
+
+All player valuations come from one module (`backend/scoutiq/api/valuation.py`). When the model artifact is missing, batch valuation returns no results and every surface renders its roster/cap facts without valuations, rather than erroring — the cockpit's contract data does not depend on the model, and one missing file must not take down routes that never needed it. The single exception is the player profile's valuation detail endpoint, which fails explicitly, because there a missing model *is* the answer. The alternative (fail loud everywhere) was rejected deliberately; before this decision the players board 500'd while the teams cap sheet degraded, and the divergence was the bug.

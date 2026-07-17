@@ -41,13 +41,8 @@ from scoutiq.api.routers.players import (
     _team_summary,
 )
 from scoutiq.api.routers.teams import _apron, team_cap_hits
+from scoutiq.api.valuation import Valuation, value_players
 from scoutiq.config import settings
-from scoutiq.model.predict import (
-    build_features_from_season,
-    predict_many_from_features,
-    prev_season_label,
-    previous_seasons_for,
-)
 from scoutiq.model.roster_fit import profile_roster, score_candidate
 from scoutiq.models import CapConstants, Contract, ContractYear, FreeAgentRight, Player, PlayerSeason, Team
 
@@ -294,24 +289,19 @@ def _assemble_pool(
     return pool
 
 
-def _value_pool(db: DB, pool: list[_PoolEntry]) -> dict[int, dict]:
+def _value_pool(db: DB, pool: list[_PoolEntry]) -> dict[int, Valuation]:
     """Batch model valuation for every pool player with a latest stats season."""
-    feature_rows: list[dict] = []
-    ids: list[int] = []
-    season_rows = [e.latest_season_row for e in pool if e.latest_season_row is not None]
-    prev_by_key = previous_seasons_for(season_rows, db)
-    for e in pool:
-        if e.latest_season_row is not None:
-            row = e.latest_season_row
-            prev = prev_by_key.get((e.player.player_id, prev_season_label(row.season)))
-            feature_rows.append(build_features_from_season(row, e.player, prev=prev))
-            ids.append(e.player.player_id)
-    if not feature_rows:
-        return {}
-    try:
-        return dict(zip(ids, predict_many_from_features(feature_rows)))
-    except FileNotFoundError:
-        return {}  # model artifact missing → degrade to a value-less list (like the cap sheet)
+    targets = [
+        (e.player.player_id, e.latest_season_row.season)
+        for e in pool
+        if e.latest_season_row is not None
+    ]
+    valuations = value_players(db, targets)
+    return {
+        player_id: valuations[(player_id, season)]
+        for player_id, season in targets
+        if (player_id, season) in valuations
+    }
 
 
 def _entry_models(
@@ -354,7 +344,7 @@ def _entry_models(
         right = rights_by_player.get(pid)
         summary = summaries[pid]
         pred = value_by_player.get(pid)
-        value_pct = pred["value_pct"] if pred else None
+        value_pct = pred.value_pct if pred else None
 
         # expiring pay as % of cap: stored fraction if present, else AAV / expiry-season cap
         expiry_cap = _cap_for(e.expiring_season, caps)
@@ -402,8 +392,8 @@ def _entry_models(
                 expiring_aav_usd=e.last_year.aav,
                 expiring_cap_pct=expiring_cap_pct,
                 value_pct=value_pct,
-                lo_pct=pred["lo_pct"] if pred else None,
-                hi_pct=pred["hi_pct"] if pred else None,
+                lo_pct=pred.lo_pct if pred else None,
+                hi_pct=pred.hi_pct if pred else None,
                 value_usd=value_usd,
                 valuation_season=e.latest_season_row.season if e.latest_season_row else None,
                 valuation_status="ready" if pred else "unavailable",

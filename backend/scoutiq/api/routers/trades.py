@@ -16,14 +16,9 @@ from scoutiq.api.routers.players import LATEST_SEASON, TeamSummary, _team_summar
 from scoutiq.api.routers.teams import CAVEAT, team_cap_hits
 from scoutiq.api.season import is_valid_season
 from scoutiq.api.trades import overall_status, salary_match
-from scoutiq.model.predict import (
-    build_features_from_season,
-    predict_many_from_features,
-    prev_season_label,
-    previous_seasons_for,
-)
+from scoutiq.api.valuation import value_players
 from scoutiq.model.roster_fit import profile_roster
-from scoutiq.models import Player, PlayerSeason, Team
+from scoutiq.models import Player, Team
 
 router = APIRouter(prefix="/trades", tags=["trades"])
 
@@ -194,26 +189,8 @@ def _selected_values(db: DB, player_ids: set[int]) -> dict[int, float]:
     """Run one model batch for selected players only, never an entire roster."""
     if not player_ids:
         return {}
-    rows = db.execute(
-        select(Player, PlayerSeason)
-        .join(PlayerSeason, PlayerSeason.player_id == Player.player_id)
-        .where(Player.player_id.in_(player_ids), PlayerSeason.season == LATEST_SEASON)
-    ).all()
-    season_rows = [season_row for _, season_row in rows]
-    previous = previous_seasons_for(season_rows, db)
-    feature_rows = [
-        build_features_from_season(
-            season_row,
-            player,
-            prev=previous.get((player.player_id, prev_season_label(season_row.season))),
-        )
-        for player, season_row in rows
-    ]
-    try:
-        predictions = predict_many_from_features(feature_rows)
-    except FileNotFoundError:
-        return {}
-    return {player.player_id: prediction["value_pct"] for (player, _), prediction in zip(rows, predictions)}
+    valuations = value_players(db, [(pid, LATEST_SEASON) for pid in player_ids])
+    return {pid: v.value_pct for (pid, _season), v in valuations.items()}
 
 
 def _label(status: str) -> str:

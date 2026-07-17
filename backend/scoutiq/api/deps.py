@@ -8,7 +8,6 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from scoutiq.db import SessionLocal
-from scoutiq.model.predict import load_artifact
 
 
 def get_db() -> Iterator[Session]:
@@ -25,9 +24,4 @@ def get_db() -> Iterator[Session]:
         session.close()
 
 
-def get_model() -> dict:
-    return load_artifact()
-
-
 DB = Annotated[Session, Depends(get_db)]
-Model = Annotated[dict, Depends(get_model)]

@@ -12,6 +12,13 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from scoutiq.api.deps import DB
 from scoutiq.api.season import next_season
+from scoutiq.api.valuation import (
+    LATEST_SEASON,
+    PlayerCardStats,
+    Valuation,
+    value_player_detail,
+    value_players,
+)
 from scoutiq.config import settings
 from scoutiq.llm import generate
 from scoutiq.llm.pricing import Usage
@@ -20,14 +27,6 @@ from scoutiq.llm.player_ratings import (
     aggregate_from_db,
     aggregate_player_scout_ratings,
     load_player_reports,
-)
-from scoutiq.model.predict import (
-    attribute_prediction,
-    build_features_from_season,
-    predict_from_features,
-    predict_many_from_features,
-    prev_season_label,
-    previous_seasons_for,
 )
 from scoutiq.model.similarity import (
     SIMILARITY_BASIS,
@@ -50,10 +49,6 @@ from scoutiq.models import (
 
 router = APIRouter(prefix="/players", tags=["players"])
 
-# The most recent completed season for which we have full stats.
-# Update each offseason after the ETL runs for the new season.
-LATEST_SEASON = "2025-26"
-
 
 class TeamSummary(BaseModel):
     team_id: int
@@ -72,41 +67,9 @@ class PlayerSummary(BaseModel):
     team_data_note: str | None
 
 
-class PlayerCardStats(BaseModel):
-    """Compact production context for card surfaces; season-consistent with the valuation."""
-
-    gp: int | None
-    mpg: float | None
-    pts_pg: float | None
-    reb_pg: float | None
-    ast_pg: float | None
-    ts_pct: float | None
-    bpm: float | None
-    # League percentile (0-100) per stat key, computed across the watchlist's
-    # full valued candidate set. Absent when the peer set is too small.
-    pctl: dict[str, int] | None = None
-
-
-class PlayerCardValuation(BaseModel):
-    season: str
-    value_pct: float
-    lo_pct: float
-    hi_pct: float
-    actual_pct: float | None
-    actual_usd: int | None
-    gap_pct: float | None
-    salary_cap: int | None
-    model_version: str
-    verdict_label: str
-    verdict_tone: Literal["positive", "negative", "neutral", "warning"]
-    caution_flags: list[str]
-    caveat: str | None
-    stats: PlayerCardStats | None = None
-
-
 class PlayerCard(PlayerSummary):
     valuation_status: str
-    valuation: PlayerCardValuation | None
+    valuation: Valuation | None
 
 
 class PlayerWatchlistResponse(BaseModel):
@@ -193,75 +156,6 @@ def _pct_from_contract_year(year: ContractYear, cap_row: CapConstants | None) ->
     if year.cap_pct is not None:
         return round(float(year.cap_pct) * 100, 2)
     return None
-
-
-def _num(value) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _valuation_verdict(
-    *,
-    gap_pct: float | None,
-    actual_pct: float | None,
-    features: dict,
-) -> tuple[str, Literal["positive", "negative", "neutral", "warning"], list[str], str | None]:
-    """Translate raw value-pay gap into a trust-aware display verdict.
-
-    The raw model output stays untouched. This layer prevents cheap, high-usage
-    players with weak impact indicators from reading as clean bargains.
-    """
-    if gap_pct is None:
-        return "No data", "neutral", [], None
-
-    flags: list[str] = []
-    age = _num(features.get("age"))
-    bpm = _num(features.get("BPM"))
-    ws48 = _num(features.get("WS48"))
-    net_rating = _num(features.get("NET_RATING"))
-    ts_pct = _num(features.get("TS_PCT"))
-    usg_pct = _num(features.get("USG_PCT"))
-
-    if age is not None and age >= 35:
-        flags.append("Age 35+")
-    if actual_pct is not None and actual_pct < 3 and gap_pct >= 8:
-        flags.append("Minimum-salary gap")
-    if bpm is not None and bpm < 0:
-        flags.append("Negative BPM")
-    if ws48 is not None and ws48 < 0.05:
-        flags.append("Low WS/48")
-    if net_rating is not None and net_rating <= -5:
-        flags.append("Poor on-court net")
-    if ts_pct is not None and usg_pct is not None and ts_pct < 0.54 and usg_pct >= 0.22:
-        flags.append("High-use efficiency risk")
-
-    if gap_pct >= 3:
-        if flags:
-            return (
-                "Salary bargain",
-                "warning",
-                flags,
-                "Large positive gap is driven by pay versus box production; impact indicators are mixed.",
-            )
-        return "Significant bargain", "positive", [], None
-    if gap_pct >= 1:
-        if flags:
-            return (
-                "Bargain, monitor impact",
-                "warning",
-                flags,
-                "Positive gap has production support, but impact indicators need review.",
-            )
-        return "Bargain", "positive", [], None
-    if gap_pct > -1:
-        return "Fair value", "neutral", flags, None
-    if gap_pct > -3:
-        return "Slight overpay", "negative", flags, None
-    return "Overpaid", "negative", flags, None
 
 
 def _latest_stats_row(player_id: int, db: DB):
@@ -428,35 +322,11 @@ def search_players(
     return [summaries[p.player_id] for p in players]
 
 
-def _card_stats_from_features(features: dict) -> PlayerCardStats | None:
-    """Pull the card's production line out of the already-built model features."""
-    gp = _num(features.get("gp"))
-    minutes = _num(features.get("minutes"))
-    ts_pct = _num(features.get("TS_PCT"))
-
-    def _rounded(key: str) -> float | None:
-        value = _num(features.get(key))
-        return round(value, 1) if value is not None else None
-
-    stats = PlayerCardStats(
-        gp=int(gp) if gp else None,
-        mpg=round(minutes / gp, 1) if (minutes is not None and gp) else None,
-        pts_pg=_rounded("pts_pg"),
-        reb_pg=_rounded("reb_pg"),
-        ast_pg=_rounded("ast_pg"),
-        ts_pct=round(ts_pct, 3) if ts_pct is not None else None,
-        bpm=_rounded("BPM"),
-    )
-    if all(value is None for value in stats.model_dump().values()):
-        return None
-    return stats
-
-
 _PCTL_KEYS = ("gp", "mpg", "pts_pg", "reb_pg", "ast_pg", "bpm")
 _PCTL_MIN_PEERS = 20
 
 
-def _annotate_stat_percentiles(valuations: dict[int, PlayerCardValuation]) -> None:
+def _annotate_stat_percentiles(valuations: dict[int, Valuation]) -> None:
     """Stamp league percentile ranks onto card stats, mid-rank for ties."""
     from bisect import bisect_left, bisect_right
 
@@ -489,7 +359,7 @@ def _card_valuations(
     summaries: dict[int, PlayerSummary],
     db: DB,
     season: str | None = None,
-) -> dict[int, PlayerCardValuation]:
+) -> dict[int, Valuation]:
     """Value each player at `season` if given, else at their latest season.
 
     The watchlist pins valuation to its target season so a player's gap is
@@ -500,84 +370,26 @@ def _card_valuations(
     def _target(player_id: int) -> str | None:
         return season or summaries[player_id].latest_season
 
-    player_ids = [player.player_id for player in players if _target(player.player_id)]
-    if not player_ids:
+    targets = [
+        (player.player_id, _target(player.player_id))
+        for player in players
+        if _target(player.player_id)
+    ]
+    if not targets:
         return {}
 
-    player_by_id = {player.player_id: player for player in players}
-    target_seasons = {_target(player_id) for player_id in player_ids}
-    seasons = sorted(season for season in target_seasons if season)
-
-    season_rows = db.scalars(
-        select(PlayerSeason)
-        .where(PlayerSeason.player_id.in_(player_ids))
-        .where(PlayerSeason.season.in_(seasons))
-    ).all()
-    season_by_key = {(row.player_id, row.season): row for row in season_rows}
-    prev_by_key = previous_seasons_for(season_rows, db)
-
-    salary_rows = db.scalars(
-        select(PlayerSalary)
-        .where(PlayerSalary.player_id.in_(player_ids))
-        .where(PlayerSalary.season.in_(seasons))
-    ).all()
-    salary_by_key = {(row.player_id, row.season): row for row in salary_rows}
-
-    cap_rows = db.scalars(select(CapConstants).where(CapConstants.season.in_(seasons))).all()
-    cap_by_season = {row.season: row for row in cap_rows}
-
-    feature_rows: list[dict] = []
-    feature_keys: list[tuple[int, str]] = []
-    for player_id in player_ids:
-        target_season = _target(player_id)
-        if not target_season:
-            continue
-        season_row = season_by_key.get((player_id, target_season))
-        if season_row is None:
-            continue
-        prev = prev_by_key.get((player_id, prev_season_label(target_season)))
-        feature_rows.append(build_features_from_season(season_row, player_by_id[player_id], prev=prev))
-        feature_keys.append((player_id, target_season))
-
-    predictions = predict_many_from_features(feature_rows)
-    features_by_key = dict(zip(feature_keys, feature_rows))
-    valuations: dict[int, PlayerCardValuation] = {}
-    for (player_id, season), prediction in zip(feature_keys, predictions):
-        salary_row = salary_by_key.get((player_id, season))
-        cap_row = cap_by_season.get(season)
-        salary_cap = cap_row.salary_cap if cap_row else None
-        actual_usd = salary_row.salary if salary_row else None
-        actual_pct = round(actual_usd / salary_cap * 100, 2) if (actual_usd and salary_cap) else None
-        value_pct = prediction["value_pct"]
-        gap_pct = round(value_pct - actual_pct, 2) if actual_pct is not None else None
-        verdict_label, verdict_tone, caution_flags, caveat = _valuation_verdict(
-            gap_pct=gap_pct,
-            actual_pct=actual_pct,
-            features=features_by_key[(player_id, season)],
-        )
-        valuations[player_id] = PlayerCardValuation(
-            season=season,
-            value_pct=value_pct,
-            lo_pct=prediction["lo_pct"],
-            hi_pct=prediction["hi_pct"],
-            actual_pct=actual_pct,
-            actual_usd=actual_usd,
-            gap_pct=gap_pct,
-            salary_cap=salary_cap,
-            model_version=prediction["model_version"],
-            verdict_label=verdict_label,
-            verdict_tone=verdict_tone,
-            caution_flags=caution_flags,
-            caveat=caveat,
-            stats=_card_stats_from_features(features_by_key[(player_id, season)]),
-        )
-    return valuations
+    valuations = value_players(db, targets)
+    return {
+        player_id: valuations[(player_id, target_season)]
+        for player_id, target_season in targets
+        if (player_id, target_season) in valuations
+    }
 
 
 def _player_cards_from_parts(
     players: list[Player],
     summaries: dict[int, PlayerSummary],
-    valuations: dict[int, PlayerCardValuation],
+    valuations: dict[int, Valuation],
 ) -> list[PlayerCard]:
     cards: list[PlayerCard] = []
     for player in players:
@@ -790,22 +602,8 @@ def get_similar_players(
     ).all()
     salary_by_player = {row.player_id: row.salary for row in salary_rows}
 
-    value_by_player: dict[int, float | None] = {}
-    try:
-        prev_by_key = previous_seasons_for(season_rows, db)
-        feature_rows = []
-        feature_player_ids = []
-        for row in season_rows:
-            candidate = player_by_id.get(row.player_id)
-            if candidate is None:
-                continue
-            prev = prev_by_key.get((row.player_id, prev_season_label(row.season)))
-            feature_rows.append(build_features_from_season(row, candidate, prev=prev))
-            feature_player_ids.append(row.player_id)
-        for candidate_id, prediction in zip(feature_player_ids, predict_many_from_features(feature_rows)):
-            value_by_player[candidate_id] = prediction["value_pct"]
-    except FileNotFoundError:
-        value_by_player = {}
+    valuations = value_players(db, [(row.player_id, row.season) for row in season_rows])
+    value_by_player = {pid: v.value_pct for (pid, _season), v in valuations.items()}
 
     records: list[SimilarityRecord] = []
     for row in season_rows:
@@ -893,36 +691,13 @@ def get_player_contract(player_id: int, db: DB = None):
     cap_rows = db.scalars(select(CapConstants).where(CapConstants.season.in_(seasons))).all() if seasons else []
     cap_by_season = {row.season: row for row in cap_rows}
 
-    # Model value per contract season, batched: fetch the seasons that actually
-    # have stats in one query and score them together, instead of one prediction
-    # (and one DB round-trip) per contract year — most future years have no stats.
+    # Model value per contract season, batched: value_players scores every season that
+    # actually has stats together, instead of one prediction per contract year — most
+    # future years have no stats and are simply absent from the result.
     value_by_season: dict[str, float] = {}
     if seasons:
-        try:
-            stat_rows = db.scalars(
-                select(PlayerSeason).where(
-                    PlayerSeason.player_id == player_id,
-                    PlayerSeason.season.in_(seasons),
-                )
-            ).all()
-            if stat_rows:
-                prev_by_key = previous_seasons_for(stat_rows, db)
-                predictions = predict_many_from_features(
-                    [
-                        build_features_from_season(
-                            row,
-                            player,
-                            prev=prev_by_key.get((player_id, prev_season_label(row.season))),
-                        )
-                        for row in stat_rows
-                    ]
-                )
-                value_by_season = {
-                    row.season: prediction["value_pct"]
-                    for row, prediction in zip(stat_rows, predictions)
-                }
-        except FileNotFoundError:
-            value_by_season = {}
+        valuations = value_players(db, [(player_id, season) for season in seasons])
+        value_by_season = {season: v.value_pct for (pid, season), v in valuations.items()}
 
     years_detail: list[PlayerContractYear] = []
     for row in year_rows:
@@ -983,46 +758,15 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
     latest = _latest_stats_row(player_id, db)
     target_season = season or (latest[0] if latest else LATEST_SEASON)
 
-    season_row = db.scalars(
-        select(PlayerSeason).where(
-            PlayerSeason.player_id == player_id,
-            PlayerSeason.season == target_season,
-        )
-    ).first()
-    if season_row is None:
+    try:
+        valuation, features, attribution = value_player_detail(db, player_id, target_season)
+    except LookupError:
         raise HTTPException(
             status_code=404,
             detail=f"No stats for player_id={player_id} in season {target_season}.",
         )
-
-    prev_by_key = previous_seasons_for([season_row], db)
-    prev = prev_by_key.get((player_id, prev_season_label(target_season)))
-    features = build_features_from_season(season_row, player, prev=prev)
-    try:
-        prediction = predict_from_features(features)
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
-
-    # realized salary for this season (if known)
-    salary_row = db.scalars(
-        select(PlayerSalary).where(
-            PlayerSalary.player_id == player_id,
-            PlayerSalary.season == target_season,
-        )
-    ).first()
-
-    cap_row = db.get(CapConstants, target_season)
-    salary_cap = cap_row.salary_cap if cap_row else None
-
-    actual_usd = salary_row.salary if salary_row else None
-    actual_pct = round(actual_usd / salary_cap * 100, 2) if (actual_usd and salary_cap) else None
-    value_pct = prediction["value_pct"]
-    gap_pct = round(value_pct - actual_pct, 2) if actual_pct is not None else None
-    verdict_label, verdict_tone, caution_flags, caveat = _valuation_verdict(
-        gap_pct=gap_pct,
-        actual_pct=actual_pct,
-        features=features,
-    )
 
     return {
         "player_id": player_id,
@@ -1030,21 +774,21 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
         "position": player.position,
         "current_team": _team_summary(db.get(Team, player.current_team_id)) if player.current_team_id else None,
         "season": target_season,
-        "value_pct": value_pct,
-        "lo_pct": prediction["lo_pct"],
-        "hi_pct": prediction["hi_pct"],
-        "actual_pct": actual_pct,
-        "actual_usd": actual_usd,
-        "gap_pct": gap_pct,
-        "salary_cap": salary_cap,
-        "value_usd": int(value_pct / 100 * salary_cap) if salary_cap else None,
-        "model_version": prediction["model_version"],
-        "features": {k: (None if v != v else v) for k, v in features.items()},
-        "attribution": attribute_prediction(features),
-        "verdict_label": verdict_label,
-        "verdict_tone": verdict_tone,
-        "caution_flags": caution_flags,
-        "caveat": caveat,
+        "value_pct": valuation.value_pct,
+        "lo_pct": valuation.lo_pct,
+        "hi_pct": valuation.hi_pct,
+        "actual_pct": valuation.actual_pct,
+        "actual_usd": valuation.actual_usd,
+        "gap_pct": valuation.gap_pct,
+        "salary_cap": valuation.salary_cap,
+        "value_usd": valuation.value_usd,
+        "model_version": valuation.model_version,
+        "features": features,
+        "attribution": attribution,
+        "verdict_label": valuation.verdict_label,
+        "verdict_tone": valuation.verdict_tone,
+        "caution_flags": valuation.caution_flags,
+        "caveat": valuation.caveat,
     }
 
 
