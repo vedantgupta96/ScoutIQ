@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 
 from scoutiq.api import free_agency as fa
-from scoutiq.api.cap_simulator import SeasonCapData, build_season_sequence, classify_tier
+from scoutiq.api.cap import SeasonCapData, cap_for, classify_tier, load_season_caps, room_to_lines
 from scoutiq.api.offseason import incomplete_roster_charge
 from scoutiq.api.deps import DB
 from scoutiq.api.roster_fit import (
@@ -40,11 +40,11 @@ from scoutiq.api.routers.players import (
     _batched_summaries,
     _team_summary,
 )
-from scoutiq.api.routers.teams import _apron, team_cap_hits
+from scoutiq.api.routers.teams import team_cap_hits
 from scoutiq.api.valuation import Valuation, value_players
 from scoutiq.config import settings
 from scoutiq.model.roster_fit import profile_roster, score_candidate
-from scoutiq.models import CapConstants, Contract, ContractYear, FreeAgentRight, Player, PlayerSeason, Team
+from scoutiq.models import Contract, ContractYear, FreeAgentRight, Player, PlayerSeason, Team
 
 router = APIRouter(prefix="/free-agency", tags=["free-agency"])
 
@@ -170,32 +170,6 @@ class _PoolEntry:
     latest_season_row: PlayerSeason | None
 
 
-def _season_caps(db: DB) -> dict[str, SeasonCapData]:
-    """All DB cap constants as SeasonCapData, apron gaps filled by the tax-line proxy."""
-    caps: dict[str, SeasonCapData] = {}
-    for row in db.scalars(select(CapConstants)).all():
-        if not row.salary_cap or not row.tax_line:
-            continue
-        caps[row.season] = SeasonCapData(
-            season=row.season,
-            salary_cap=row.salary_cap,
-            tax_line=row.tax_line,
-            first_apron=_apron(row, "first_apron", 1.032) or int(row.tax_line * 1.032),
-            second_apron=_apron(row, "second_apron", 1.097) or int(row.tax_line * 1.097),
-        )
-    return caps
-
-
-def _cap_for(season: str, caps: dict[str, SeasonCapData]) -> SeasonCapData | None:
-    """Cap data for `season`, projecting forward at the CBA escalator when it isn't stored."""
-    if not caps:
-        return None
-    try:
-        return build_season_sequence(season, 1, caps)[0]
-    except (ValueError, KeyError):
-        return caps.get(season)
-
-
 def _latest_contract_per_player(db: DB) -> list[Contract]:
     """One contract per player — the most recent by season_start, then scrape time."""
     return db.scalars(
@@ -314,7 +288,7 @@ def _entry_models(
     """Turn assembled pool entries into API models, valued and (optionally) with an option verdict."""
     summaries = _batched_summaries([e.player for e in pool], db)
     value_by_player = _value_pool(db, pool)
-    entering_cap = _cap_for(pool[0].entering_season, caps) if pool else None
+    entering_cap = cap_for(pool[0].entering_season, caps) if pool else None
     entering_salary_cap = entering_cap.salary_cap if entering_cap else None
     rights_rows = (
         db.scalars(
@@ -347,7 +321,7 @@ def _entry_models(
         value_pct = pred.value_pct if pred else None
 
         # expiring pay as % of cap: stored fraction if present, else AAV / expiry-season cap
-        expiry_cap = _cap_for(e.expiring_season, caps)
+        expiry_cap = cap_for(e.expiring_season, caps)
         expiry_salary_cap = expiry_cap.salary_cap if expiry_cap else None
         if e.last_year.cap_pct is not None:
             expiring_cap_pct = round(float(e.last_year.cap_pct) * 100, 2)
@@ -487,7 +461,7 @@ def get_free_agency_board(
             status_code=422, detail=f"type must be one of {', '.join(fa.FA_TYPES)}."
         )
 
-    caps = _season_caps(db)
+    caps = load_season_caps(db)
     pool = _assemble_pool(db, entering, type_filter=type, position=position)
     entries = _sorted_by_value(_entry_models(db, pool, caps, with_option=False))
     page = entries[offset : offset + limit]
@@ -511,7 +485,7 @@ def get_free_agency_options(
 ):
     """Player/team option years for `season`, each with a pick-up/decline recommendation."""
     entering = _resolve_entering(season)
-    caps = _season_caps(db)
+    caps = load_season_caps(db)
 
     pool = [
         e
@@ -547,8 +521,8 @@ def get_team_fa_targets(
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found.")
 
-    caps = _season_caps(db)
-    entering_cap = _cap_for(entering, caps)
+    caps = load_season_caps(db)
+    entering_cap = cap_for(entering, caps)
     salary_cap = entering_cap.salary_cap if entering_cap else None
     tax_line = entering_cap.tax_line if entering_cap else None
     first_apron = entering_cap.first_apron if entering_cap else None
@@ -583,6 +557,9 @@ def get_team_fa_targets(
     fit_roster_ids = (set(cap_hits) - remove_ids) | add_ids
 
     tier = classify_tier(committed, tax_line, first_apron, second_apron)
+    rooms = room_to_lines(
+        committed, salary_cap=salary_cap, tax_line=tax_line, first_apron=first_apron, second_apron=second_apron
+    )
     cap_context = ProjectedCapContext(
         season=entering,
         is_projected=entering_cap.is_projected if entering_cap else False,
@@ -596,10 +573,10 @@ def get_team_fa_targets(
         incomplete_roster_charges_usd=incomplete,
         incomplete_roster_spots=incomplete_spots,
         tier=tier,
-        room_to_cap=(salary_cap - committed) if salary_cap else None,
-        room_to_tax=(tax_line - committed) if tax_line else None,
-        room_to_first_apron=(first_apron - committed) if first_apron else None,
-        room_to_second_apron=(second_apron - committed) if second_apron else None,
+        room_to_cap=rooms.room_to_cap,
+        room_to_tax=rooms.room_to_tax,
+        room_to_first_apron=rooms.room_to_first_apron,
+        room_to_second_apron=rooms.room_to_second_apron,
     )
 
     room_to_cap = cap_context.room_to_cap

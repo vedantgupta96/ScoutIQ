@@ -116,7 +116,7 @@ PREDS = {
 
 def _patch_common(monkeypatch, pool=POOL):
     monkeypatch.setattr(far, "_assemble_pool", lambda db, entering, **kw: list(pool))
-    monkeypatch.setattr(far, "_season_caps", lambda db: dict(CAPS))
+    monkeypatch.setattr(far, "load_season_caps", lambda db: dict(CAPS))
     monkeypatch.setattr(far, "_batched_summaries", lambda players, db: dict(SUMMARIES))
     # value by player_id so filtering (e.g. options-only) can't misalign predictions
     monkeypatch.setattr(

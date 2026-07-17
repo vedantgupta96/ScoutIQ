@@ -147,8 +147,8 @@ def _trade_response(monkeypatch, salary_a=10_000_000, salary_b=10_000_000,
     cap = SeasonCapData("2026-27", 160_000_000, 190_000_000, 200_000_000, 210_000_000,
                         is_projected=True)
 
-    monkeypatch.setattr(trades_router, "_season_caps", lambda db: {cap.season: cap})
-    monkeypatch.setattr(trades_router, "_cap_for", lambda season, caps: cap)
+    monkeypatch.setattr(trades_router, "load_season_caps", lambda db: {cap.season: cap})
+    monkeypatch.setattr(trades_router, "cap_for", lambda season, caps: cap)
     monkeypatch.setattr(
         trades_router,
         "_load_trade_workspaces",

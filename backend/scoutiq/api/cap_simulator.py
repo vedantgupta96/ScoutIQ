@@ -16,10 +16,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from scoutiq.api.season import next_season as _next_season
-from scoutiq.api.season import validate_season
+from scoutiq.api.cap import (
+    APRON_CONSEQUENCES,
+    CAP_GROWTH_RATE,
+    SeasonCapData,
+    TIER_ORDER,
+    build_season_sequence,
+    classify_tier,
+    room_to_lines,
+)
 
-CAP_GROWTH_RATE = 0.045  # 4.5% annual cap escalator for projection
 SIMULATOR_ASSUMPTIONS = {
     "standalone_contract_only": True,
     "simplified_cba": True,
@@ -33,60 +39,6 @@ SIMULATOR_ASSUMPTIONS = {
         "traded-player exceptions",
     ],
 }
-
-
-# Payroll tiers, ordered from cheapest to most restrictive.
-TIER_BELOW_TAX = "below-tax"
-TIER_TAXPAYER = "taxpayer"
-TIER_FIRST_APRON = "first-apron"
-TIER_SECOND_APRON = "second-apron"
-TIER_ORDER = [TIER_BELOW_TAX, TIER_TAXPAYER, TIER_FIRST_APRON, TIER_SECOND_APRON]
-
-# The roster-building tools each tier costs you under the 2023 CBA. Phrased as the
-# consequences of *being in* that tier, most-cited restrictions first.
-APRON_CONSEQUENCES: dict[str, list[str]] = {
-    TIER_BELOW_TAX: [],
-    TIER_TAXPAYER: [
-        "Owes luxury tax on every dollar above the tax line (escalating brackets).",
-        "Repeater-tax rates apply if taxed in 3 of the prior 4 seasons.",
-    ],
-    TIER_FIRST_APRON: [
-        "Hard-capped at the first apron once any apron tool is used.",
-        "Limited to the taxpayer mid-level exception; loses the full non-taxpayer MLE.",
-        "Cannot acquire a player via sign-and-trade.",
-        "Cannot use the bi-annual exception or send cash out in trades.",
-    ],
-    TIER_SECOND_APRON: [
-        "Hard-capped at the second apron.",
-        "Cannot aggregate two-plus salaries to match in a trade.",
-        "No mid-level exception of any kind.",
-        "Cannot take back more salary than is sent out in a trade.",
-        "Future first-round pick frozen, then moved to end of the round if it persists.",
-    ],
-}
-
-
-def classify_tier(
-    payroll: int, tax: int | None, first_apron: int | None, second_apron: int | None
-) -> str:
-    """Bucket a payroll into its cap tier; thresholds may be None (unknown)."""
-    if second_apron and payroll >= second_apron:
-        return TIER_SECOND_APRON
-    if first_apron and payroll >= first_apron:
-        return TIER_FIRST_APRON
-    if tax and payroll >= tax:
-        return TIER_TAXPAYER
-    return TIER_BELOW_TAX
-
-
-@dataclass
-class SeasonCapData:
-    season: str
-    salary_cap: int
-    tax_line: int
-    first_apron: int
-    second_apron: int
-    is_projected: bool = False
 
 
 @dataclass
@@ -118,70 +70,6 @@ class CapSimulation:
     model_version: str | None
     assumptions: dict = field(default_factory=lambda: dict(SIMULATOR_ASSUMPTIONS))
     years: list[ContractYear] = field(default_factory=list)
-
-
-def _project_cap(base_cap: SeasonCapData, years_forward: int) -> SeasonCapData:
-    """Project cap thresholds forward from a base season using CAP_GROWTH_RATE."""
-    factor = (1 + CAP_GROWTH_RATE) ** years_forward
-    # tax/apron margins are typically set by CBA ratio; we scale them proportionally
-    return SeasonCapData(
-        season=base_cap.season,  # caller overwrites
-        salary_cap=int(base_cap.salary_cap * factor),
-        tax_line=int(base_cap.tax_line * factor),
-        first_apron=int(base_cap.first_apron * factor),
-        second_apron=int(base_cap.second_apron * factor),
-        is_projected=True,
-    )
-
-
-def build_season_sequence(
-    start_season: str,
-    years: int,
-    cap_by_season: dict[str, SeasonCapData],
-) -> list[SeasonCapData]:
-    """Return cap data for `years` seasons starting at start_season.
-
-    Uses DB data when available; projects forward otherwise.
-    Season format: 'YYYY-YY' (e.g. '2025-26').
-    """
-    validate_season(start_season)
-
-    # find last known base for projection
-    all_known = sorted(cap_by_season.keys())
-    last_known = cap_by_season[all_known[-1]] if all_known else None
-
-    result = []
-    current = start_season
-    for _ in range(years):
-        if current in cap_by_season:
-            raw = cap_by_season[current]
-            data = SeasonCapData(
-                season=current,
-                salary_cap=raw.salary_cap,
-                tax_line=raw.tax_line,
-                first_apron=raw.first_apron,
-                second_apron=raw.second_apron,
-                is_projected=False,
-            )
-        elif last_known is not None:
-            # project forward
-            base_year = int(all_known[-1][:4])
-            target_year = int(current[:4])
-            offset = target_year - base_year
-            data = _project_cap(last_known, offset)
-        else:
-            raise ValueError("No cap constants available to project from.")
-        data = SeasonCapData(
-            current,
-            data.salary_cap,
-            data.tax_line,
-            data.first_apron,
-            data.second_apron,
-            data.is_projected,
-        )
-        result.append(data)
-        current = _next_season(current)
-    return result
 
 
 def simulate(
@@ -322,6 +210,7 @@ def apron_outlook(
     tier_before = classify_tier(existing_payroll_usd, tax, ap1, ap2)
     tier_after = classify_tier(payroll_after, tax, ap1, ap2)
     crosses = TIER_ORDER.index(tier_after) > TIER_ORDER.index(tier_before)
+    rooms = room_to_lines(payroll_after, salary_cap=None, tax_line=tax, first_apron=ap1, second_apron=ap2)
 
     return ApronOutlook(
         team_id=team_id,
@@ -334,8 +223,8 @@ def apron_outlook(
         tier_before=tier_before,
         tier_after=tier_after,
         crosses_a_line=crosses,
-        room_to_tax_after=(tax - payroll_after) if tax else None,
-        room_to_first_apron_after=(ap1 - payroll_after) if ap1 else None,
-        room_to_second_apron_after=(ap2 - payroll_after) if ap2 else None,
+        room_to_tax_after=rooms.room_to_tax,
+        room_to_first_apron_after=rooms.room_to_first_apron,
+        room_to_second_apron_after=rooms.room_to_second_apron,
         consequences=list(APRON_CONSEQUENCES.get(tier_after, [])),
     )

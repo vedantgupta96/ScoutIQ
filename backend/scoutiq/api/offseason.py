@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from scoutiq.api.cap_simulator import ContractYear, SeasonCapData, TIER_ORDER, classify_tier
+from scoutiq.api.cap import SeasonCapData, TIER_ORDER, classify_tier, room_to_lines
+from scoutiq.api.cap_simulator import ContractYear
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,13 @@ def apply_plan(
         tier_after = classify_tier(
             payroll_after, cap.tax_line, cap.first_apron, cap.second_apron
         )
+        rooms = room_to_lines(
+            payroll_after,
+            salary_cap=cap.salary_cap,
+            tax_line=cap.tax_line,
+            first_apron=cap.first_apron,
+            second_apron=cap.second_apron,
+        )
 
         results.append(
             PlannedSeason(
@@ -132,10 +140,10 @@ def apply_plan(
                 tier_before=tier_before,
                 tier_after=tier_after,
                 crosses_a_line=TIER_ORDER.index(tier_before) != TIER_ORDER.index(tier_after),
-                room_to_cap_after=cap.salary_cap - payroll_after,
-                room_to_tax_after=cap.tax_line - payroll_after,
-                room_to_first_apron_after=cap.first_apron - payroll_after,
-                room_to_second_apron_after=cap.second_apron - payroll_after,
+                room_to_cap_after=rooms.room_to_cap,
+                room_to_tax_after=rooms.room_to_tax,
+                room_to_first_apron_after=rooms.room_to_first_apron,
+                room_to_second_apron_after=rooms.room_to_second_apron,
                 baseline_contract_payroll_usd=baseline_contract_payroll,
                 contract_payroll_after_usd=contract_payroll_after,
                 baseline_cap_holds_usd=baseline_hold_total,

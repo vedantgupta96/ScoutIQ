@@ -148,7 +148,7 @@ def test_build_offseason_plan_prices_proposed_signing(monkeypatch):
 
     monkeypatch.setattr(
         offseason_router,
-        "_season_caps",
+        "load_season_caps",
         lambda db: {cap.season: cap for cap in CAPS},
     )
     monkeypatch.setattr(
@@ -240,7 +240,7 @@ def test_plan_batches_horizon_holds_and_resigning_replaces_hold(monkeypatch):
 
     monkeypatch.setattr(
         offseason_router,
-        "_season_caps",
+        "load_season_caps",
         lambda db: {cap.season: cap for cap in CAPS},
     )
     monkeypatch.setattr(

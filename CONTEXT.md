@@ -27,3 +27,12 @@ A production red flag (age, negative impact metrics, minimum-salary artifacts) t
 
 **Verdict ladder**:
 The single set of value-gap thresholds that produce a verdict. There is exactly one ladder, owned server-side; every surface renders it, none re-derives it.
+
+**Cap tier**:
+Where a payroll sits against the CBA's escalating thresholds: below-tax, taxpayer, first apron, second apron. Each tier costs roster-building tools.
+
+**Apron proxy**:
+Estimated apron thresholds for seasons before the 2023 CBA defined them, scaled from that season's tax line.
+
+**Room**:
+Signed distance from a payroll to a cap threshold; negative means over the line.
