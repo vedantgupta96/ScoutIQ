@@ -11,6 +11,10 @@ import re
 
 SEASON_RE = re.compile(r"^\d{4}-\d{2}$")
 
+# The most recent completed season for which we have full stats.
+# Update each offseason after the ETL runs for the new season.
+LATEST_SEASON = "2025-26"
+
 
 def is_valid_season(season: str) -> bool:
     """True iff `season` is a well-formed 'YYYY-YY' label with a consistent end year."""
@@ -35,3 +39,11 @@ def next_season(season: str) -> str | None:
         return None
     y1, y2 = int(season[:4]), int(season[5:])
     return f"{y1 + 1}-{str((y2 + 1) % 100).zfill(2)}"
+
+
+def prev_season(season: str) -> str | None:
+    """The label for the season before `season`, or None if malformed. Inverse of next_season."""
+    if not is_valid_season(season):
+        return None
+    y1 = int(season[:4])
+    return f"{y1 - 1}-{str(y1 % 100).zfill(2)}"

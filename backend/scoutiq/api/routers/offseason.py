@@ -13,14 +13,14 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 
+from scoutiq.api import rosters
 from scoutiq.api.cap import build_season_sequence, load_season_caps
 from scoutiq.api.cap_simulator import simulate
 from scoutiq.api.deps import DB
 from scoutiq.api.offseason import PlannedContract, apply_plan
 from scoutiq.api.roster_fit import TeamNeedsResponse, load_fit_context, needs_response
-from scoutiq.api.routers.players import LATEST_SEASON, TeamSummary, _team_summary
-from scoutiq.api.routers.teams import team_cap_hits
-from scoutiq.api.season import is_valid_season
+from scoutiq.api.rosters import TeamSummary
+from scoutiq.api.season import LATEST_SEASON, is_valid_season
 from scoutiq.api.valuation import Valuation, value_players
 from scoutiq.model.roster_fit import profile_roster
 from scoutiq.models import Contract, ContractYear, FreeAgentRight, Player, Team
@@ -202,7 +202,7 @@ def build_offseason_plan(req: OffseasonPlanRequest, db: DB = None):
     roster = db.scalars(select(Player).where(Player.current_team_id == req.team_id)).all()
     roster_ids = [player.player_id for player in roster]
     baseline_hits = {
-        cap.season: team_cap_hits(db, roster_ids, cap.season)[0]
+        cap.season: rosters.team_cap_hits(db, roster_ids, cap.season)[0]
         for cap in plan_caps
     }
     plan_season_labels = [cap.season for cap in plan_caps]
@@ -366,7 +366,7 @@ def build_offseason_plan(req: OffseasonPlanRequest, db: DB = None):
     ) | {move.player_id for move in req.contracts}
     fit_context = load_fit_context(db, valuation_season)
     return OffseasonPlanResponse(
-        team=_team_summary(team),
+        team=rosters.team_summary(team),
         start_season=req.start_season,
         valuation_season=valuation_season,
         moves=move_responses,

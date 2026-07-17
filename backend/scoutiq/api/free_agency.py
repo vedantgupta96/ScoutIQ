@@ -32,14 +32,6 @@ DECISION_THRESHOLD_PCT = 1.0
 VerdictTone = Literal["positive", "negative", "neutral"]
 
 
-def prev_season(season: str) -> str | None:
-    """The label for the season before `season`, or None if malformed. Inverse of next_season."""
-    if not is_valid_season(season):
-        return None
-    y1 = int(season[:4])
-    return f"{y1 - 1}-{str(y1 % 100).zfill(2)}"
-
-
 def expiry_season(season_start: str, years: int) -> str | None:
     """Last season of a contract: `season_start` advanced `years - 1` times.
 

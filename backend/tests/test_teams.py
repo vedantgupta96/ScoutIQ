@@ -1,5 +1,6 @@
 """Tests for the teams cap-sheet router."""
 import scoutiq.api.routers.teams as teams_router
+from scoutiq.api import rosters
 import scoutiq.api.valuation as valuation_module
 from fastapi.testclient import TestClient
 
@@ -163,7 +164,7 @@ def test_cap_sheet_keeps_roster_when_model_artifact_missing(monkeypatch):
 
 def test_team_needs_uses_projected_committed_roster(monkeypatch):
     monkeypatch.setattr(
-        teams_router,
+        rosters,
         "team_cap_hits",
         lambda db, ids, season: ({100: 10_000_000}, {100: "contract"}),
     )

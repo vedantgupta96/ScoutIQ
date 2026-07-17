@@ -1,7 +1,7 @@
 """Unit tests for the shared season-label parsing/validation helpers."""
 import pytest
 
-from scoutiq.api.season import is_valid_season, next_season, validate_season
+from scoutiq.api.season import is_valid_season, next_season, prev_season, validate_season
 
 
 @pytest.mark.parametrize("season", ["2025-26", "1999-00", "2023-24", "2099-00"])
@@ -33,3 +33,17 @@ def test_next_season_rolls_year_and_century():
 
 def test_next_season_returns_none_for_malformed_input():
     assert next_season("banana") is None
+
+
+def test_prev_season_rolls_year_and_century():
+    assert prev_season("2025-26") == "2024-25"
+    assert prev_season("2000-01") == "1999-00"
+
+
+def test_prev_season_returns_none_for_malformed_input():
+    assert prev_season("banana") is None
+
+
+@pytest.mark.parametrize("season", ["2025-26", "2000-01", "2099-00"])
+def test_prev_next_season_round_trip(season):
+    assert next_season(prev_season(season)) == season

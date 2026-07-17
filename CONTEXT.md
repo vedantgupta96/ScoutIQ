@@ -36,3 +36,10 @@ Estimated apron thresholds for seasons before the 2023 CBA defined them, scaled 
 
 **Room**:
 Signed distance from a payroll to a cap threshold; negative means over the line.
+
+**Cap hit**:
+What a player costs a team's payroll for a season. Precedence: the contract year covering that season (later contracts win), else realized salary.
+_Avoid_: salary (realized pay is one input to a cap hit, not the same thing)
+
+**Latest season**:
+The most recent completed season with full loaded stats — the default season every surface values against, advanced once each offseason.
