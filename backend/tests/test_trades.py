@@ -6,7 +6,7 @@ from scoutiq.api.cap_simulator import SeasonCapData
 from scoutiq.api.deps import get_db
 from scoutiq.api.main import app
 from scoutiq.api.routers import trades as trades_router
-from scoutiq.api.routers.players import TeamSummary
+from scoutiq.api.rosters import TeamSummary
 from scoutiq.api.routers.trades import (
     TradeCapContext,
     TradeRequest,

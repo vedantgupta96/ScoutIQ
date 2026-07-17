@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from scoutiq.api.cap_simulator import ContractYear, SeasonCapData
 from scoutiq.api.main import app
 from scoutiq.api.offseason import PlannedContract, apply_plan, incomplete_roster_charge, zero_year_minimum
+from scoutiq.api import rosters
 from scoutiq.api.routers import offseason as offseason_router
 from scoutiq.api.routers.offseason import OffseasonPlanRequest, ProposedContractRequest
 from scoutiq.api.valuation import Valuation
@@ -152,7 +153,7 @@ def test_build_offseason_plan_prices_proposed_signing(monkeypatch):
         lambda db: {cap.season: cap for cap in CAPS},
     )
     monkeypatch.setattr(
-        offseason_router,
+        rosters,
         "team_cap_hits",
         lambda db, ids, season: ({10: 110 if season == "2026-27" else 100}, {10: "contract"}),
     )
@@ -244,7 +245,7 @@ def test_plan_batches_horizon_holds_and_resigning_replaces_hold(monkeypatch):
         lambda db: {cap.season: cap for cap in CAPS},
     )
     monkeypatch.setattr(
-        offseason_router,
+        rosters,
         "team_cap_hits",
         lambda db, ids, season: ({}, {}),
     )

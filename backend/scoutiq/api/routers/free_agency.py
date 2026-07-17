@@ -32,15 +32,9 @@ from scoutiq.api.roster_fit import (
     load_fit_context,
     needs_response,
 )
-from scoutiq.api.season import is_valid_season, next_season
-from scoutiq.api.routers.players import (
-    LATEST_SEASON,
-    PlayerSummary,
-    TeamSummary,
-    _batched_summaries,
-    _team_summary,
-)
-from scoutiq.api.routers.teams import team_cap_hits
+from scoutiq.api import rosters
+from scoutiq.api.rosters import PlayerSummary, TeamSummary
+from scoutiq.api.season import LATEST_SEASON, is_valid_season, next_season
 from scoutiq.api.valuation import Valuation, value_players
 from scoutiq.config import settings
 from scoutiq.model.roster_fit import profile_roster, score_candidate
@@ -286,7 +280,7 @@ def _entry_models(
     with_option: bool,
 ) -> list[FreeAgentEntry]:
     """Turn assembled pool entries into API models, valued and (optionally) with an option verdict."""
-    summaries = _batched_summaries([e.player for e in pool], db)
+    summaries = rosters.batched_summaries([e.player for e in pool], db)
     value_by_player = _value_pool(db, pool)
     entering_cap = cap_for(pool[0].entering_season, caps) if pool else None
     entering_salary_cap = entering_cap.salary_cap if entering_cap else None
@@ -303,7 +297,7 @@ def _entry_models(
     rights_team_ids = {row.rights_team_id for row in rights_rows if row.rights_team_id}
     rights_teams = (
         {
-            team.team_id: _team_summary(team)
+            team.team_id: rosters.team_summary(team)
             for team in db.scalars(
                 select(Team).where(Team.team_id.in_(rights_team_ids))
             ).all()
@@ -533,7 +527,7 @@ def get_team_fa_targets(
         p.player_id
         for p in db.scalars(select(Player).where(Player.current_team_id == team_id)).all()
     ]
-    cap_hits, _ = team_cap_hits(db, roster_ids, entering)
+    cap_hits, _ = rosters.team_cap_hits(db, roster_ids, entering)
     contract_payroll = sum(cap_hits.values())
     rights = db.scalars(
         select(FreeAgentRight)
@@ -605,7 +599,7 @@ def get_team_fa_targets(
         )
     targets = targets[:limit]
     return TeamFaTargetsResponse(
-        team=_team_summary(team),
+        team=rosters.team_summary(team),
         entering_season=entering,
         cap_context=cap_context,
         committed_player_count=len(cap_hits),

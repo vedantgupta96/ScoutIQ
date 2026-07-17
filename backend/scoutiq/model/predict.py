@@ -18,6 +18,7 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from scoutiq.api.season import prev_season as _prev_season
 from scoutiq.model.features import (
     BBREF_ADV,
     FEATURE_COLS,
@@ -81,8 +82,10 @@ def _as_float(value: Any) -> float | None:
 
 def prev_season_label(season: str) -> str:
     """'2025-26' -> '2024-25'."""
-    start = int(season[:4])
-    return f"{start - 1}-{str(start)[2:]}"
+    label = _prev_season(season)
+    if label is None:
+        raise ValueError(f"invalid season label {season!r}")
+    return label
 
 
 def previous_seasons_for(

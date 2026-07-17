@@ -7,21 +7,15 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
+from scoutiq.api import rosters
 from scoutiq.api.cap import SeasonCapData, load_season_caps
 from scoutiq.api.cap_simulator import apron_outlook, simulate
 from scoutiq.api.deps import DB
-from scoutiq.api.season import is_valid_season
-from scoutiq.api.routers.teams import team_cap_hits
+from scoutiq.api.season import LATEST_SEASON, is_valid_season
 from scoutiq.api.valuation import value_players
 from scoutiq.models import Player, Team
 
 router = APIRouter(tags=["simulator"])
-
-# Most recent season with full model features — used as the valuation base.
-# Mirrors players.LATEST_SEASON; advance both each offseason after the ETL runs.
-# 2025-26 cap constants are loaded, so the simulator now uses actual (not
-# projected) caps for current-season contracts.
-VALUATION_SEASON = "2025-26"
 
 
 class SimulatorRequest(BaseModel):
@@ -132,7 +126,7 @@ def _simulate_cap(req: SimulatorRequest, db: DB = None) -> dict:
         raise HTTPException(status_code=503, detail="No cap constants found in DB.")
 
     # run valuation model on player's most recent stats
-    val_season = req.valuation_season or VALUATION_SEASON
+    val_season = req.valuation_season or LATEST_SEASON
     v = value_players(db, [(req.player_id, val_season)]).get((req.player_id, val_season))
     valuation = (
         {
@@ -193,7 +187,7 @@ def _apron_overlay(req: SimulatorRequest, player: Player, result, db: DB):
         return None
     team = db.get(Team, req.team_id)
     roster = db.scalars(select(Player).where(Player.current_team_id == req.team_id)).all()
-    cap_hits, _ = team_cap_hits(db, [p.player_id for p in roster], req.start_season)
+    cap_hits, _ = rosters.team_cap_hits(db, [p.player_id for p in roster], req.start_season)
     existing_payroll = sum(cap_hits.values())
     # Net out the player's current cap figure only if they're already on this team.
     replaces = cap_hits.get(req.player_id, 0) if player.current_team_id == req.team_id else 0

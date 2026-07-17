@@ -22,10 +22,6 @@ from scoutiq.model.predict import (
 )
 from scoutiq.models import CapConstants, Player, PlayerSalary, PlayerSeason
 
-# The most recent completed season for which we have full stats.
-# Update each offseason after the ETL runs for the new season.
-LATEST_SEASON = "2025-26"
-
 Target = tuple[int, str]
 
 
