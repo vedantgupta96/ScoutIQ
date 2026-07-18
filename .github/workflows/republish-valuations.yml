@@ -1,0 +1,36 @@
+# Safety-net refresh of the precomputed player_valuations table.
+#
+# The primary refresh happens automatically at the end of local ETL/train runs
+# (model.train chains publish_valuations). This weekly job catches drift from
+# manual DB edits that skip a retrain (e.g. load_salary_overrides) so stored
+# valuations can never go stale for more than a week.
+#
+# Requires the repo secret DATABASE_URL (the postgresql+psycopg:// Neon string).
+# Uses the model artifact committed in backend/scoutiq/model/artifacts/.
+name: republish-valuations
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install backend
+        run: pip install ./backend
+      - name: Publish valuations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL secret not set; skipping."
+            exit 0
+          fi
+          cd backend && python -m scoutiq.model.publish_valuations

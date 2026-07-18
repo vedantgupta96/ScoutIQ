@@ -1,6 +1,6 @@
 # ScoutIQ — Progress Log
 
-_Last updated: 2026-07-16. Snapshot of what's built, what works, what broke, and what's next._
+_Last updated: 2026-07-18. Snapshot of what's built, what works, what broke, and what's next._
 
 ## Status at a glance
 | Phase | Scope | Status |
@@ -246,6 +246,39 @@ value as a proxy for basketball fit.
 - **Performance:** normalized league context and the static free-agent market are cached for five minutes.
   Live Neon testing reduced repeated target reranks from roughly 19 seconds to 3.6 seconds; the cold load
   still pays the remote market-assembly cost.
+
+---
+
+## Latency re-architecture: precomputed valuations (2026-07-18)
+
+Data fetching was seconds-slow. Measured diagnosis (SQLAlchemy event hooks + `EXPLAIN ANALYZE`):
+every valuation-backed read recomputed the league — load ~362 qualified players' wide stat rows,
+run the model, sort, return one page (~0.6 s CPU per request; the dashboard fired three at once,
+GIL-serialized). Postgres itself executed the heaviest query in **11 ms**; nothing cached model
+*outputs* anywhere. Secondary costs: Neon-autosuspend cold starts (~1.7 s TLS connect) and 6–11
+sequential queries per endpoint multiplying client-to-us-east-1 round trips.
+
+**Fix — compute at publish time, not read time** (deliberately no Redis; details in
+`docs/04-deployment.md`):
+- `player_valuations` table (migration `0008`): one row per player-season with value/interval,
+  pay, gap, verdict, card stats + league percentiles, features, `model_version`, `computed_at`.
+- `python -m scoutiq.model.publish_valuations` runs the model once over all loaded seasons and
+  upserts (7,411 rows / 14 seasons published). `model.train` chains it; a weekly GitHub Action
+  is the safety net for ETL runs that skip a retrain.
+- `api/valuation.py` serves stored rows first and falls back to live inference only for
+  unpublished targets, so an empty table degrades to exactly the old behavior. A guard test
+  fails if the watchlist ever runs inference while published rows exist.
+- HTTP `Cache-Control` (5 min + stale-while-revalidate) on GET responses, a 5-minute in-memory
+  GET cache in the frontend, and a 5-minute keep-warm ping workflow against Neon autosuspend.
+
+**Result:** co-located (production-equivalent) endpoint times dropped from 3.3–7.9 s to
+0.01–0.13 s — watchlist 5.9 s → 0.03 s, free-agency board 6.0 s → 0.09 s, cap sheet
+3.4 s → 0.01 s. Backend suite: 163 passing.
+
+**Open follow-ups:** push watchlist filter/sort/pagination fully into SQL (Python still builds
+~360 slim cards per uncached request); store attribution at publish time so the profile page
+never needs the model artifact; consider SWR/TanStack Query if the ad-hoc frontend cache
+outgrows itself. Redis stays out until the backend runs multiple replicas.
 
 ---
 

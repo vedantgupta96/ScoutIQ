@@ -1,8 +1,11 @@
 """Valuation — the one module that produces player valuations.
 
-Every API surface gets valuations from here; none re-assembles the pipeline. Degrade
-contract (ADR-0001): a missing model artifact yields empty results, a target without a
-stats season is absent from the result; callers render without valuations.
+Every API surface gets valuations from here; none re-assembles the pipeline. Published
+`player_valuations` rows (written by `scoutiq.model.publish_valuations` after ETL/
+retrain) are the fast path; targets without a stored row fall back to live inference.
+Degrade contract (ADR-0001): a missing model artifact yields stored-only results, a
+target without a stored row or stats season is absent from the result; callers render
+without valuations.
 """
 from __future__ import annotations
 
@@ -20,7 +23,8 @@ from scoutiq.model.predict import (
     prev_season_label,
     previous_seasons_for,
 )
-from scoutiq.models import CapConstants, Player, PlayerSalary, PlayerSeason
+from scoutiq.model.valuation_store import stored_valuations
+from scoutiq.models import CapConstants, Player, PlayerSalary, PlayerSeason, PlayerValuation
 
 # The most recent completed season for which we have full stats.
 # Update each offseason after the ETL runs for the new season.
@@ -60,6 +64,8 @@ class Valuation(BaseModel):
     caution_flags: list[str]
     caveat: str | None
     stats: PlayerCardStats | None = None
+    # When the served row was published; None when computed live on request.
+    computed_at: str | None = None
 
 
 def _num(value) -> float | None:
@@ -206,15 +212,53 @@ def _assemble_valuation(
     )
 
 
+def _valuation_from_row(row: PlayerValuation, cap_row: CapConstants | None) -> Valuation:
+    """Shape a published row into the API model without touching the ML artifact."""
+    salary_cap = cap_row.salary_cap if cap_row else None
+    value_pct = float(row.value_pct)
+    return Valuation(
+        season=row.season,
+        value_pct=value_pct,
+        lo_pct=float(row.lo_pct),
+        hi_pct=float(row.hi_pct),
+        actual_usd=row.actual_usd,
+        actual_pct=float(row.actual_pct) if row.actual_pct is not None else None,
+        gap_pct=float(row.gap_pct) if row.gap_pct is not None else None,
+        salary_cap=salary_cap,
+        value_usd=int(round(value_pct / 100 * salary_cap)) if salary_cap else None,
+        model_version=row.model_version,
+        verdict_label=row.verdict_label,
+        verdict_tone=row.verdict_tone,
+        caution_flags=list(row.caution_flags or []),
+        caveat=row.caveat,
+        stats=PlayerCardStats(**row.stats) if row.stats else None,
+        computed_at=row.computed_at.isoformat() if row.computed_at else None,
+    )
+
+
 def value_players(db: DB, targets: Iterable[Target]) -> dict[Target, Valuation]:
-    """Batch-value every (player_id, season) target in one round of queries."""
+    """Batch-value every (player_id, season) target: published rows first, one live
+    model batch only for targets without a stored valuation."""
     targets = list(dict.fromkeys(targets))
     if not targets:
         return {}
 
-    player_ids = sorted({player_id for player_id, _ in targets})
     seasons = sorted({season for _, season in targets})
-    target_set = set(targets)
+    cap_rows = db.scalars(select(CapConstants).where(CapConstants.season.in_(seasons))).all()
+    cap_by_season = {row.season: row for row in cap_rows}
+
+    stored = stored_valuations(db, targets)
+    valuations: dict[Target, Valuation] = {
+        target: _valuation_from_row(row, cap_by_season.get(target[1]))
+        for target, row in stored.items()
+    }
+
+    missing = [target for target in targets if target not in stored]
+    if not missing:
+        return valuations
+
+    player_ids = sorted({player_id for player_id, _ in missing})
+    missing_set = set(missing)
 
     season_rows = db.scalars(
         select(PlayerSeason)
@@ -224,7 +268,7 @@ def value_players(db: DB, targets: Iterable[Target]) -> dict[Target, Valuation]:
     season_by_key = {
         (row.player_id, row.season): row
         for row in season_rows
-        if (row.player_id, row.season) in target_set
+        if (row.player_id, row.season) in missing_set
     }
 
     players = db.scalars(select(Player).where(Player.player_id.in_(player_ids))).all()
@@ -238,12 +282,9 @@ def value_players(db: DB, targets: Iterable[Target]) -> dict[Target, Valuation]:
     ).all()
     salary_by_key = {(row.player_id, row.season): row for row in salary_rows}
 
-    cap_rows = db.scalars(select(CapConstants).where(CapConstants.season.in_(seasons))).all()
-    cap_by_season = {row.season: row for row in cap_rows}
-
     feature_rows: list[dict] = []
     feature_keys: list[Target] = []
-    for target in targets:
+    for target in missing:
         season_row = season_by_key.get(target)
         if season_row is None:
             continue
@@ -255,10 +296,10 @@ def value_players(db: DB, targets: Iterable[Target]) -> dict[Target, Valuation]:
     try:
         predictions = predict_many_from_features(feature_rows)
     except FileNotFoundError:
-        return {}
+        # No model artifact: published rows still serve; only unpublished targets drop out.
+        return valuations
 
     features_by_key = dict(zip(feature_keys, feature_rows))
-    valuations: dict[Target, Valuation] = {}
     for target, prediction in zip(feature_keys, predictions):
         _, season = target
         valuations[target] = _assemble_valuation(
@@ -274,9 +315,23 @@ def value_players(db: DB, targets: Iterable[Target]) -> dict[Target, Valuation]:
 def value_player_detail(db: DB, player_id: int, season: str) -> tuple[Valuation, dict, list | None]:
     """Full single-player valuation: the model's feature row, prediction, and attribution.
 
-    Raises LookupError if `season` has no loaded stats for this player; lets
-    FileNotFoundError (missing model artifact) propagate to the caller.
+    A published row (with stored features) serves without stats queries or model
+    inference — attribution is derived from the stored features and degrades to None
+    when the artifact is absent. The live fallback raises LookupError if `season` has
+    no loaded stats for this player and lets FileNotFoundError (missing model
+    artifact) propagate to the caller.
     """
+    stored_row = stored_valuations(
+        db, [(player_id, season)], with_features=True
+    ).get((player_id, season))
+    if stored_row is not None and stored_row.features:
+        valuation = _valuation_from_row(stored_row, db.get(CapConstants, season))
+        try:
+            attribution = attribute_prediction(stored_row.features)
+        except FileNotFoundError:
+            attribution = None
+        return valuation, dict(stored_row.features), attribution
+
     season_row = db.scalars(
         select(PlayerSeason).where(
             PlayerSeason.player_id == player_id,

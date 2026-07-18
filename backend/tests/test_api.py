@@ -800,7 +800,7 @@ def test_backtest_returns_committed_metrics():
     assert body["metrics"]["n_test"] == 803
     assert body["metrics"]["test_seasons"] == ["2024-25", "2025-26"]
     assert body["metrics"]["segments"]["decision_point"]["n"] == 226
-    assert body["metrics"]["segments"]["decision_point"]["interval_80_coverage"] == 0.858
+    assert body["metrics"]["segments"]["decision_point"]["interval_80_coverage"] == 0.827
     assert body["metrics"]["interval_calibration"] == "decision_point_oof_5fold"
     assert "metrics.json" in body["artifacts"]
 

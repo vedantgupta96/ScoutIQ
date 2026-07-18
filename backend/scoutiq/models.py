@@ -216,6 +216,41 @@ class PlayerRating(Base):
     report: Mapped[ScoutReport] = relationship(back_populates="ratings")
 
 
+class PlayerValuation(Base):
+    """Precomputed model valuation for one player-season.
+
+    Published by `python -m scoutiq.model.publish_valuations` after ETL/retrain runs; the
+    API's read surfaces serve these rows instead of running the model per request. Rows are
+    deterministic between data refreshes, so recompute belongs at publish time, not read time.
+    """
+    __tablename__ = "player_valuations"
+    __table_args__ = (
+        UniqueConstraint("player_id", "season", name="uq_player_valuation_season"),
+        Index("ix_player_valuations_season_gap", "season", "gap_pct"),
+        Index("ix_player_valuations_season_value", "season", "value_pct"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.player_id"), index=True)
+    season: Mapped[str] = mapped_column(String(7), index=True)
+    value_pct: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False)
+    lo_pct: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False)
+    hi_pct: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False)
+    actual_usd: Mapped[int | None] = mapped_column(BigInteger)
+    actual_pct: Mapped[float | None] = mapped_column(Numeric(6, 2))
+    gap_pct: Mapped[float | None] = mapped_column(Numeric(6, 2))
+    # Watchlist qualification (gp/minutes floors) evaluated at publish time.
+    qualified: Mapped[bool] = mapped_column(Boolean, default=False)
+    verdict_label: Mapped[str] = mapped_column(String(48))
+    verdict_tone: Mapped[str] = mapped_column(String(12))
+    caution_flags: Mapped[list | None] = mapped_column(JSONB)
+    caveat: Mapped[str | None] = mapped_column(String)
+    stats: Mapped[dict | None] = mapped_column(JSONB)     # card stat line + league percentiles
+    features: Mapped[dict | None] = mapped_column(JSONB)  # model inputs, for attribution/display
+    model_version: Mapped[str] = mapped_column(String(48))
+    computed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class PlayerRationale(Base):
     """A grounded, cited natural-language verdict fusing the model's value gap with the scouting signal.
 
