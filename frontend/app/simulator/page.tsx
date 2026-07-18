@@ -17,7 +17,8 @@ import { VerdictPill } from '@/components/ui/VerdictPill';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
 import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
-import { fmtM, fmtPct, gapLabel, gapTone, signed } from '@/lib/utils';
+import { classifyGap } from '@/lib/present';
+import { fmtM, fmtPct, signed } from '@/lib/utils';
 import { teamVisual } from '@/lib/teamVisuals';
 
 // ---- Slider -------------------------------------------------------
@@ -425,7 +426,7 @@ function SimulatorContent() {
   // teal = priced at model value (calibration, not a verdict), brand orange
   // while there's no reading yet.
   const simGap = displayResult?.value_gap_pct ?? null;
-  const simTone = gapTone(simGap);
+  const simTone = classifyGap(simGap).tone;
   const simVerdictColor =
     simGap == null ? 'var(--accent)'
     : simTone === 'positive' ? 'var(--positive)'
@@ -641,7 +642,7 @@ function SimulatorContent() {
                         <StatTile
                           label="Value gap"
                           value={displayResult.value_gap_pct != null ? signed(displayResult.value_gap_pct) + '%' : '—'}
-                          sub={displayResult.value_gap_pct != null ? gapLabel(displayResult.value_gap_pct) : 'No valuation'}
+                          sub={displayResult.value_gap_pct != null ? classifyGap(displayResult.value_gap_pct).label : 'No valuation'}
                           valueTone={simTone}
                           delta={undefined}
                           size="md"

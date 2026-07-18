@@ -11,8 +11,6 @@ import {
 import {
   ArrowLeftRight,
   Check,
-  CircleAlert,
-  CircleCheck,
   LoaderCircle,
   Plus,
   Search,
@@ -30,7 +28,7 @@ import {
   type TradeTeamWorkspace,
   type TradeWorkspacePlayer,
 } from '@/lib/api';
-import { CapBar, CAP_TIER_LABEL } from '@/components/cap/CapBar';
+import { CapBar } from '@/components/cap/CapBar';
 import { Alert } from '@/components/ui/Alert';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
@@ -41,31 +39,10 @@ import { LoadingNote } from '@/components/ui/LoadingNote';
 import { Panel } from '@/components/ui/Panel';
 import { Select } from '@/components/ui/Select';
 import { TeamLogo } from '@/components/ui/TeamLogo';
+import { CAP_TIER_LABEL, TIER_RANK, fmtSignedM, tierIcon, tierTone } from '@/lib/present';
 import { fmtM, signed } from '@/lib/utils';
 
 const SEASON = '2026-27';
-
-function fmtSignedM(value: number): string {
-  if (value === 0) return '$0';
-  return `${value > 0 ? '+' : '−'}${fmtM(Math.abs(value))}`;
-}
-
-function tierTone(tier: CapTier): 'positive' | 'warning' | 'negative' {
-  return tier === 'below-tax' ? 'positive' : tier === 'second-apron' ? 'negative' : 'warning';
-}
-
-function tierIcon(tier: CapTier) {
-  if (tier === 'below-tax') return <CircleCheck size={14} />;
-  if (tier === 'second-apron') return <CircleAlert size={14} />;
-  return <TriangleAlert size={14} />;
-}
-
-const TIER_RANK: Record<CapTier, number> = {
-  'below-tax': 0,
-  taxpayer: 1,
-  'first-apron': 2,
-  'second-apron': 3,
-};
 
 function capTransition(before: CapTier, after: CapTier): string {
   if (before === after) return `Remains ${CAP_TIER_LABEL[after].toLowerCase()}`;

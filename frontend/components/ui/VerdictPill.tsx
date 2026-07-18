@@ -1,4 +1,5 @@
-import { gapLabel, gapTone, signed } from '@/lib/utils';
+import { classifyGap } from '@/lib/present';
+import { signed } from '@/lib/utils';
 
 interface VerdictPillProps {
   gapPct: number | null;
@@ -14,8 +15,8 @@ const SIZE = {
 };
 
 export function VerdictPill({ gapPct, size = 'md', label, tone: toneOverride }: VerdictPillProps) {
-  const tone = toneOverride ?? gapTone(gapPct);
-  const displayLabel = label ?? gapLabel(gapPct);
+  const tone = toneOverride ?? classifyGap(gapPct).tone;
+  const displayLabel = label ?? classifyGap(gapPct).label;
   const s = SIZE[size];
 
   const colors = {
