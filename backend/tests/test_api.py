@@ -5,21 +5,12 @@ from fastapi.testclient import TestClient
 
 import scoutiq.api.routers.headshots as headshots_router
 import scoutiq.api.routers.players as players_router
+from scoutiq.api.season import LATEST_SEASON
+from fakes import FakeScalarResult
 import scoutiq.api.valuation as valuation_module
 from scoutiq.api.deps import get_db
 from scoutiq.api.main import app
 from scoutiq.models import CapConstants, Contract, ContractYear, Player, PlayerSalary, PlayerSeason, Team
-
-
-class FakeScalarResult:
-    def __init__(self, values):
-        self.values = values
-
-    def all(self):
-        return self.values
-
-    def first(self):
-        return self.values[0] if self.values else None
 
 
 class FakeDB:
@@ -578,7 +569,7 @@ def test_stat_percentiles_use_mid_rank_and_skip_small_peer_sets():
         )
 
     def _stats(pts):
-        return players_router.PlayerCardStats(
+        return valuation_module.PlayerCardStats(
             gp=None, mpg=None, pts_pg=pts, reb_pg=None, ast_pg=None, ts_pct=None, bpm=None,
         )
 
@@ -814,7 +805,7 @@ def test_health_exposes_current_season():
     body = response.json()
     assert body["status"] == "ok"
     # current_season is the UI's source of truth; it must mirror LATEST_SEASON.
-    assert body["current_season"] == players_router.LATEST_SEASON
+    assert body["current_season"] == LATEST_SEASON
 
 
 def test_player_headshot_fetches_and_caches_image(monkeypatch, tmp_path):

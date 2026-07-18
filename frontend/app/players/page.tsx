@@ -21,22 +21,9 @@ import { LoadingNote } from '@/components/ui/LoadingNote';
 import { Select } from '@/components/ui/Select';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { fmtM, fmtPct, gapLabel, gapTone, signed } from '@/lib/utils';
-
-type GapTone = 'positive' | 'negative' | 'neutral' | 'warning';
-
-const TONE_COLOR: Record<GapTone, string> = {
-  positive: 'var(--positive)',
-  negative: 'var(--negative)',
-  neutral: 'var(--text-secondary)',
-  warning: 'var(--warning)',
-};
-const TONE_TEXT: Record<GapTone, string> = {
-  positive: 'var(--positive-text)',
-  negative: 'var(--negative-text)',
-  neutral: 'var(--text-secondary)',
-  warning: 'var(--warning-text)',
-};
+import { Tone, classifyGap, toneColor, toneText } from '@/lib/present';
+import { fmtM, fmtPct, signed } from '@/lib/utils';
+import { useApi } from '@/lib/useApi';
 
 function CountUpPct({
   value, decimals = 1, withSign = false, style, className,
@@ -53,14 +40,14 @@ function CountUpPct({
 // the pay marker and the band is the bargain/overpay story.
 function ValuePayGauge({
   value, lo, hi, pay, tone,
-}: { value: number; lo: number; hi: number; pay: number | null; tone: GapTone }) {
+}: { value: number; lo: number; hi: number; pay: number | null; tone: Tone }) {
   const domainMax = Math.max(hi, value, pay ?? 0) * 1.12 || 6;
   const pct = (x: number) => Math.max(0, Math.min(100, (x / domainMax) * 100));
   const bandLeft = pct(lo);
   const bandWidth = Math.max(pct(hi) - bandLeft, 1.5);
   const valuePos = pct(value);
   const payPos = pay != null ? pct(pay) : null;
-  const payColor = TONE_COLOR[tone];
+  const payColor = toneColor(tone);
 
   return (
     <div className="siq-players-gauge-wrap">
@@ -155,8 +142,8 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
   const team = player.current_team ?? player.latest_stats_team;
   const valuation = player.valuation_status === 'ready' ? player.valuation : undefined;
   const gap = valuation?.gap_pct ?? null;
-  const tone: GapTone = valuation?.verdict_tone ?? gapTone(gap);
-  const accent = gap == null ? 'var(--border-strong)' : TONE_COLOR[tone];
+  const tone: Tone = valuation?.verdict_tone ?? classifyGap(gap).tone;
+  const accent = gap == null ? 'var(--border-strong)' : toneColor(tone);
   const valueUsd = valuation?.salary_cap != null
     ? (valuation.value_pct / 100) * valuation.salary_cap
     : null;
@@ -183,15 +170,15 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
           <>
             {/* Verdict + hero gap */}
             <div className="siq-case-card__verdict">
-              <span className="siq-players-verdict-label" style={{ color: TONE_TEXT[tone] }}>
-                {valuation.verdict_label ?? gapLabel(gap)}
+              <span className="siq-players-verdict-label" style={{ color: toneText(tone) }}>
+                {valuation.verdict_label ?? classifyGap(gap).label}
               </span>
               {gap != null && (
                 <CountUpPct
                   value={gap}
                   withSign
                   className="siq-players-verdict-gap"
-                  style={{ color: TONE_COLOR[tone] }}
+                  style={{ color: toneColor(tone) }}
                 />
               )}
             </div>
@@ -206,7 +193,7 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
 
             <div className="siq-case-card__metrics">
               <MetricCell label="value" dotColor="var(--confidence)" pct={valuation.value_pct} usd={valueUsd} />
-              <MetricCell label="pay" dotColor={TONE_COLOR[tone]} pct={valuation.actual_pct} usd={valuation.actual_usd} align="right" />
+              <MetricCell label="pay" dotColor={toneColor(tone)} pct={valuation.actual_pct} usd={valuation.actual_usd} align="right" />
             </div>
 
             {valuation.stats && <CardStatLine stats={valuation.stats} />}
@@ -245,7 +232,6 @@ function PlayersContent() {
   const q = searchParams.get('q') ?? '';
 
   const [draftQuery, setDraftQuery] = useState(q);
-  const [watchlist, setWatchlist] = useState<PlayerWatchlistResponse | null>(null);
   const bucketParam = searchParams.get('bucket');
   const [bucket, setBucket] = useState<WatchlistBucket>(
     bucketParam === 'underpaid' || bucketParam === 'overpaid' ? bucketParam : 'all',
@@ -254,8 +240,6 @@ function PlayersContent() {
   const [position, setPosition] = useState('');
   const [qualifiedOnly, setQualifiedOnly] = useState(true);
   const [offset, setOffset] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraftQuery(q);
@@ -274,41 +258,19 @@ function PlayersContent() {
     setOffset(0);
   }, [q, bucket, sort, position, qualifiedOnly]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const controller = new AbortController();
-
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await getPlayerWatchlist({
-          query: q || undefined,
-          bucket,
-          sort,
-          position: position || undefined,
-          qualifiedOnly,
-          limit: PAGE_SIZE,
-          offset,
-        }, controller.signal);
-        if (cancelled) return;
-        setWatchlist(response);
-        setLoading(false);
-      } catch (e: unknown) {
-        if (cancelled) return;
-        if (e instanceof DOMException && e.name === 'AbortError') return;
-        setError(e instanceof Error ? e.message : 'Failed to load players.');
-        setWatchlist(null);
-        setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [q, bucket, sort, position, qualifiedOnly, offset]);
+  const { data: watchlist, loading, error } = useApi<PlayerWatchlistResponse>(
+    (signal) => getPlayerWatchlist({
+      query: q || undefined,
+      bucket,
+      sort,
+      position: position || undefined,
+      qualifiedOnly,
+      limit: PAGE_SIZE,
+      offset,
+    }, signal),
+    [q, bucket, sort, position, qualifiedOnly, offset],
+    { fallback: 'Failed to load players.' },
+  );
 
   const players = watchlist?.items ?? [];
   const total = watchlist?.total ?? 0;

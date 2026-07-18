@@ -47,8 +47,10 @@ import { TeamLogo } from '@/components/ui/TeamLogo';
 import { ValueGauge } from '@/components/players/ValueGauge';
 import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
 import { PlayerCutout } from '@/components/players/PlayerCutout';
+import { traitLabel } from '@/lib/present';
 import { clamp, fmtM, fmtPct, pctPosition, roundedDomainMax, signed } from '@/lib/utils';
 import { teamVisual } from '@/lib/teamVisuals';
+import { useApi } from '@/lib/useApi';
 
 function StatRow({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
@@ -107,14 +109,6 @@ function formatFeatureValue(key: string, value: number): { label: string; format
   const meta = FEATURE_META[key];
   if (meta) return { label: meta.label, formatted: meta.fmt(value) };
   return { label: key.replace(/_/g, ' '), formatted: value.toFixed(2) };
-}
-
-function traitLabel(trait: string): string {
-  if (trait === 'basketball_iq') return 'Basketball IQ';
-  return trait
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
 }
 
 function ScoutTraitRow({ trait }: { trait: PlayerScoutTraitRating }) {
@@ -497,11 +491,12 @@ function MetricPlate({
   label: string;
   value: string;
   sub?: string;
-  tone?: 'positive' | 'negative' | 'neutral';
+  tone?: 'positive' | 'negative' | 'neutral' | 'warning';
 }) {
   const accent = tone === 'positive'
     ? 'var(--positive-text)'
-    : tone === 'negative' ? 'var(--negative-text)' : undefined;
+    : tone === 'negative' ? 'var(--negative-text)'
+    : tone === 'warning' ? 'var(--warning-text)' : undefined;
   return (
     <div
       className="siq-metric-plate"
@@ -773,7 +768,7 @@ function FrontOfficeRead({
   scoutRatings: PlayerScoutRatingsResponse | null;
 }) {
   const topMatch = similarMarket?.results[0];
-  const gapTone = val.gap_pct == null ? 'neutral' : val.gap_pct >= 0 ? 'positive' : 'negative';
+  const gapTone = val.verdict_tone;
   const scoutTop = scoutRatings?.traits[0];
   const marketGaugeDomainMaxPct = roundedDomainMax([
       val.value_pct ?? 0,
@@ -1130,7 +1125,6 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   const playerId = Number(id);
   const router = useRouter();
 
-  const [val, setVal] = useState<ValuationResponse | null>(null);
   const [contract, setContract] = useState<PlayerContractResponse | null>(null);
   const [contractError, setContractError] = useState<string | null>(null);
   const [similarMode, setSimilarMode] = useState<SimilarPlayersMode>('twins');
@@ -1139,16 +1133,14 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('brief');
   const [scoutRatings, setScoutRatings] = useState<PlayerScoutRatingsResponse | null>(null);
   const [scoutError, setScoutError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  const { data: val, loading, error } = useApi<ValuationResponse>(
+    (signal) => getValuation(playerId, undefined, signal),
+    [playerId],
+    { fallback: 'Failed to load valuation.' },
+  );
 
   useEffect(() => {
-    setLoading(true);
-    getValuation(playerId)
-      .then(setVal)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load valuation.'))
-      .finally(() => setLoading(false));
-
     setContract(null);
     setContractError(null);
     getPlayerContract(playerId)

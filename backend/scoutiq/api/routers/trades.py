@@ -8,12 +8,12 @@ from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 
+from scoutiq.api import rosters
 from scoutiq.api.cap import SeasonCapData, cap_for, classify_tier, load_season_caps
 from scoutiq.api.deps import DB
 from scoutiq.api.roster_fit import load_fit_context, needs_response
-from scoutiq.api.routers.players import LATEST_SEASON, TeamSummary, _team_summary
-from scoutiq.api.routers.teams import CAVEAT, team_cap_hits
-from scoutiq.api.season import is_valid_season
+from scoutiq.api.rosters import CAVEAT, TeamSummary
+from scoutiq.api.season import LATEST_SEASON, is_valid_season
 from scoutiq.api.trades import overall_status, salary_match
 from scoutiq.api.valuation import value_players
 from scoutiq.model.roster_fit import profile_roster
@@ -137,7 +137,7 @@ def _load_trade_workspaces(
         .order_by(Player.current_team_id, Player.full_name)
     ).all()
     player_ids = [player.player_id for player in roster]
-    cap_hits, pay_sources = team_cap_hits(db, player_ids, season)
+    cap_hits, pay_sources = rosters.team_cap_hits(db, player_ids, season)
     players_by_team: dict[int, list[TradeWorkspacePlayer]] = {team_id: [] for team_id in missing}
     for player in roster:
         cap_hit = cap_hits.get(player.player_id)
@@ -155,7 +155,7 @@ def _load_trade_workspaces(
         players.sort(key=lambda player: (player.cap_hit_usd or 0, player.full_name), reverse=True)
         payroll = sum(player.cap_hit_usd or 0 for player in players)
         workspace = TradeTeamWorkspace(
-            team=_team_summary(team_by_id[team_id]),
+            team=rosters.team_summary(team_by_id[team_id]),
             season=season,
             is_projected_cap=cap.is_projected,
             cap_context=TradeCapContext(

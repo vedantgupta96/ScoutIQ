@@ -12,7 +12,9 @@ from scoutiq.api import free_agency as fa
 from scoutiq.api.cap_simulator import SeasonCapData
 from scoutiq.api.deps import get_db
 from scoutiq.api.main import app
-from scoutiq.api.routers.players import PlayerSummary
+from scoutiq.api import rosters
+from scoutiq.api.rosters import PlayerSummary
+from fakes import FakeScalarResult
 from scoutiq.api.valuation import Valuation
 from scoutiq.model.roster_fit import CandidateFit
 from scoutiq.models import ContractYear, FreeAgentRight, Player, PlayerSeason, Team
@@ -21,10 +23,8 @@ LAL_ID = 1610612747
 
 
 # --------------------------------------------------------------------------- pure logic
-def test_prev_and_expiry_and_entering_season():
-    assert fa.prev_season("2026-27") == "2025-26"
-    assert fa.prev_season("2000-01") == "1999-00"
-    assert fa.prev_season("bogus") is None
+def test_expiry_and_entering_season():
+    # prev_season now lives in scoutiq.api.season and is covered by test_season.py.
     assert fa.expiry_season("2024-25", 4) == "2027-28"
     assert fa.expiry_season("2025-26", 1) == "2025-26"
     assert fa.expiry_season("2025-26", 0) is None
@@ -117,7 +117,7 @@ PREDS = {
 def _patch_common(monkeypatch, pool=POOL):
     monkeypatch.setattr(far, "_assemble_pool", lambda db, entering, **kw: list(pool))
     monkeypatch.setattr(far, "load_season_caps", lambda db: dict(CAPS))
-    monkeypatch.setattr(far, "_batched_summaries", lambda players, db: dict(SUMMARIES))
+    monkeypatch.setattr(rosters, "batched_summaries", lambda players, db: dict(SUMMARIES))
     # value by player_id so filtering (e.g. options-only) can't misalign predictions
     monkeypatch.setattr(
         far, "_value_pool",
@@ -138,17 +138,11 @@ class _FakeDB:
 
     def scalars(self, stmt):
         sql = str(stmt)
-
-        class _R:
-            def __init__(self, v): self.v = v
-            def all(self_inner): return self_inner.v
-            def first(self_inner): return self_inner.v[0] if self_inner.v else None
-
         if "FROM free_agent_rights" in sql:
-            return _R(self._rights)
+            return FakeScalarResult(self._rights)
         if "FROM teams" in sql:
-            return _R(self._rights_teams)
-        return _R(self._roster if "current_team_id" in sql else [])
+            return FakeScalarResult(self._rights_teams)
+        return FakeScalarResult(self._roster if "current_team_id" in sql else [])
 
 
 def _client(fake_db):
@@ -239,7 +233,7 @@ def test_options_attaches_verdict(monkeypatch):
 # --------------------------------------------------------------------------- team targets
 def test_team_targets_room_and_fit(monkeypatch):
     _patch_common(monkeypatch)
-    monkeypatch.setattr(far, "team_cap_hits", lambda db, ids, season: ({1: 50_000_000, 2: 30_000_000}, {}))
+    monkeypatch.setattr(rosters, "team_cap_hits", lambda db, ids, season: ({1: 50_000_000, 2: 30_000_000}, {}))
     team = Team(team_id=LAL_ID, abbreviation="LAL", name="Los Angeles Lakers")
     fake = _FakeDB(team=team, roster=[Player(player_id=1, current_team_id=LAL_ID)])
 
@@ -260,7 +254,7 @@ def test_team_targets_room_and_fit(monkeypatch):
 def test_team_targets_include_hold_without_double_counting_contracted_player(monkeypatch):
     _patch_common(monkeypatch)
     monkeypatch.setattr(
-        far,
+        rosters,
         "team_cap_hits",
         lambda db, ids, season: ({1: 50_000_000, 2: 30_000_000}, {}),
     )
@@ -299,7 +293,7 @@ def test_team_targets_include_hold_without_double_counting_contracted_player(mon
 def test_team_targets_fit_sort_and_staged_roster_overrides(monkeypatch):
     _patch_common(monkeypatch)
     monkeypatch.setattr(
-        far,
+        rosters,
         "team_cap_hits",
         lambda db, ids, season: ({1: 50_000_000, 2: 30_000_000}, {}),
     )

@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from scoutiq.api.routers.players import LATEST_SEASON
+from scoutiq.api.season import LATEST_SEASON
 
 router = APIRouter()
 

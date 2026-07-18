@@ -13,26 +13,18 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from scoutiq.api import rosters
 from scoutiq.api.cap import apron_values, classify_tier, room_to_lines
 from scoutiq.api.deps import DB
 from scoutiq.api.roster_fit import TeamNeedsResponse, load_fit_context, needs_response
-from scoutiq.api.season import is_valid_season
-from scoutiq.api.routers.players import (
-    LATEST_SEASON,
-    PlayerSummary,
-    TeamSummary,
-    _batched_summaries,
-    _team_summary,
-)
+from scoutiq.api.rosters import CAVEAT, PlayerSummary, TeamSummary
+from scoutiq.api.season import LATEST_SEASON, is_valid_season
 from scoutiq.api.valuation import classify_gap, value_players
 from scoutiq.model.roster_fit import profile_roster
 from scoutiq.config import settings
 from scoutiq.models import (
     CapConstants,
-    Contract,
-    ContractYear,
     Player,
-    PlayerSalary,
     PlayerSeason,
     Team,
 )
@@ -43,14 +35,6 @@ LOGO_CACHE_DIR = settings.RAW_DIR / "team_logos"
 LOGO_CDN_URL = "https://cdn.nba.com/logos/nba/{team_id}/primary/L/logo.svg"
 LOGO_HEADERS = {"User-Agent": "ScoutIQ/0.1 (personal portfolio research; contact via github)"}
 LOGO_CACHE_SECONDS = 604_800  # 7 days
-
-CAVEAT = (
-    "Roster is derived from each player's current-team flag and may be incomplete or lag "
-    "mid-season trades. Cap hit is the contract year where available, else realized salary "
-    "(see pay_source). Excludes dead money, cap holds, incomplete-roster charges, "
-    "two-way/Exhibit-10 deals, trade exceptions, Bird rights, luxury tax owed, and the "
-    "repeater tax."
-)
 
 
 @router.get("/{team_id}/logo")
@@ -138,45 +122,6 @@ class TeamCapSheetResponse(BaseModel):
     caveat: str
 
 
-def team_cap_hits(
-    db: DB, player_ids: list[int], season: str
-) -> tuple[dict[int, int], dict[int, str]]:
-    """Per-player cap hit for `season` and where it came from.
-
-    Precedence: the contract year for the season (later contracts win), else the
-    realized salary. Shared by the team cap sheet and the simulator's apron overlay so
-    both price a roster the same way. Returns (cap_hit_by_player, pay_source_by_player).
-    """
-    cap_hit_by_player: dict[int, int] = {}
-    pay_source_by_player: dict[int, str] = {}
-    if not player_ids:
-        return cap_hit_by_player, pay_source_by_player
-
-    contract_rows = db.execute(
-        select(ContractYear, Contract.player_id)
-        .join(Contract, Contract.id == ContractYear.contract_id)
-        .where(Contract.player_id.in_(player_ids))
-        .where(ContractYear.season == season)
-        .order_by(Contract.season_start)
-    ).all()
-    for cy, pid in contract_rows:
-        if cy.aav is not None:
-            cap_hit_by_player[pid] = cy.aav
-            pay_source_by_player[pid] = "contract"
-
-    salary_rows = db.scalars(
-        select(PlayerSalary)
-        .where(PlayerSalary.player_id.in_(player_ids))
-        .where(PlayerSalary.season == season)
-    ).all()
-    for sr in salary_rows:
-        if sr.player_id not in cap_hit_by_player and sr.salary is not None:
-            cap_hit_by_player[sr.player_id] = sr.salary
-            pay_source_by_player[sr.player_id] = "salary"
-
-    return cap_hit_by_player, pay_source_by_player
-
-
 @router.get("", response_model=list[TeamListItem])
 def list_teams(db: DB = None):
     """All teams, ordered by name — drives the war-room picker."""
@@ -209,7 +154,7 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     player_ids = [p.player_id for p in roster]
     # Batch every player's summary (latest season + team) in two queries instead
     # of one latest-season lookup per rostered player inside the loop below.
-    summaries = _batched_summaries(roster, db)
+    summaries = rosters.batched_summaries(roster, db)
 
     cap_row = db.scalars(select(CapConstants).where(CapConstants.season == target)).first()
     salary_cap = cap_row.salary_cap if cap_row else None
@@ -217,7 +162,7 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     first_apron, second_apron = apron_values(cap_row)
 
     # Cap hit precedence: contract year for the season (later contracts win), else realized salary.
-    cap_hit_by_player, pay_source_by_player = team_cap_hits(db, player_ids, target)
+    cap_hit_by_player, pay_source_by_player = rosters.team_cap_hits(db, player_ids, target)
 
     # season_rows stays for age only; value_players batches the model value itself.
     season_rows = (
@@ -304,7 +249,7 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
         top_overpay = None
 
     return TeamCapSheetResponse(
-        team=_team_summary(team),
+        team=rosters.team_summary(team),
         season=target,
         cap_context=TeamCapContext(
             season=target,
@@ -352,6 +297,6 @@ def get_team_needs(team_id: int, season: str | None = None, db: DB = None):
         player.player_id
         for player in db.scalars(select(Player).where(Player.current_team_id == team_id)).all()
     ]
-    cap_hits, _ = team_cap_hits(db, roster_ids, target)
+    cap_hits, _ = rosters.team_cap_hits(db, roster_ids, target)
     context = load_fit_context(db, LATEST_SEASON)
     return needs_response(profile_roster(context, set(cap_hits)), LATEST_SEASON)
