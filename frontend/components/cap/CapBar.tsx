@@ -1,24 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { capTier, fmtM } from '@/lib/utils';
-
-export type CapTierKey = 'below-tax' | 'taxpayer' | 'first-apron' | 'second-apron';
-
-export const CAP_TIER_LABEL: Record<CapTierKey, string> = {
-  'below-tax': 'Under tax',
-  'taxpayer': 'Over tax',
-  'first-apron': 'First apron',
-  'second-apron': 'Second apron',
-};
-
-export function capTierBadgeTone(tier: CapTierKey): 'positive' | 'warning' | 'negative' {
-  return tier === 'below-tax' ? 'positive' : tier === 'taxpayer' ? 'warning' : 'negative';
-}
+import type { CapTier } from '@/lib/api';
+import { capTier } from '@/lib/present';
+import { fmtM } from '@/lib/utils';
 
 // Vivid fill + danger glow that intensifies as the figure climbs through the
 // tax line and the two aprons. Chrome stays quiet; the bar carries the alarm.
-const TIER_FILL: Record<CapTierKey, { fill: string; glow: string }> = {
+const TIER_FILL: Record<CapTier, { fill: string; glow: string }> = {
   'below-tax':    { fill: 'linear-gradient(90deg, var(--teal-500), var(--green-500))',   glow: '0 0 7px rgba(31,190,116,0.28)' },
   'taxpayer':     { fill: 'linear-gradient(90deg, var(--amber-500), var(--amber-600))',  glow: '0 0 8px rgba(236,178,46,0.40)' },
   'first-apron':  { fill: 'linear-gradient(90deg, var(--amber-500), var(--orange-500))', glow: '0 0 9px rgba(244,98,31,0.42)' },
@@ -58,7 +47,7 @@ export function CapBar({
   const ap1Pct = (firstApron / MAX_USD) * 100;
   const ap2Pct = (secondApron / MAX_USD) * 100;
 
-  const tier = capTier(value, taxLine, firstApron, secondApron) as CapTierKey;
+  const tier = capTier(value, taxLine, firstApron, secondApron) as CapTier;
   const { fill, glow } = TIER_FILL[tier];
   const markerTop = -5;
   const markerHeight = height + 10;

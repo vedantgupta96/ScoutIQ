@@ -22,6 +22,7 @@ import { DecisionStrip } from '@/components/ui/DecisionStrip';
 import { LoadingNote } from '@/components/ui/LoadingNote';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
+import { traitLabel } from '@/lib/present';
 import { fmtPct, signed } from '@/lib/utils';
 
 // Default leaderboard qualification floor: real rotation players only, so small-sample
@@ -93,14 +94,6 @@ function CalRow({ nominal, empirical, halfWidthPct }: { nominal: number; empiric
 
 function fmtRate(value: number | undefined): string {
   return value == null ? '—' : `${(value * 100).toFixed(1)}%`;
-}
-
-function traitLabel(trait: string): string {
-  if (trait === 'basketball_iq') return 'Basketball IQ';
-  return trait
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
 }
 
 function RatingPill({ rating }: { rating: ScoutRatingRow }) {

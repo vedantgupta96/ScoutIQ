@@ -35,12 +35,13 @@ import { Button, ButtonLink } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Select';
 import { Panel } from '@/components/ui/Panel';
-import { CapBar, CAP_TIER_LABEL, CapTierKey, capTierBadgeTone } from '@/components/cap/CapBar';
+import { CapBar } from '@/components/cap/CapBar';
 import { DecisionStrip } from '@/components/ui/DecisionStrip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingNote } from '@/components/ui/LoadingNote';
 import { TeamLogo } from '@/components/ui/TeamLogo';
 import { RosterNeeds } from '@/components/teams/RosterNeeds';
+import { CAP_TIER_LABEL, fmtSignedM, tierTone } from '@/lib/present';
 import { fmtM, fmtPct, signed } from '@/lib/utils';
 import { teamVisual } from '@/lib/teamVisuals';
 
@@ -70,11 +71,6 @@ const SEASONS = [
 
 function cappedValue(value: number | null | undefined): number {
   return Math.min(35, Math.max(1, Math.round((value ?? 10) * 2) / 2));
-}
-
-function moneyDelta(value: number): string {
-  if (value === 0) return '$0';
-  return `${value > 0 ? '+' : '−'}${fmtM(Math.abs(value))}`;
 }
 
 function moveLabel(move: OffseasonMoveResponse): string {
@@ -252,7 +248,7 @@ function SeasonLedger({ plan }: { plan: OffseasonPlanResponse }) {
       </div>
       <div className="siq-offseason-ledger">
         {plan.seasons.map((season) => {
-          const tier = season.tier_after as CapTierKey;
+          const tier = season.tier_after;
           return (
             <div className="siq-offseason-season" key={season.season}>
               <div className="siq-offseason-season-metrics">
@@ -263,10 +259,10 @@ function SeasonLedger({ plan }: { plan: OffseasonPlanResponse }) {
                 <span className="ds-tnum" data-label="Baseline">{fmtM(season.baseline_payroll_usd)}</span>
                 <span className="ds-tnum" data-label="Plan"><strong>{fmtM(season.payroll_after_usd)}</strong></span>
                 <span className="ds-tnum" data-label="Delta" style={{ color: season.payroll_delta_usd > 0 ? 'var(--negative-text)' : season.payroll_delta_usd < 0 ? 'var(--positive-text)' : 'var(--text-muted)' }}>
-                  {moneyDelta(season.payroll_delta_usd)}
+                  {fmtSignedM(season.payroll_delta_usd)}
                 </span>
                 <span className="siq-offseason-tier" data-label="Tier">
-                  <Badge tone={capTierBadgeTone(tier)} size="sm">{CAP_TIER_LABEL[tier]}</Badge>
+                  <Badge tone={tierTone(tier)} size="sm">{CAP_TIER_LABEL[tier]}</Badge>
                 </span>
               </div>
               <CapBar
@@ -450,7 +446,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
           teamAccent
           eyebrow={`${season} plan`}
           icon={<Shield size={15} />}
-          action={<Badge tone={capTierBadgeTone(firstYear.tier_after as CapTierKey)}>{CAP_TIER_LABEL[firstYear.tier_after as CapTierKey]}</Badge>}
+          action={<Badge tone={tierTone(firstYear.tier_after)}>{CAP_TIER_LABEL[firstYear.tier_after]}</Badge>}
         >
           <div className="siq-offseason-hero">
             <div className="siq-offseason-team">
@@ -462,7 +458,7 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
             </div>
             <div className="siq-offseason-hero-payroll">
               <strong className={`ds-tnum${planLoading ? ' siq-offseason-updating' : ''}`}>{fmtM(firstYear.payroll_after_usd)}</strong>
-              <span className="ds-tnum">{moneyDelta(firstYear.payroll_delta_usd)} vs baseline</span>
+              <span className="ds-tnum">{fmtSignedM(firstYear.payroll_delta_usd)} vs baseline</span>
               <span className="ds-note ds-tnum">{fmtM(firstYear.contract_payroll_after_usd)} contracts · {fmtM(firstYear.cap_holds_after_usd)} holds · {fmtM(firstYear.incomplete_roster_charges_after_usd)} roster charges</span>
             </div>
           </div>
@@ -479,8 +475,8 @@ function PlannerWorkspace({ teamId, season }: { teamId: number; season: string }
             ariaLabel={`${plan.team.name ?? plan.team.abbreviation} offseason decision status`}
             lead={{
               label: stagedDecisionCount ? 'Plan consequence' : 'Baseline decision state',
-              value: firstYear.crosses_a_line ? `Crosses into ${CAP_TIER_LABEL[firstYear.tier_after as CapTierKey]}` : `${CAP_TIER_LABEL[firstYear.tier_after as CapTierKey]} maintained`,
-              detail: `${stagedDecisionCount} staged ${stagedDecisionCount === 1 ? 'decision' : 'decisions'} · ${moneyDelta(firstYear.payroll_delta_usd)} versus baseline`,
+              value: firstYear.crosses_a_line ? `Crosses into ${CAP_TIER_LABEL[firstYear.tier_after]}` : `${CAP_TIER_LABEL[firstYear.tier_after]} maintained`,
+              detail: `${stagedDecisionCount} staged ${stagedDecisionCount === 1 ? 'decision' : 'decisions'} · ${fmtSignedM(firstYear.payroll_delta_usd)} versus baseline`,
               tone: firstYear.crosses_a_line ? 'warning' : stagedDecisionCount ? 'confidence' : 'neutral',
             }}
             items={[

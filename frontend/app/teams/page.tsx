@@ -21,7 +21,8 @@ import { Avatar } from '@/components/ui/Avatar';
 import { TeamLogo } from '@/components/ui/TeamLogo';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
-import { CapBar, CAP_TIER_LABEL, capTierBadgeTone, CapTierKey } from '@/components/cap/CapBar';
+import { CapBar } from '@/components/cap/CapBar';
+import { CAP_TIER_LABEL, gapColor, tierTone } from '@/lib/present';
 import { fmtM, fmtPct, roundedDomainMax, signed } from '@/lib/utils';
 import { teamVisual } from '@/lib/teamVisuals';
 
@@ -32,13 +33,6 @@ const SORTS: Array<{ value: RosterSort; label: string }> = [
   { value: 'value', label: 'Model value' },
   { value: 'name', label: 'Name (A–Z)' },
 ];
-
-function gapColor(gap: number | null): string {
-  if (gap == null) return 'var(--text-muted)';
-  if (gap >= 1) return 'var(--positive-text)';
-  if (gap <= -1) return 'var(--negative-text)';
-  return 'var(--text-secondary)';
-}
 
 function RoomLine({ label, room }: { label: string; room: number | null }) {
   if (room == null) return null;
@@ -104,7 +98,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
   const [sort, setSort] = useState<RosterSort>('cap');
   const ctx = sheet.cap_context;
   const totals = sheet.totals;
-  const tier = ctx.tier as CapTierKey;
+  const tier = ctx.tier;
   const visual = teamVisual(sheet.team.abbreviation);
 
   const players = useMemo(() => {
@@ -160,7 +154,7 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
               <h1 className="siq-teams-title">
                 {sheet.team.name ?? sheet.team.abbreviation ?? 'Team'}
               </h1>
-              <Badge tone={capTierBadgeTone(tier)} size="md">{CAP_TIER_LABEL[tier]}</Badge>
+              <Badge tone={tierTone(tier)} size="md">{CAP_TIER_LABEL[tier]}</Badge>
             </div>
           </div>
           <div className="ds-right">
