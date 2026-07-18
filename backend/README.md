@@ -45,7 +45,8 @@ python -m scoutiq.etl.load_salary_overrides       # tracked source-confirmed sal
 python -m scoutiq.etl.bridge_contract_salaries    # bridge 2025-26 cap hits into player_salaries
 python -m scoutiq.etl.check_contract_coverage     # audit players with stats but missing pay/contract rows
 python -m scoutiq.etl.check_coverage              # data-quality gate -> trainable row count
-python -m scoutiq.model.train                     # regenerate model.joblib + backtest artifacts
+python -m scoutiq.model.train                     # regenerate model.joblib + backtest artifacts, then republish valuations
+python -m scoutiq.model.publish_valuations        # precompute player_valuations (run after any ETL load without a retrain)
 python -m scoutiq.etl.load_scout_reports --limit 5  # Sonar scouting narratives (WORDS only; needs PERPLEXITY_API_KEY)
 python -m scoutiq.etl.extract_scout_ratings --eval-gate  # Claude trait extraction (needs ANTHROPIC_API_KEY + SCOUTIQ_LLM_MODEL)
 python -m scoutiq.etl.compare_rationale_cost --players 5 # cost: fusion vs multi_source rationale ($/rationale)

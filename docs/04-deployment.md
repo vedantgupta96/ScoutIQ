@@ -57,6 +57,19 @@ origin (or your stable preview alias) to `CORS_ORIGINS` on the backend.
 - **Data refreshes need no deploy.** ETL/backfills run locally against the same Neon DB,
   so new contracts/stats/scout reports appear in production immediately. Only a model
   retrain (new `model.joblib`) or code change requires a push.
+- **Valuations are precomputed.** The API serves `player_valuations` rows (published by
+  `python -m scoutiq.model.publish_valuations`; `model.train` chains it automatically) and
+  falls back to live inference only for unpublished player-seasons. After any ETL load
+  that skips a retrain, rerun the publish step — or let the weekly
+  `.github/workflows/republish-valuations.yml` safety net catch it (needs the
+  `DATABASE_URL` repo secret).
+- **Cold starts are handled by a keep-warm ping.** `.github/workflows/keep-warm.yml`
+  hits `/health` every 5 minutes once the `BACKEND_URL` repo variable is set, preventing
+  Neon autosuspend + platform idle from stacking multi-second first hits.
+- **Read responses are HTTP-cacheable.** GET endpoints return
+  `Cache-Control: public, max-age=300, stale-while-revalidate=3600`, and the frontend
+  additionally keeps a 5-minute in-memory GET cache — tab switches and back-navigation
+  don't refetch.
 - **Headshot cache is ephemeral.** The headshot proxy caches to local disk; platform
   restarts clear it and it re-fetches lazily. Harmless.
 - **Keys stay local.** `PERPLEXITY_API_KEY`/`ANTHROPIC_API_KEY` are for offline scripts;

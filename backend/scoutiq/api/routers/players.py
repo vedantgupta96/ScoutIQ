@@ -691,6 +691,7 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
         "verdict_tone": valuation.verdict_tone,
         "caution_flags": valuation.caution_flags,
         "caveat": valuation.caveat,
+        "computed_at": valuation.computed_at,
     }
 
 

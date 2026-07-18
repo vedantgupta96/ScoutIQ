@@ -373,4 +373,19 @@ def _write_report(metrics: dict, importance: pd.DataFrame, underpaid: pd.DataFra
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Train the valuation model and publish valuations.")
+    parser.add_argument(
+        "--skip-publish", action="store_true",
+        help="Skip republishing player_valuations after training (publish is the default "
+        "so the API always serves the artifact that was just trained).",
+    )
+    args = parser.parse_args()
     main()
+    if not args.skip_publish:
+        # New artifact means every stored valuation is stale — republish in the same run.
+        from scoutiq.model import publish_valuations
+
+        print("republishing player_valuations with the new artifact...")
+        publish_valuations.publish()

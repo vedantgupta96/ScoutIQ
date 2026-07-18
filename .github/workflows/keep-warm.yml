@@ -1,0 +1,27 @@
+# Prevents cold starts: Neon autosuspends after idle and the first request afterwards
+# pays DB wake-up + TLS connect (~2-4 s). A 5-minute health ping keeps the backend and
+# its DB connection pool warm. Requires the repo variable BACKEND_URL (e.g.
+# https://your-backend.up.railway.app); the job no-ops politely when it is unset.
+#
+# Note: GitHub schedules are best-effort (runs can lag a few minutes). If you want a
+# tighter or more reliable ping, an uptime monitor (UptimeRobot etc.) does the same job.
+name: keep-warm
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+        run: |
+          if [ -z "$BACKEND_URL" ]; then
+            echo "BACKEND_URL repo variable not set; skipping."
+            exit 0
+          fi
+          curl --fail --silent --show-error --max-time 30 "$BACKEND_URL/health"

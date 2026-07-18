@@ -27,7 +27,14 @@ function formatApiError(detail: unknown, fallback: string): string {
   return messages.length > 0 ? messages.join(' ') : fallback;
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+// Valuation-backed reads only change when the backend republishes (≈ daily), so GETs
+// are cached in memory for a few minutes: tab switches, filter round-trips, and
+// back-navigation render instantly instead of refetching. POSTs (simulator, trades,
+// offseason plans) are user-specific what-ifs and are never cached.
+const GET_CACHE_TTL_MS = 5 * 60 * 1000;
+const getCache = new Map<string, { expires: number; data: unknown }>();
+
+async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
@@ -44,6 +51,17 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(formatApiError(detail, res.statusText));
   }
   return res.json() as Promise<T>;
+}
+
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  if ((init?.method ?? 'GET') !== 'GET') return requestJson<T>(path, init);
+
+  const cached = getCache.get(path);
+  if (cached && cached.expires > Date.now()) return cached.data as T;
+
+  const data = await requestJson<T>(path, init);
+  getCache.set(path, { expires: Date.now() + GET_CACHE_TTL_MS, data });
+  return data;
 }
 
 type QueryValue = string | number | boolean | null | undefined;
@@ -98,6 +116,8 @@ export interface ValuationResponse {
   verdict_tone: 'positive' | 'negative' | 'neutral' | 'warning';
   caution_flags: string[];
   caveat: string | null;
+  /** When the served valuation was published; null when computed live on request. */
+  computed_at: string | null;
 }
 
 export interface ValuationAttribution {
