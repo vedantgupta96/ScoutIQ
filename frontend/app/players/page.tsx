@@ -23,6 +23,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Tone, classifyGap, toneColor, toneText } from '@/lib/present';
 import { fmtM, fmtPct, signed } from '@/lib/utils';
+import { useApi } from '@/lib/useApi';
 
 function CountUpPct({
   value, decimals = 1, withSign = false, style, className,
@@ -231,7 +232,6 @@ function PlayersContent() {
   const q = searchParams.get('q') ?? '';
 
   const [draftQuery, setDraftQuery] = useState(q);
-  const [watchlist, setWatchlist] = useState<PlayerWatchlistResponse | null>(null);
   const bucketParam = searchParams.get('bucket');
   const [bucket, setBucket] = useState<WatchlistBucket>(
     bucketParam === 'underpaid' || bucketParam === 'overpaid' ? bucketParam : 'all',
@@ -240,8 +240,6 @@ function PlayersContent() {
   const [position, setPosition] = useState('');
   const [qualifiedOnly, setQualifiedOnly] = useState(true);
   const [offset, setOffset] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraftQuery(q);
@@ -260,41 +258,19 @@ function PlayersContent() {
     setOffset(0);
   }, [q, bucket, sort, position, qualifiedOnly]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const controller = new AbortController();
-
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await getPlayerWatchlist({
-          query: q || undefined,
-          bucket,
-          sort,
-          position: position || undefined,
-          qualifiedOnly,
-          limit: PAGE_SIZE,
-          offset,
-        }, controller.signal);
-        if (cancelled) return;
-        setWatchlist(response);
-        setLoading(false);
-      } catch (e: unknown) {
-        if (cancelled) return;
-        if (e instanceof DOMException && e.name === 'AbortError') return;
-        setError(e instanceof Error ? e.message : 'Failed to load players.');
-        setWatchlist(null);
-        setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [q, bucket, sort, position, qualifiedOnly, offset]);
+  const { data: watchlist, loading, error } = useApi<PlayerWatchlistResponse>(
+    (signal) => getPlayerWatchlist({
+      query: q || undefined,
+      bucket,
+      sort,
+      position: position || undefined,
+      qualifiedOnly,
+      limit: PAGE_SIZE,
+      offset,
+    }, signal),
+    [q, bucket, sort, position, qualifiedOnly, offset],
+    { fallback: 'Failed to load players.' },
+  );
 
   const players = watchlist?.items ?? [];
   const total = watchlist?.total ?? 0;

@@ -50,6 +50,7 @@ import { PlayerCutout } from '@/components/players/PlayerCutout';
 import { traitLabel } from '@/lib/present';
 import { clamp, fmtM, fmtPct, pctPosition, roundedDomainMax, signed } from '@/lib/utils';
 import { teamVisual } from '@/lib/teamVisuals';
+import { useApi } from '@/lib/useApi';
 
 function StatRow({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
@@ -1124,7 +1125,6 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   const playerId = Number(id);
   const router = useRouter();
 
-  const [val, setVal] = useState<ValuationResponse | null>(null);
   const [contract, setContract] = useState<PlayerContractResponse | null>(null);
   const [contractError, setContractError] = useState<string | null>(null);
   const [similarMode, setSimilarMode] = useState<SimilarPlayersMode>('twins');
@@ -1133,16 +1133,14 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('brief');
   const [scoutRatings, setScoutRatings] = useState<PlayerScoutRatingsResponse | null>(null);
   const [scoutError, setScoutError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  const { data: val, loading, error } = useApi<ValuationResponse>(
+    (signal) => getValuation(playerId, undefined, signal),
+    [playerId],
+    { fallback: 'Failed to load valuation.' },
+  );
 
   useEffect(() => {
-    setLoading(true);
-    getValuation(playerId)
-      .then(setVal)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load valuation.'))
-      .finally(() => setLoading(false));
-
     setContract(null);
     setContractError(null);
     getPlayerContract(playerId)
