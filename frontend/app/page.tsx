@@ -7,6 +7,7 @@ import {
   BacktestResponse,
   PlayerCardResponse,
   PlayerValuationCautionsResponse,
+  PlayerWatchlistResponse,
   getBacktest,
   getPlayerValuationCautions,
   getPlayerWatchlist,
@@ -17,6 +18,7 @@ import { ButtonLink } from '@/components/ui/Button';
 import { Panel } from '@/components/ui/Panel';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { fmtPct, signed } from '@/lib/utils';
+import { useApi } from '@/lib/useApi';
 
 function gapText(gap: number): string {
   return `${signed(gap)}%`;
@@ -56,20 +58,22 @@ function MoverSkeletons() {
 }
 
 export default function Home() {
-  const [underpaid, setUnderpaid] = useState<PlayerCardResponse[] | null>(null);
-  const [overpaid, setOverpaid] = useState<PlayerCardResponse[] | null>(null);
   const [cautions, setCautions] = useState<PlayerValuationCautionsResponse | null>(null);
   const [backtest, setBacktest] = useState<BacktestResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+
+  const { data: board, error } = useApi<[PlayerWatchlistResponse, PlayerWatchlistResponse]>(
+    (signal) => Promise.all([
+      getPlayerWatchlist({ bucket: 'underpaid', limit: 5 }, signal),
+      getPlayerWatchlist({ bucket: 'overpaid', limit: 5 }, signal),
+    ]),
+    [],
+    { fallback: 'Failed to load the board.' },
+  );
+  const underpaid = board ? board[0].items : null;
+  const overpaid = board ? board[1].items : null;
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      getPlayerWatchlist({ bucket: 'underpaid', limit: 5 }, controller.signal),
-      getPlayerWatchlist({ bucket: 'overpaid', limit: 5 }, controller.signal),
-    ])
-      .then(([under, over]) => { setUnderpaid(under.items); setOverpaid(over.items); })
-      .catch((e) => { if (e?.name !== 'AbortError') setError(String(e?.message ?? e)); });
     getPlayerValuationCautions({ limit: 4 }, controller.signal).then(setCautions).catch(() => {});
     getBacktest().then(setBacktest).catch(() => {});
     return () => controller.abort();

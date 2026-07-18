@@ -33,6 +33,7 @@ import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
 import { CapBar } from '@/components/cap/CapBar';
 import { RosterNeeds } from '@/components/teams/RosterNeeds';
 import { fmtM, fmtPct, roundedDomainMax } from '@/lib/utils';
+import { useApi } from '@/lib/useApi';
 
 type TabId = 'board' | 'options' | 'targets';
 const TABS: Array<{ id: TabId; label: string; Icon: typeof Handshake }> = [
@@ -106,32 +107,20 @@ function BoardTab({ season }: { season: string }) {
   const [type, setType] = useState<FaType | 'all'>('all');
   const [position, setPosition] = useState('all');
   const [offset, setOffset] = useState(0);
-  const [data, setData] = useState<FreeAgencyBoardResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { setOffset(0); }, [season, type, position]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    getFreeAgencyBoard({
+  const { data, loading, error } = useApi<FreeAgencyBoardResponse>(
+    (signal) => getFreeAgencyBoard({
       season,
       type: type === 'all' ? undefined : type,
       position: position === 'all' ? undefined : position,
       limit: PAGE_SIZE,
       offset,
-    }, controller.signal)
-      .then((res) => { setData(res); setLoading(false); })
-      .catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === 'AbortError') return;
-        setError(e instanceof Error ? e.message : 'Failed to load the free-agency board.');
-        setData(null);
-        setLoading(false);
-      });
-    return () => controller.abort();
-  }, [season, type, position, offset]);
+    }, signal),
+    [season, type, position, offset],
+    { fallback: 'Failed to load the free-agency board.' },
+  );
 
   const domainMax = useMemo(
     () => roundedDomainMax((data?.items ?? []).flatMap((e) => [e.value_pct, e.expiring_cap_pct])),
@@ -213,26 +202,14 @@ function BoardTab({ season }: { season: string }) {
 // ---- Options tab --------------------------------------------------------------
 function OptionsTab({ season }: { season: string }) {
   const [offset, setOffset] = useState(0);
-  const [data, setData] = useState<FreeAgencyOptionsResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { setOffset(0); }, [season]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    getFreeAgencyOptions({ season, limit: PAGE_SIZE, offset }, controller.signal)
-      .then((res) => { setData(res); setLoading(false); })
-      .catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === 'AbortError') return;
-        setError(e instanceof Error ? e.message : 'Failed to load option decisions.');
-        setData(null);
-        setLoading(false);
-      });
-    return () => controller.abort();
-  }, [season, offset]);
+  const { data, loading, error } = useApi<FreeAgencyOptionsResponse>(
+    (signal) => getFreeAgencyOptions({ season, limit: PAGE_SIZE, offset }, signal),
+    [season, offset],
+    { fallback: 'Failed to load option decisions.' },
+  );
 
   const domainMax = useMemo(
     () => roundedDomainMax((data?.items ?? []).flatMap((e) => [e.value_pct, e.option?.option_cap_pct ?? null])),
@@ -303,42 +280,12 @@ function RoomLine({ label, room }: { label: string; room: number | null }) {
   );
 }
 
-function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }) {
-  const searchParams = useSearchParams();
-  const teamParam = searchParams.get('team');
-  const parsedTeamId = teamParam ? Number(teamParam) : null;
-  const selectedFromUrl = parsedTeamId != null && Number.isFinite(parsedTeamId)
-    ? parsedTeamId
-    : (teams[0]?.team_id ?? null);
-  const [selectedId, setSelectedId] = useState<number | null>(selectedFromUrl);
-  const [sort, setSort] = useState<'fit' | 'value'>('fit');
-
-  const [data, setData] = useState<TeamFaTargetsResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => { setSelectedId(selectedFromUrl); }, [selectedFromUrl]);
-
-  useEffect(() => {
-    if (selectedId == null) return;
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    getTeamFaTargets(selectedId, { season, sort }, controller.signal)
-      .then((res) => { setData(res); setLoading(false); })
-      .catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === 'AbortError') return;
-        setError(e instanceof Error ? e.message : 'Failed to load team targets.');
-        setData(null);
-        setLoading(false);
-      });
-    return () => controller.abort();
-  }, [selectedId, season, sort]);
-
-  const setTeam = (id: string) => {
-    setSelectedId(Number(id));
-    writeFreeAgencyUrl(searchParams, 'team', id);
-  };
+function TargetsResults({ teamId, season, sort }: { teamId: number; season: string; sort: 'fit' | 'value' }) {
+  const { data, loading, error } = useApi<TeamFaTargetsResponse>(
+    (signal) => getTeamFaTargets(teamId, { season, sort }, signal),
+    [teamId, season, sort],
+    { fallback: 'Failed to load team targets.' },
+  );
 
   const ctx = data?.cap_context;
   const thresholdsReady = !!ctx && ctx.tax_line != null && ctx.first_apron != null && ctx.second_apron != null;
@@ -348,22 +295,7 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
   );
 
   return (
-    <div className="siq-stack">
-      <div className="siq-row siq-row--12 siq-fa-flex-wrap">
-        <Field label="Team" htmlFor="fa-team-select" inline>
-          <Select id="fa-team-select" value={selectedId != null ? String(selectedId) : ''} onChange={(e) => setTeam(e.target.value)}>
-            {teams.length === 0 && <option value="">Loading teams…</option>}
-            {teams.map((t) => <option key={t.team_id} value={t.team_id}>{t.name ?? t.abbreviation}</option>)}
-          </Select>
-        </Field>
-        <Field label="Rank by" htmlFor="fa-rank-select" inline>
-          <Select id="fa-rank-select" value={sort} onChange={(e) => setSort(e.target.value as 'fit' | 'value')}>
-            <option value="fit">Roster need fit</option>
-            <option value="value">Model value</option>
-          </Select>
-        </Field>
-      </div>
-
+    <>
       {error && <ErrorNote message={error} />}
       {loading && !data && <LoadingNote>Loading projected room…</LoadingNote>}
 
@@ -478,6 +410,45 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
           <AssumptionFlag tone="warning" title="Projected room is a simplified model" icon={<TriangleAlert size={16} />}>{data.caveat}</AssumptionFlag>
         </>
       )}
+    </>
+  );
+}
+
+function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }) {
+  const searchParams = useSearchParams();
+  const teamParam = searchParams.get('team');
+  const parsedTeamId = teamParam ? Number(teamParam) : null;
+  const selectedFromUrl = parsedTeamId != null && Number.isFinite(parsedTeamId)
+    ? parsedTeamId
+    : (teams[0]?.team_id ?? null);
+  const [selectedId, setSelectedId] = useState<number | null>(selectedFromUrl);
+  const [sort, setSort] = useState<'fit' | 'value'>('fit');
+
+  useEffect(() => { setSelectedId(selectedFromUrl); }, [selectedFromUrl]);
+
+  const setTeam = (id: string) => {
+    setSelectedId(Number(id));
+    writeFreeAgencyUrl(searchParams, 'team', id);
+  };
+
+  return (
+    <div className="siq-stack">
+      <div className="siq-row siq-row--12 siq-fa-flex-wrap">
+        <Field label="Team" htmlFor="fa-team-select" inline>
+          <Select id="fa-team-select" value={selectedId != null ? String(selectedId) : ''} onChange={(e) => setTeam(e.target.value)}>
+            {teams.length === 0 && <option value="">Loading teams…</option>}
+            {teams.map((t) => <option key={t.team_id} value={t.team_id}>{t.name ?? t.abbreviation}</option>)}
+          </Select>
+        </Field>
+        <Field label="Rank by" htmlFor="fa-rank-select" inline>
+          <Select id="fa-rank-select" value={sort} onChange={(e) => setSort(e.target.value as 'fit' | 'value')}>
+            <option value="fit">Roster need fit</option>
+            <option value="value">Model value</option>
+          </Select>
+        </Field>
+      </div>
+
+      {selectedId != null && <TargetsResults teamId={selectedId} season={season} sort={sort} />}
     </div>
   );
 }
