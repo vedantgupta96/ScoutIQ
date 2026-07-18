@@ -10,7 +10,7 @@ from scoutiq.api.main import app
 from scoutiq.model.valuation_store import prediction_dict, stored_valuations
 from scoutiq.models import CapConstants, Player, PlayerSalary, PlayerSeason, PlayerValuation
 
-from tests.test_api import FakeDB, FakeScalarResult
+from test_api import FakeDB, FakeScalarResult
 
 COMPUTED_AT = datetime(2026, 7, 18, 12, 0, 0, tzinfo=timezone.utc)
 
