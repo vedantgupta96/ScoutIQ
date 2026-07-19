@@ -6,6 +6,7 @@ from scoutiq.api.trade_assets import (
     discount_factor,
     pick_surplus_pct,
     remaining_contract_surplus,
+    roster_count_legality,
     stepien_check,
     value_pick,
 )
@@ -194,3 +195,31 @@ def test_contract_surplus_flags_expiring_and_handles_missing_value():
 def test_discount_factor_orders_team_states():
     assert discount_factor("contending", 3) < discount_factor("neutral", 3) < discount_factor("rebuilding", 3)
     assert discount_factor("neutral", 0) == 1.0
+
+
+# ---- roster-count legality (Phase D2) --------------------------------------
+
+def test_roster_count_pass_within_bounds():
+    r = roster_count_legality(standard_before=14, standard_outgoing=1, standard_incoming=1, two_way_count=2)
+    assert r.status == "pass"
+    assert r.standard_after == 14 and r.net_change == 0
+
+
+def test_roster_count_over_max_needs_review():
+    r = roster_count_legality(standard_before=15, standard_outgoing=1, standard_incoming=3, two_way_count=1)
+    assert r.status == "needs-review"
+    assert r.standard_after == 17 and r.net_change == 2
+    assert "above the 15-man limit" in r.reasons[0]
+
+
+def test_roster_count_under_min_needs_review():
+    r = roster_count_legality(standard_before=14, standard_outgoing=2, standard_incoming=0, two_way_count=1)
+    assert r.status == "needs-review"
+    assert r.standard_after == 12 and r.net_change == -2
+    assert "below the 14-man minimum" in r.reasons[0]
+
+
+def test_roster_count_net_change_is_exact_regardless_of_absolute():
+    # A 2-for-2 swap never changes the count, so it always passes even near the limit.
+    r = roster_count_legality(standard_before=15, standard_outgoing=2, standard_incoming=2, two_way_count=3)
+    assert r.status == "pass" and r.net_change == 0 and r.standard_after == 15

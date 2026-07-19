@@ -16,6 +16,8 @@ from scoutiq.api.rosters import CAVEAT, TeamSummary
 from scoutiq.api.season import LATEST_SEASON, is_valid_season
 from scoutiq.api.trade_assets import (
     PICK_VALUE_CAVEAT,
+    ROSTER_COUNT_CAVEAT,
+    roster_count_legality,
     upcoming_draft_year,
     SURPLUS_CAVEAT,
     TEAM_STATES,
@@ -39,7 +41,8 @@ NOT_MODELED = [
     "Sign-and-trades", "No-trade clauses and player consent", "Trade kickers and bonuses",
     "Poison-pill and base-year compensation", "Guarantee adjustments", "Trade eligibility dates and waiting periods",
     "Pick swaps (informational only)", "Lottery-odds pick projection", "Full conditional-Stepien modeling",
-    "Cash", "Trades involving three or more teams",
+    "Roster-count hard limits (flagged for review, not enforced — see roster caveat)",
+    "In-season sub-14 grace period", "Cash", "Trades involving three or more teams",
 ]
 
 
@@ -97,6 +100,7 @@ class TradeWorkspacePlayer(BaseModel):
     cap_hit_usd: int | None
     salary_pct: float | None
     pay_source: str | None
+    is_two_way: bool = False
 
 
 class TradeTeamWorkspace(BaseModel):
@@ -177,6 +181,7 @@ def _load_trade_workspaces(
             cap_hit_usd=cap_hit,
             salary_pct=round(cap_hit / cap.salary_cap * 100, 2) if cap_hit else None,
             pay_source=pay_sources.get(player.player_id),
+            is_two_way=bool(player.is_two_way),
         ))
 
     for team_id in missing:
@@ -378,6 +383,20 @@ def _team_analysis(
     )
     before_ids = {pid for pid, player in roster_by_id.items() if player.cap_hit_usd and player.cap_hit_usd > 0}
     after_ids = (before_ids - set(sends)) | set(receives)
+
+    # Roster-count legality on STANDARD contracts only (two-way players excluded).
+    standard_before = sum(
+        1 for pid in before_ids if not roster_by_id[pid].is_two_way
+    )
+    standard_outgoing = sum(1 for pid in sends if not roster_by_id[pid].is_two_way)
+    standard_incoming = sum(1 for pid in receives if not other_by_id[pid].is_two_way)
+    roster_legality = roster_count_legality(
+        standard_before=standard_before,
+        standard_outgoing=standard_outgoing,
+        standard_incoming=standard_incoming,
+        two_way_count=sum(1 for player in roster_by_id.values() if player.is_two_way),
+    )
+
     before = needs_response(profile_roster(fit_context, before_ids), LATEST_SEASON)
     after = needs_response(profile_roster(fit_context, after_ids), LATEST_SEASON)
 
@@ -413,6 +432,7 @@ def _team_analysis(
         "tier_after": classify_tier(payroll_after, cap.tax_line, cap.first_apron, cap.second_apron),
         "roster_count_before": len(before_ids),
         "roster_count_after": len(after_ids),
+        "roster_legality": roster_legality.__dict__,
         "outgoing_salary_usd": outgoing,
         "incoming_salary_usd": incoming,
         "salary_delta_usd": incoming - outgoing,
@@ -497,14 +517,18 @@ def _load_trade_picks(db: DB, req: TradeRequest) -> tuple[list[DraftPick], list[
     return [by_id[pid] for pid in req.team_a_sends_picks], [by_id[pid] for pid in req.team_b_sends_picks]
 
 
-def _status_with_picks(salary_status: str, *legalities) -> str:
-    """Escalate the salary verdict with pick-legality outcomes (Stepien fail = noncompliant)."""
-    statuses = [legality.status for legality in legalities if legality]
+def _escalate_status(salary_status: str, *statuses: str | None) -> str:
+    """Fold pick-legality and roster-count outcomes into the salary verdict.
+
+    A hard `fail` (Stepien) makes the trade noncompliant; a `needs-review` (protected
+    pick, roster-count warning) downgrades an otherwise-compliant trade to needs-review.
+    """
+    present = [s for s in statuses if s]
     if salary_status == "incomplete":
         return salary_status
-    if "fail" in statuses:
+    if "fail" in present:
         return "modeled-noncompliant"
-    if "needs-review" in statuses and salary_status == "modeled-compliant":
+    if "needs-review" in present and salary_status == "modeled-compliant":
         return "needs-review"
     return salary_status
 
@@ -563,11 +587,17 @@ def analyze_trade(req: TradeRequest, db: DB = None):
         surplus_by_pid=surplus_b,
     )
     salary_status = overall_status(a["salary_match"]["status"], b["salary_match"]["status"])
-    status = _status_with_picks(salary_status, legality_a, legality_b)
+    status = _escalate_status(
+        salary_status,
+        legality_a.status if legality_a else None,
+        legality_b.status if legality_b else None,
+        a["roster_legality"]["status"],
+        b["roster_legality"]["status"],
+    )
     summary = {
         "modeled-compliant": "Both teams fit at least one modeled salary-matching path.",
         "modeled-noncompliant": "At least one team fails a modeled salary or pick-legality rule.",
-        "needs-review": "At least one package requires a CBA path outside this model (allocation or conditional pick protection).",
+        "needs-review": "At least one package needs review — a CBA allocation path, conditional pick protection, or a roster-count adjustment outside this model.",
         "incomplete": "Select at least one player from each team to evaluate salary matching.",
     }[status]
     return {
@@ -583,6 +613,7 @@ def analyze_trade(req: TradeRequest, db: DB = None):
             "Payroll uses target-season active contract and salary hits for current rosters.",
             PICK_VALUE_CAVEAT,
             SURPLUS_CAVEAT,
+            ROSTER_COUNT_CAVEAT,
         ],
         "not_modeled": NOT_MODELED,
     }

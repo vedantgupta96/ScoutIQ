@@ -422,6 +422,21 @@ function Impact({ analysis }: { analysis: TradeTeamAnalysis }) {
           {analysis.pick_legality?.reasons.map((reason) => <p className="ds-note" key={reason}>{reason}</p>)}
         </div>
       ) : null}
+      <div className="siq-trade-match">
+        <div className="siq-trade-match-head">
+          <span className="ds-eyebrow">Roster count (standard contracts)</span>
+          <Badge tone={analysis.roster_legality.status === 'pass' ? 'positive' : 'warning'}>
+            {analysis.roster_legality.status === 'pass' ? 'Within limits' : 'Review roster'}
+          </Badge>
+        </div>
+        <div className="siq-trade-match-grid ds-tnum">
+          <span>Standard before<strong>{analysis.roster_legality.standard_before}</strong></span>
+          <span>Standard after<strong>~{analysis.roster_legality.standard_after}</strong></span>
+          <span>Net players<strong className={analysis.roster_legality.net_change === 0 ? '' : analysis.roster_legality.net_change > 0 ? 'is-positive' : 'is-negative'}>{signed(analysis.roster_legality.net_change)}</strong></span>
+          <span>Two-way (excluded)<strong>{analysis.roster_legality.two_way_count}</strong></span>
+        </div>
+        {analysis.roster_legality.reasons.map((reason) => <p className="ds-note" key={reason}>{reason}</p>)}
+      </div>
       <details className="siq-trade-details">
         <summary>Model value and roster fit</summary>
         <div className="siq-trade-secondary-grid ds-tnum">

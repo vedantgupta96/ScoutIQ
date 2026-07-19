@@ -995,6 +995,11 @@ export interface TradeTeamPicksResponse {
   picks: TradePickAsset[]; caveat: string;
 }
 export interface TradePickLegality { status: 'pass' | 'fail' | 'needs-review' | 'not-applicable'; reasons: string[] }
+export interface TradeRosterLegality {
+  status: 'pass' | 'needs-review';
+  standard_before: number; standard_after: number;
+  net_change: number; two_way_count: number; reasons: string[];
+}
 export interface TradeAssetLedger {
   player_surplus_sent_usd: number; player_surplus_received_usd: number;
   player_surplus_coverage_sent: number; player_surplus_coverage_received: number;
@@ -1013,7 +1018,8 @@ export interface TradeTeamAnalysis {
   selected_outgoing_ids: number[]; selected_incoming_ids: number[];
   payroll_before_usd: number; payroll_after_usd: number;
   tier_before: CapTier; tier_after: CapTier;
-  roster_count_before: number; roster_count_after: number; outgoing_salary_usd: number; incoming_salary_usd: number; salary_delta_usd: number;
+  roster_count_before: number; roster_count_after: number; roster_legality: TradeRosterLegality;
+  outgoing_salary_usd: number; incoming_salary_usd: number; salary_delta_usd: number;
   salary_match: { status: 'pass'|'fail'|'needs-review'|'incomplete'; method: string|null; rule_label: string; incoming: number; outgoing: number; allowed_incoming: number; margin: number; reasons: string[] };
   value: { sent_usd: number; received_usd: number; delta_usd: number; sent_coverage: number; received_coverage: number; sent_selected: number; received_selected: number };
   fit_before: TeamNeedsResponse; fit_after: TeamNeedsResponse;

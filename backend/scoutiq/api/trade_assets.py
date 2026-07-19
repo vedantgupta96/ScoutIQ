@@ -215,6 +215,64 @@ def evaluate_pick_legality(
     )
 
 
+# ---- Roster-count legality (Phase D2) --------------------------------------
+
+# CBA standard-roster bounds. Two-way players (up to 3) don't count against these.
+ROSTER_STANDARD_MAX = 15
+ROSTER_STANDARD_MIN = 14
+
+ROSTER_COUNT_CAVEAT = (
+    "Roster counts standard contracts only (two-way players excluded). The absolute count "
+    "is approximate — waived-player dead money can inflate it and incomplete contract data "
+    "can deflate it — so limits surface as review flags, not hard failures. The net change "
+    "in players is exact."
+)
+
+
+@dataclass(frozen=True)
+class RosterLegality:
+    status: str                 # pass | needs-review
+    standard_before: int
+    standard_after: int
+    net_change: int             # incoming − outgoing standard players (exact)
+    two_way_count: int
+    reasons: list[str]
+
+
+def roster_count_legality(
+    *,
+    standard_before: int,
+    standard_outgoing: int,
+    standard_incoming: int,
+    two_way_count: int,
+) -> RosterLegality:
+    """Warn (never hard-block) when a trade pushes the standard roster out of [14, 15].
+
+    Absolute counts are approximate (see ROSTER_COUNT_CAVEAT), so over/under conditions
+    are `needs-review` with the fix stated; the net player change is always exact.
+    """
+    net = standard_incoming - standard_outgoing
+    after = standard_before + net
+    reasons: list[str] = []
+    status = "pass"
+    if after > ROSTER_STANDARD_MAX:
+        status = "needs-review"
+        reasons.append(
+            f"Roster would hold ~{after} standard-salaried players (+{net}), above the "
+            f"{ROSTER_STANDARD_MAX}-man limit — a waiver or additional outgoing player is required. "
+            "Count is approximate."
+        )
+    elif after < ROSTER_STANDARD_MIN:
+        status = "needs-review"
+        reasons.append(
+            f"Roster would hold ~{after} standard-salaried players ({net:+d}), below the "
+            f"{ROSTER_STANDARD_MIN}-man minimum — a signing would be required. Count is approximate."
+        )
+    else:
+        reasons.append(f"Roster stays within limits at ~{after} standard players ({net:+d}).")
+    return RosterLegality(status, standard_before, after, net, two_way_count, reasons)
+
+
 # ---- Remaining-contract surplus (Phase B) ----------------------------------
 
 SURPLUS_CAVEAT = (

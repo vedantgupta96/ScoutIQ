@@ -79,7 +79,20 @@ approximate — dead money inflates, incomplete contracts deflate — so Phase 2
 Design decision above already recommended; the data confirms it. Hard-block is
 reconsiderable only if contract cap-hit completeness is separately fixed.
 
-### Phase 2 — Roster-count check in Trade Lab (depends on Phase 1 + picks PR #80)
+### Phase 2 — Roster-count check in Trade Lab ✅ (implemented 2026-07-20)
+
+Done as designed (warning, not block). `roster_count_legality` in `api/trade_assets.py`
+returns pass / needs-review with the exact net change; `trades.py` computes standard-only
+counts (excluding `is_two_way`), runs the check per side, and folds it into the overall
+verdict via `_escalate_status` (needs-review, never downgrading a salary/pick `fail`).
+Response carries `roster_legality` {status, standard_before, standard_after, net_change,
+two_way_count, reasons} per team + a roster caveat; NOT_MODELED notes limits are flagged,
+not enforced. Frontend shows a "Roster count (standard contracts)" block with a
+Within-limits / Review-roster badge, before/after/net/two-way figures, and the reason.
+Tests: 4 unit (`test_trade_assets.py`) + 1 endpoint escalation (`test_trade_scenarios.py`);
+198 pass. Live-verified: BKN 1-for-3 → standard 17→19, needs-review.
+
+**Original Phase 2 spec (for reference):**
 1. `api/trade_assets.py`: `roster_count_legality(standard_before, incoming, outgoing)`
    → verdict + reasons, in the `salary_match` / `stepien_check` style.
 2. Trades analysis: compute standard-only counts (exclude `is_two_way`), run the check,
