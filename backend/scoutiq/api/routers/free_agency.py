@@ -34,7 +34,7 @@ from scoutiq.api.roster_fit import (
 )
 from scoutiq.api import rosters
 from scoutiq.api.rosters import PlayerSummary, TeamSummary
-from scoutiq.api.season import LATEST_SEASON, is_valid_season, next_season
+from scoutiq.api.season import LATEST_SEASON, is_valid_season, next_season, prev_season
 from scoutiq.api.valuation import Valuation, value_players
 from scoutiq.config import settings
 from scoutiq.model.roster_fit import profile_roster, score_candidate
@@ -177,7 +177,7 @@ def _assemble_pool(
     db: DB, entering: str, *, type_filter: str | None, position: str | None
 ) -> list[_PoolEntry]:
     """Players whose current contract ends the season before `entering`, with option context."""
-    target_expiry = fa.prev_season(entering)
+    target_expiry = prev_season(entering)
     if target_expiry is None:
         return []
 

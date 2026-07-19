@@ -325,3 +325,27 @@ def test_team_targets_unknown_team_404(monkeypatch):
     _patch_common(monkeypatch)
     resp = _client(_FakeDB(team=None)).get(f"/free-agency/teams/{LAL_ID}/targets")
     assert resp.status_code == 404
+
+
+class _EmptyDB:
+    """All queries come back empty — exercises the real pool assembly, not a mock."""
+
+    def scalars(self, stmt):
+        return FakeScalarResult([])
+
+    def execute(self, stmt):
+        return FakeScalarResult([])
+
+    def get(self, model, key):
+        return None
+
+
+def test_board_runs_real_pool_assembly_without_mocks(monkeypatch):
+    """Regression: #77 removed free_agency.prev_season while the router still called
+    fa.prev_season — every FA endpoint 500'd, unseen because tests mocked _assemble_pool."""
+    monkeypatch.setattr(far, "load_season_caps", lambda db: dict(CAPS))
+
+    response = _client(_EmptyDB()).get("/free-agency/board", params={"season": "2026-27"})
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
