@@ -172,6 +172,37 @@ class FreeAgentRight(Base):
     scraped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class DraftPick(Base):
+    """One tradable draft pick in the seven-draft forward window.
+
+    Default rows say "every team owns its own picks" (source='default-ownership');
+    real traded picks/protections enter only via the verified overrides CSV loaded by
+    etl/load_draft_picks.py. A pick's identity is (draft_year, round, original_team);
+    `current_team_id` is who owns it now.
+    """
+    __tablename__ = "draft_picks"
+    __table_args__ = (
+        UniqueConstraint("draft_year", "round", "original_team_id", name="uq_draft_pick_identity"),
+        Index("ix_draft_picks_owner_year", "current_team_id", "draft_year"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    draft_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    round: Mapped[int] = mapped_column(Integer, nullable=False)  # 1 or 2
+    original_team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.team_id"), nullable=False)
+    current_team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.team_id"), nullable=False, index=True)
+    # Top-N protection on conveyance (e.g. 10 = top-10 protected). Null = unprotected.
+    protected_top: Mapped[int | None] = mapped_column(Integer)
+    # Team holding favorable swap rights over this pick, if any (informational in v0).
+    swap_rights_team_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("teams.team_id"))
+    # What the pick converts to if protection never conveys (e.g. "two 2031 second-round picks").
+    converts_to: Mapped[str | None] = mapped_column(String(128))
+    source: Mapped[str] = mapped_column(String(32), default="default-ownership")
+    source_url: Mapped[str | None] = mapped_column(String(512))
+    notes: Mapped[str | None] = mapped_column(String(256))
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ScoutReport(Base):
     """A qualitative scouting narrative sourced from Perplexity Sonar (WORDS only, with citations).
 

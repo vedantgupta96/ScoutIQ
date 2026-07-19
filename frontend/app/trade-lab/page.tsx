@@ -19,12 +19,15 @@ import {
 } from 'lucide-react';
 import {
   analyzeTrade,
+  getTeamPicks,
   getTeams,
   getTradeWorkspace,
   type CapTier,
   type TeamListItem,
+  type TradePickAsset,
   type TradeResponse,
   type TradeTeamAnalysis,
+  type TradeTeamState,
   type TradeTeamWorkspace,
   type TradeWorkspacePlayer,
 } from '@/lib/api';
@@ -48,6 +51,83 @@ function capTransition(before: CapTier, after: CapTier): string {
   if (before === after) return `Remains ${CAP_TIER_LABEL[after].toLowerCase()}`;
   if (TIER_RANK[after] < TIER_RANK[before]) return `Moves to ${CAP_TIER_LABEL[after].toLowerCase()}`;
   return `Crosses into ${CAP_TIER_LABEL[after].toLowerCase()}`;
+}
+
+const TEAM_STATE_LABEL: Record<TradeTeamState, string> = {
+  contending: 'Contending',
+  neutral: 'Neutral',
+  rebuilding: 'Rebuilding',
+};
+
+function useTeamPicks(teamId: number | null, teamState: TradeTeamState) {
+  const [picks, setPicks] = useState<TradePickAsset[]>([]);
+
+  useEffect(() => {
+    if (!teamId) {
+      setPicks([]);
+      return;
+    }
+    const controller = new AbortController();
+    getTeamPicks(teamId, teamState, controller.signal)
+      .then((response) => setPicks(response.picks))
+      .catch(() => { if (!controller.signal.aborted) setPicks([]); });
+    return () => controller.abort();
+  }, [teamId, teamState]);
+
+  return picks;
+}
+
+interface PickSectionProps {
+  picks: TradePickAsset[];
+  selected: number[];
+  teamState: TradeTeamState;
+  onToggle: (pickId: number) => void;
+  onTeamState: (state: TradeTeamState) => void;
+}
+
+function PickSection({ picks, selected, teamState, onToggle, onTeamState }: PickSectionProps) {
+  const selectedSet = new Set(selected);
+  const firsts = picks.filter((pick) => pick.round === 1);
+  const seconds = picks.filter((pick) => pick.round === 2);
+
+  return (
+    <details className="siq-trade-details">
+      <summary className="ds-tnum">
+        Draft picks · {selected.length} selected
+      </summary>
+      <label className="siq-trade-team-select" style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+        <span className="ds-eyebrow">Team state</span>
+        <Select value={teamState} onChange={(event) => onTeamState(event.target.value as TradeTeamState)}>
+          {(Object.keys(TEAM_STATE_LABEL) as TradeTeamState[]).map((state) => (
+            <option key={state} value={state}>{TEAM_STATE_LABEL[state]}</option>
+          ))}
+        </Select>
+      </label>
+      {[firsts, seconds].map((group, index) => group.length ? (
+        <div className="siq-trade-selected-list" key={index === 0 ? 'firsts' : 'seconds'}>
+          {group.map((pick) => (
+            <label className="siq-trade-selected-row" key={pick.pick_id} style={{ cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={selectedSet.has(pick.pick_id)}
+                onChange={() => onToggle(pick.pick_id)}
+                aria-label={`Include ${pick.label}`}
+              />
+              <span className="siq-trade-player-id">
+                <strong>{pick.label}</strong>
+                <small>exp. #{pick.expected_pick}{pick.source === 'default-ownership' ? ' · assumed own pick' : ''}</small>
+              </span>
+              <strong className="ds-tnum">{pick.value_usd != null ? fmtM(pick.value_usd) : '—'}</strong>
+            </label>
+          ))}
+        </div>
+      ) : null)}
+      <p className="ds-note">
+        Pick values use an approximate rookie-deal surplus curve under the selected team state; ownership marked
+        &ldquo;assumed&rdquo; is default self-ownership, not verified trade data.
+      </p>
+    </details>
+  );
 }
 
 interface PlayerPickerProps {
@@ -167,6 +247,7 @@ interface TeamPackageProps {
   onTeam: (id: number | null) => void;
   onAdd: () => void;
   onRemove: (id: number) => void;
+  pickSection?: React.ReactNode;
 }
 
 function TeamPackage({
@@ -180,6 +261,7 @@ function TeamPackage({
   onTeam,
   onAdd,
   onRemove,
+  pickSection,
 }: TeamPackageProps) {
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const players = useMemo(
@@ -257,6 +339,7 @@ function TeamPackage({
               <small>Open the roster to build this team&apos;s outgoing package.</small>
             </div>
           )}
+          {pickSection}
         </>
       ) : null}
       {!selectedTeam && !loading ? <EmptyState title="Select a team to begin." description="Its Add player action will appear here." /> : null}
@@ -308,6 +391,33 @@ function Impact({ analysis }: { analysis: TradeTeamAnalysis }) {
         </div>
         {analysis.salary_match.reasons.map((reason) => <p className="ds-note" key={reason}>{reason}</p>)}
       </div>
+      {(analysis.picks_outgoing.length > 0 || analysis.picks_incoming.length > 0) ? (
+        <div className="siq-trade-match">
+          <div className="siq-trade-match-head">
+            <span className="ds-eyebrow">Draft picks · {TEAM_STATE_LABEL[analysis.team_state]} lens</span>
+            {analysis.pick_legality ? (
+              <Badge tone={
+                analysis.pick_legality.status === 'pass' || analysis.pick_legality.status === 'not-applicable'
+                  ? 'positive'
+                  : analysis.pick_legality.status === 'fail' ? 'negative' : 'warning'
+              }>
+                {analysis.pick_legality.status === 'not-applicable' ? 'Stepien n/a' : `Stepien ${analysis.pick_legality.status}`}
+              </Badge>
+            ) : null}
+          </div>
+          <div className="siq-trade-match-grid ds-tnum">
+            <span>Picks out<strong>{analysis.picks_outgoing.length ? `${analysis.picks_outgoing.length} · ${fmtM(analysis.assets.picks_sent_usd)}` : '—'}</strong></span>
+            <span>Picks in<strong>{analysis.picks_incoming.length ? `${analysis.picks_incoming.length} · ${fmtM(analysis.assets.picks_received_usd)}` : '—'}</strong></span>
+            <span>Net assets<strong className={analysis.assets.net_usd >= 0 ? 'is-positive' : 'is-negative'}>{fmtSignedM(analysis.assets.net_usd)}</strong></span>
+            <span>Player surplus<strong>{fmtSignedM(analysis.assets.player_surplus_received_usd - analysis.assets.player_surplus_sent_usd)}</strong></span>
+          </div>
+          {[...analysis.picks_outgoing.map((pick) => `Out: ${pick.label}`),
+            ...analysis.picks_incoming.map((pick) => `In: ${pick.label}`)].map((line) => (
+            <p className="ds-note" key={line}>{line}</p>
+          ))}
+          {analysis.pick_legality?.reasons.map((reason) => <p className="ds-note" key={reason}>{reason}</p>)}
+        </div>
+      ) : null}
       <details className="siq-trade-details">
         <summary>Model value and roster fit</summary>
         <div className="siq-trade-secondary-grid ds-tnum">
@@ -360,6 +470,10 @@ export default function TradeLabPage() {
   const [teamB, setTeamB] = useState<number | null>(null);
   const [teamASends, setTeamASends] = useState<number[]>([]);
   const [teamBSends, setTeamBSends] = useState<number[]>([]);
+  const [teamASendsPicks, setTeamASendsPicks] = useState<number[]>([]);
+  const [teamBSendsPicks, setTeamBSendsPicks] = useState<number[]>([]);
+  const [teamAState, setTeamAState] = useState<TradeTeamState>('neutral');
+  const [teamBState, setTeamBState] = useState<TradeTeamState>('neutral');
   const [picker, setPicker] = useState<'a' | 'b' | null>(null);
   const [result, setResult] = useState<TradeResponse | null>(null);
   const [analyzedKey, setAnalyzedKey] = useState<string | null>(null);
@@ -368,6 +482,8 @@ export default function TradeLabPage() {
   const [teamsRetry, setTeamsRetry] = useState(0);
   const teamAWorkspace = useTradeWorkspace(teamA, setError);
   const teamBWorkspace = useTradeWorkspace(teamB, setError);
+  const teamAPicks = useTeamPicks(teamA, teamAState);
+  const teamBPicks = useTeamPicks(teamB, teamBState);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -377,7 +493,10 @@ export default function TradeLabPage() {
     return () => controller.abort();
   }, [teamsRetry]);
 
-  const currentKey = `${teamA}:${teamB}:${teamASends.join(',')}:${teamBSends.join(',')}`;
+  const currentKey = [
+    teamA, teamB, teamASends.join(','), teamBSends.join(','),
+    teamASendsPicks.join(','), teamBSendsPicks.join(','), teamAState, teamBState,
+  ].join(':');
   const stale = result != null && analyzedKey !== currentKey;
   const canAnalyze = Boolean(
     teamA && teamB && teamA !== teamB
@@ -397,6 +516,10 @@ export default function TradeLabPage() {
         team_b_id: teamB,
         team_a_sends: teamASends,
         team_b_sends: teamBSends,
+        team_a_sends_picks: teamASendsPicks,
+        team_b_sends_picks: teamBSendsPicks,
+        team_a_state: teamAState,
+        team_b_state: teamBState,
       });
       setResult(next);
       setAnalyzedKey(requestKey);
@@ -410,14 +533,22 @@ export default function TradeLabPage() {
   const chooseTeamA = (id: number | null) => {
     setTeamA(id);
     setTeamASends([]);
+    setTeamASendsPicks([]);
     setResult(null);
     setAnalyzedKey(null);
   };
   const chooseTeamB = (id: number | null) => {
     setTeamB(id);
     setTeamBSends([]);
+    setTeamBSendsPicks([]);
     setResult(null);
     setAnalyzedKey(null);
+  };
+  const togglePick = (side: 'a' | 'b') => (pickId: number) => {
+    const setter = side === 'a' ? setTeamASendsPicks : setTeamBSendsPicks;
+    setter((current) => current.includes(pickId)
+      ? current.filter((id) => id !== pickId)
+      : [...current, pickId]);
   };
 
   return (
@@ -446,6 +577,15 @@ export default function TradeLabPage() {
           onTeam={chooseTeamA}
           onAdd={() => setPicker('a')}
           onRemove={(id) => setTeamASends((current) => current.filter((playerId) => playerId !== id))}
+          pickSection={teamA ? (
+            <PickSection
+              picks={teamAPicks}
+              selected={teamASendsPicks}
+              teamState={teamAState}
+              onToggle={togglePick('a')}
+              onTeamState={setTeamAState}
+            />
+          ) : null}
         />
         <div className="siq-trade-exchange" aria-label={`${teamASends.length} players from Team A and ${teamBSends.length} from Team B`}>
           <ArrowLeftRight size={20} />
@@ -462,6 +602,15 @@ export default function TradeLabPage() {
           onTeam={chooseTeamB}
           onAdd={() => setPicker('b')}
           onRemove={(id) => setTeamBSends((current) => current.filter((playerId) => playerId !== id))}
+          pickSection={teamB ? (
+            <PickSection
+              picks={teamBPicks}
+              selected={teamBSendsPicks}
+              teamState={teamBState}
+              onToggle={togglePick('b')}
+              onTeamState={setTeamBState}
+            />
+          ) : null}
         />
       </div>
 

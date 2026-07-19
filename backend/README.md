@@ -42,6 +42,7 @@ python -m scoutiq.etl.load_current_rosters        # current roster team -> playe
 python -m scoutiq.etl.load_contracts              # Spotrac forward contract structure (networked)
 python -m scoutiq.etl.load_bbref_contracts        # BBRef fallback for players absent from Spotrac team pages
 python -m scoutiq.etl.load_salary_overrides       # tracked source-confirmed salary overrides for edge cases
+python -m scoutiq.etl.load_draft_picks            # seed tradable pick window (defaults + verified overrides CSV)
 python -m scoutiq.etl.bridge_contract_salaries    # bridge 2025-26 cap hits into player_salaries
 python -m scoutiq.etl.check_contract_coverage     # audit players with stats but missing pay/contract rows
 python -m scoutiq.etl.check_coverage              # data-quality gate -> trainable row count
