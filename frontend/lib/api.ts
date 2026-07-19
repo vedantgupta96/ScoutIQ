@@ -986,7 +986,7 @@ export interface TradePickAsset {
   pick_id: number; draft_year: number; round: number;
   original_team: TeamSummary | null; protected_top: number | null;
   swap_rights_team: TeamSummary | null; converts_to: string | null;
-  source: string; label: string;
+  source: string; notes: string | null; label: string;
   expected_pick: number; conveyed_pick: number; years_out: number; deferral_years: number;
   raw_pct: number; discounted_pct: number; value_usd: number | null;
 }

@@ -16,6 +16,7 @@ from scoutiq.api.rosters import CAVEAT, TeamSummary
 from scoutiq.api.season import LATEST_SEASON, is_valid_season
 from scoutiq.api.trade_assets import (
     PICK_VALUE_CAVEAT,
+    upcoming_draft_year,
     SURPLUS_CAVEAT,
     TEAM_STATES,
     evaluate_pick_legality,
@@ -24,7 +25,6 @@ from scoutiq.api.trade_assets import (
 )
 from scoutiq.api.trades import overall_status, salary_match
 from scoutiq.api.valuation import value_players
-from scoutiq.config import settings
 from scoutiq.model.roster_fit import profile_roster
 from scoutiq.models import DraftPick, Player, Team
 
@@ -41,10 +41,6 @@ NOT_MODELED = [
     "Pick swaps (informational only)", "Lottery-odds pick projection", "Full conditional-Stepien modeling",
     "Cash", "Trades involving three or more teams",
 ]
-
-
-def _upcoming_draft_year() -> int:
-    return int(settings.CURRENT_SEASON[:4]) + 1
 
 
 class TradeRequest(BaseModel):
@@ -226,6 +222,7 @@ class TradePickAsset(BaseModel):
     swap_rights_team: TeamSummary | None
     converts_to: str | None
     source: str
+    notes: str | None
     label: str
     expected_pick: int
     conveyed_pick: int
@@ -267,7 +264,7 @@ def _pick_assets(
         t.team_id: t
         for t in (db.scalars(select(Team).where(Team.team_id.in_(team_ids))).all() if team_ids else [])
     }
-    upcoming = _upcoming_draft_year()
+    upcoming = upcoming_draft_year(db)
     assets = []
     for pick in picks:
         value = value_pick(
@@ -286,6 +283,7 @@ def _pick_assets(
             swap_rights_team=rosters.team_summary(teams_by_id.get(pick.swap_rights_team_id)) if pick.swap_rights_team_id else None,
             converts_to=pick.converts_to,
             source=pick.source,
+            notes=pick.notes,
             label=_pick_label(pick, teams_by_id),
             **value.__dict__,
         ))
@@ -315,7 +313,7 @@ def get_team_picks(
     response.headers["Cache-Control"] = f"public, max-age={WORKSPACE_CACHE_SECONDS}"
     return TradeTeamPicksResponse(
         team=rosters.team_summary(team),
-        upcoming_draft_year=_upcoming_draft_year(),
+        upcoming_draft_year=upcoming_draft_year(db),
         team_state=team_state,
         picks=_pick_assets(db, picks, team_state=team_state, salary_cap=cap.salary_cap if cap else None),
         caveat=PICK_VALUE_CAVEAT,
@@ -522,7 +520,7 @@ def analyze_trade(req: TradeRequest, db: DB = None):
     fit_context = load_fit_context(db, LATEST_SEASON)
 
     a_picks, b_picks = _load_trade_picks(db, req)
-    upcoming = _upcoming_draft_year()
+    upcoming = upcoming_draft_year(db)
     legality_a = evaluate_pick_legality(
         db, req.team_a_id, req.team_a_sends_picks, req.team_b_sends_picks, upcoming_year=upcoming
     ) if (a_picks or b_picks) else None

@@ -143,14 +143,20 @@ def test_trade_endpoint_is_lean_when_incomplete(monkeypatch):
 
 
 class _NoContractsDB:
-    """Bare session for analyze tests: no contract rows, so surplus degrades to empty."""
+    """Bare session for analyze tests: no contracts or picks, so those layers degrade."""
+
+    class _Empty:
+        def all(self):
+            return []
+
+        def first(self):
+            return None
 
     def execute(self, stmt):
-        class _Empty:
-            def all(self):
-                return []
+        return self._Empty()
 
-        return _Empty()
+    def scalars(self, stmt):
+        return self._Empty()
 
 
 def _trade_response(monkeypatch, salary_a=10_000_000, salary_b=10_000_000,

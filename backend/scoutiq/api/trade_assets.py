@@ -19,11 +19,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from scoutiq.api.cap import SeasonCapData
 from scoutiq.api.deps import DB
+from scoutiq.config import settings
 from scoutiq.models import Contract, ContractYear, DraftPick
+
+
+def upcoming_draft_year(db: DB) -> int:
+    """First draft of the tradable window: whatever the pick table starts at.
+
+    The ownership ETL keeps draft_picks aligned with reality (it deletes drafts already
+    held), so min(draft_year) is authoritative; the season-derived fallback only serves
+    an empty table (fresh DB, fake test sessions)."""
+    earliest = db.scalars(select(func.min(DraftPick.draft_year))).first()
+    return earliest or int(settings.CURRENT_SEASON[:4]) + 1
 
 # ---- Team-state time discounts (Phase C) -----------------------------------
 

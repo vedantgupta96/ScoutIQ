@@ -55,8 +55,20 @@ not a code change. Future years discount at the team-state rate.
 - **C — Team-state lens:** request-level `team_state` per side
   (contending 15% / neutral 8% / rebuilding 4% discount) applied to future pick value
   and future-year surplus. Same trade, two ledgers.
-- **Later (not this pass):** real pick-ownership scrape (RealGM/Tankathon, polite +
-  cached), standings-driven pick expectation, swaps math, 3-team trades, TPE inventory.
+- **D — Real pick ownership ✅ (implemented 2026-07-19 via `etl/load_draft_pick_ownership`;
+  390 picks loaded 2027–2033, 271 structured / 119 conditional-with-notes; own-pick row =
+  first row per year per team section, colspans decode protection ranges):**
+  scrape Spotrac's future-picks page (`spotrac.com/nba/draft/future`) via the existing
+  polite Spotrac pipeline — verified accessible with the repo UA; RealGM's equivalent
+  page is Cloudflare-blocked (403) and no public API covers forward ownership
+  (Sportradar's Draft API is current-cycle only). Two tables per team (R1/R2) × years
+  2027–2033. Parse clean cases into structured fields (owner, origin, "If 1–N"
+  protections → `protected_top`, swap language → `swap_rights_team_id`); keep complex
+  multi-team conditionals ("least favorable of MIL and NOP then other to NOP")
+  verbatim in `notes`, valued conservatively, never force-fitted. Seed defaults only
+  fill gaps; the "assumed" label disappears wherever Spotrac speaks.
+- **Later (not this pass):** standings-driven pick expectation, swaps math,
+  3-team trades, TPE inventory.
 
 ## Data honesty
 
@@ -64,6 +76,32 @@ Default ownership ("every team owns its own picks") is clearly labeled
 `default-ownership`; real traded picks enter only through the overrides CSV with a
 source URL per row. The UI/response caveat states pick data completeness. No invented
 trades, no invented protections.
+
+## Verification report (2026-07-19)
+
+Ten-scenario battery run against the live local stack (real Spotrac ownership data,
+Neon-mirror rosters/salaries, 2025-26 cap constants). **10/10 passed.** The endpoint-level
+scenarios are also codified as permanent tests in `tests/test_trade_scenarios.py`
+(fake sessions, no live DB), alongside the unit layers in `tests/test_trade_assets.py`
+and `tests/test_draft_pick_ownership.py`. Backend suite: 191 passing.
+
+| # | Scenario (live data) | Expected | Result |
+|---|---|---|---|
+| S1 | Balanced ~$20M swap, two under-tax teams (ORL/DET) | modeled-compliant | ✅ |
+| S2 | NYK ($208M payroll) sends $2.2M, takes $52.6M | salary fail (Standard TPE, no room) | ✅ |
+| S3 | BKN ($126M payroll) sends $2.2M, takes $11.6M | pass via cap-room path | ✅ |
+| S4 | LAL sends 2028 1st while owning no 2029 1st (real Spotrac fact) | Stepien fail → overall noncompliant | ✅ |
+| S5 | BOS sends 2027+2030 1sts, alternating years remain | Stepien pass | ✅ |
+| S6 | CHA sends its real "2027 MIA 1st (top-14 protected)" | needs-review escalation | ✅ |
+| S7 | LAL attempts to send an ORL-owned pick | 422 ownership rejection | ✅ |
+| S8 | Same 2030+ pick under three team-state lenses | contending 4.33% < neutral 5.49% < rebuilding 6.24% | ✅ |
+| S9 | Asset ledger: net = (surplus + picks) in − out | exact equality (−$58,207,556 both sides) | ✅ |
+| S10 | A's outgoing picks mirror B's incoming, values equal | exact mirror | ✅ |
+
+**Known cosmetic issue (not a correctness bug):** the results header reads "Modeled
+salary verdict" even when the failing rule is pick legality (e.g. S4) — both salary
+sections can show green margins while the overall verdict is noncompliant. The summary
+sentence states it correctly; the header label should say "Modeled trade verdict."
 
 ## Research sources
 

@@ -113,9 +113,13 @@ function PickSection({ picks, selected, teamState, onToggle, onTeamState }: Pick
                 onChange={() => onToggle(pick.pick_id)}
                 aria-label={`Include ${pick.label}`}
               />
-              <span className="siq-trade-player-id">
+              <span className="siq-trade-player-id" title={pick.notes ?? undefined}>
                 <strong>{pick.label}</strong>
-                <small>exp. #{pick.expected_pick}{pick.source === 'default-ownership' ? ' · assumed own pick' : ''}</small>
+                <small>
+                  exp. #{pick.expected_pick}
+                  {pick.source === 'default-ownership' ? ' · assumed own pick'
+                    : pick.source === 'spotrac-conditional' ? ' · conditional terms' : ''}
+                </small>
               </span>
               <strong className="ds-tnum">{pick.value_usd != null ? fmtM(pick.value_usd) : '—'}</strong>
             </label>
