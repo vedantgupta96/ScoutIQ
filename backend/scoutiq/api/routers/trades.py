@@ -15,9 +15,11 @@ from scoutiq.api.roster_fit import load_fit_context, needs_response
 from scoutiq.api.rosters import CAVEAT, TeamSummary
 from scoutiq.api.season import LATEST_SEASON, is_valid_season
 from scoutiq.api.trade_assets import (
+    BALANCE_CAVEAT,
     PICK_VALUE_CAVEAT,
     ROSTER_COUNT_CAVEAT,
     roster_count_legality,
+    trade_balance,
     upcoming_draft_year,
     SURPLUS_CAVEAT,
     TEAM_STATES,
@@ -586,6 +588,17 @@ def analyze_trade(req: TradeRequest, db: DB = None):
         pick_legality=legality_b,
         surplus_by_pid=surplus_b,
     )
+    balance = trade_balance(
+        a_value_in_usd=a["assets"]["player_surplus_received_usd"] + a["assets"]["picks_received_usd"],
+        a_value_out_usd=a["assets"]["player_surplus_sent_usd"] + a["assets"]["picks_sent_usd"],
+        b_value_in_usd=b["assets"]["player_surplus_received_usd"] + b["assets"]["picks_received_usd"],
+        b_value_out_usd=b["assets"]["player_surplus_sent_usd"] + b["assets"]["picks_sent_usd"],
+        salary_cap=cap.salary_cap,
+        a_valued=a["value"]["sent_coverage"] + a["value"]["received_coverage"],
+        a_selected=a["value"]["sent_selected"] + a["value"]["received_selected"],
+        b_valued=b["value"]["sent_coverage"] + b["value"]["received_coverage"],
+        b_selected=b["value"]["sent_selected"] + b["value"]["received_selected"],
+    )
     salary_status = overall_status(a["salary_match"]["status"], b["salary_match"]["status"])
     status = _escalate_status(
         salary_status,
@@ -607,6 +620,7 @@ def analyze_trade(req: TradeRequest, db: DB = None):
         "overall_status": status,
         "overall_label": _label(status),
         "summary": summary,
+        "balance": balance.__dict__,
         "team_a": a,
         "team_b": b,
         "assumptions": [
@@ -614,6 +628,7 @@ def analyze_trade(req: TradeRequest, db: DB = None):
             PICK_VALUE_CAVEAT,
             SURPLUS_CAVEAT,
             ROSTER_COUNT_CAVEAT,
+            BALANCE_CAVEAT,
         ],
         "not_modeled": NOT_MODELED,
     }
