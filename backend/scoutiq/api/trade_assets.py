@@ -469,7 +469,10 @@ def trade_balance(
     else:
         tier = "lopsided-b" if net_pct < -lopsided else "favors-b"
 
-    fairness_pct = round(max(0.0, min(100.0, 50.0 + (net_pct / lopsided) * 50.0)), 1)
+    # Needle on a left→right axis where left = Team A, right = Team B, center = even.
+    # It leans toward the winner: A gaining value (net_pct > 0) pushes it left (→ 0),
+    # B gaining pushes it right (→ 100). Frontend uses this directly as the CSS left%.
+    fairness_pct = round(max(0.0, min(100.0, 50.0 - (net_pct / lopsided) * 50.0)), 1)
 
     reasons: list[str] = []
     if tier == "even":

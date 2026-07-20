@@ -143,7 +143,7 @@ grade cutoffs, `LOW_COVERAGE_EVEN_MULTIPLIER=2.0`). `trades.py` assembles
 `low_confidence` flag, empty). Convention: `net_usd`/tiers are **A-relative**
 (+ favors A). Full suite green.
 
-### Phase 2 — Verdict bar: Legality stamp + Balance meter (frontend headline)
+### Phase 2 — Verdict bar: Legality stamp + Balance meter ✅ done 2026-07-20
 1. `api.ts`: add the `balance` type to `TradeResponse`.
 2. New `TradeVerdictBar` — Legality stamp (from `overall_status`) + Balance meter
    (needle component) + plain-language one-liners. Replaces the current header.
@@ -151,24 +151,45 @@ grade cutoffs, `LOW_COVERAGE_EVEN_MULTIPLIER=2.0`). `trades.py` assembles
 4. Balance-meter component: centered scale, needle at `fairness_pct`, tier label,
    `net_usd` differential; reduced-motion + non-color states.
 
-### Phase 3 — The Exchange (fuse the two silos)
+Delivered: `components/trade/BalanceMeter.tsx` (`BalanceMeter` needle instrument +
+`GradeChip`, both reusable), `TradeVerdictBar` in `page.tsx`, header relabeled
+"Trade verdict". **Needle convention corrected during verification:** the needle
+leans toward the *winner* on a left(A)→right(B) axis — `fairness_pct = 50 −
+(net_pct/lopsided)·50` (0 = fully A, 100 = fully B). Live-verified: Curry↔Tatum
+reads "Lopsided toward BOS", needle pinned right, GSW **F** / BOS **A**.
+
+### Phase 3 — The Exchange (fuse the two silos) ✅ done 2026-07-20
 1. New `TradeExchange` — one central ledger: A-sends / B-sends columns with
    player+pick values and per-side net; a balance visual, not two mirror grids.
 2. Retire the duplicated value/pick grids from `Impact`.
 
-### Phase 4 — Per-team consequences + plain language + a11y
+Delivered: `TradeExchange` + `ExchangeSide` render both outgoing packages
+(players with salary + modeled surplus, picks with value, per-side salary/asset
+footer) as two bordered cards with a center swap glyph; the old pick/value grids
+are gone from `Impact`.
+
+### Phase 4 — Per-team consequences + plain language + a11y ✅ done 2026-07-20
 1. Slim `Impact` to Tier-2 consequences (CapBar + tier line, fit deltas,
    roster-count flag). Move salary-matching math + pick math into a Tier-3
-   `<details>` "Why it's legal / the math".
+   `<details>` "The math".
 2. Microcopy + tooltips for every retained jargon term (allowed incoming,
    margin, % of cap, coverage, surplus).
 3. Accessibility: WCAG AA contrast, keyboard, `prefers-reduced-motion`, and no
    color-only state (icons/text on every stamp/tier). Confidence chip for coverage.
 
-### Phase 5 — Polish + verify
-1. Live-verify the battery from docs/06 (compliant, Stepien fail, protected pick,
-   roster over-15) renders correctly in the new hierarchy.
-2. Frontend typecheck + backend suite green. Screenshot the new headline.
+Delivered: `Impact` now shows cap trajectory (CapBar) + `FlagChip` row (Salary
+match / Stepien / Roster, each with a plain-language tooltip) + roster-fit shift,
+with all CBA math in a "The math" drawer. Needle honours `prefers-reduced-motion`;
+stamps/chips carry text + icon, never color alone.
+
+### Phase 5 — Polish + verify ✅ done 2026-07-20
+1. Live-verify a real trade (Curry↔Tatum) renders correctly across the new
+   hierarchy — verdict bar, Exchange, slim consequence panels.
+2. Frontend typecheck clean; backend suite 206 passing (8 new balance tests).
+   Screenshotted the redesign + the corrected verdict bar.
+
+Note: a Turbopack dev-HMR quirk skipped recompiling an appended CSS block until
+the file was re-saved — a dev-only artifact, not a code issue.
 
 ## Sequencing note
 

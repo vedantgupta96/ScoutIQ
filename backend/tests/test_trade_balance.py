@@ -37,7 +37,7 @@ def test_lopsided_toward_a_grades_b_down_and_points_left_of_center():
     b = _balance(20_000_000, 4_000_000, 4_000_000, 20_000_000)
     assert b.fairness_tier == "lopsided-a"
     assert b.net_usd == 16_000_000
-    assert b.fairness_pct == 100.0            # beyond the lopsided band, clamped
+    assert b.fairness_pct == 0.0              # far left = Team A's winning side, clamped
     assert b.team_a_grade == "A"
     assert b.team_b_grade == "F"
     assert "Team A" in b.fairness_label
@@ -48,14 +48,15 @@ def test_favors_b_is_within_lopsided_band():
     b = _balance(2_000_000, 8_000_000, 8_000_000, 2_000_000)
     assert b.fairness_tier == "favors-b"
     assert b.net_usd == -6_000_000
-    assert b.fairness_pct < 50.0
+    assert b.fairness_pct > 50.0              # right of center = Team B's winning side
     assert b.team_b_grade in {"A", "B"} and b.team_a_grade in {"D", "F"}
 
 
 def test_needle_is_monotonic_in_differential():
     small = _balance(11_000_000, 10_000_000, 10_000_000, 11_000_000)   # A +1M
     big = _balance(15_000_000, 10_000_000, 10_000_000, 15_000_000)     # A +5M
-    assert big.fairness_pct > small.fairness_pct >= 50.0
+    # A gaining more pushes the needle further left (toward Team A), so pct decreases.
+    assert big.fairness_pct < small.fairness_pct <= 50.0
 
 
 def test_low_coverage_widens_even_band_and_flags_confidence():
@@ -78,7 +79,7 @@ def test_lopsided_threshold_boundary_is_exact():
     edge = int(FAIRNESS_LOPSIDED_PCT_OF_CAP / 100 * CAP)   # 8% of cap
     b = _balance(10_000_000 + edge, 10_000_000, 10_000_000, 10_000_000 + edge)
     assert b.fairness_tier == "favors-a"
-    assert b.fairness_pct == 100.0
+    assert b.fairness_pct == 0.0              # exactly the lopsided band → needle pinned left
 
 
 def test_coverage_is_reported_per_side():
