@@ -1029,7 +1029,20 @@ export interface TradeTeamAnalysis {
   pick_legality: TradePickLegality | null;
   assets: TradeAssetLedger;
 }
-export interface TradeResponse { season: string; role_season: string; is_projected_cap: boolean; overall_status: string; overall_label: string; summary: string; team_a: TradeTeamAnalysis; team_b: TradeTeamAnalysis; assumptions: string[]; not_modeled: string[] }
+export type TradeFairnessTier = 'even' | 'favors-a' | 'favors-b' | 'lopsided-a' | 'lopsided-b';
+export interface TradeBalance {
+  net_usd: number;            // A-relative: + favors Team A, − favors Team B
+  fairness_pct: number;       // needle 0..100 (50 = even)
+  fairness_tier: TradeFairnessTier;
+  fairness_label: string;
+  team_a_grade: string; team_b_grade: string;
+  team_a_value_in_usd: number; team_a_value_out_usd: number;
+  team_b_value_in_usd: number; team_b_value_out_usd: number;
+  low_confidence: boolean;
+  coverage: { a_valued: number; a_selected: number; b_valued: number; b_selected: number };
+  reasons: string[];
+}
+export interface TradeResponse { season: string; role_season: string; is_projected_cap: boolean; overall_status: string; overall_label: string; summary: string; balance: TradeBalance; team_a: TradeTeamAnalysis; team_b: TradeTeamAnalysis; assumptions: string[]; not_modeled: string[] }
 export function getTradeWorkspace(teamId: number, season: string, signal?: AbortSignal): Promise<TradeTeamWorkspace> {
   return apiFetch<TradeTeamWorkspace>(`/trades/teams/${teamId}/workspace${queryString({ season })}`, { signal });
 }

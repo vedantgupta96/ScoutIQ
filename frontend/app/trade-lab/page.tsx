@@ -31,6 +31,7 @@ import {
   type TradeTeamWorkspace,
   type TradeWorkspacePlayer,
 } from '@/lib/api';
+import { BalanceMeter, GradeChip } from '@/components/trade/BalanceMeter';
 import { CapBar } from '@/components/cap/CapBar';
 import { Alert } from '@/components/ui/Alert';
 import { Avatar } from '@/components/ui/Avatar';
@@ -455,6 +456,57 @@ function Impact({ analysis }: { analysis: TradeTeamAnalysis }) {
   );
 }
 
+const LEGALITY_WORD: Record<string, string> = {
+  'modeled-compliant': 'Works',
+  'modeled-noncompliant': 'Blocked',
+  'needs-review': 'Needs review',
+  'incomplete': 'Incomplete',
+};
+
+function TradeVerdictBar({ result, stale }: { result: TradeResponse; stale: boolean }) {
+  const { balance } = result;
+  const status = result.overall_status;
+  const tone = status === 'modeled-compliant' ? 'positive'
+    : status === 'modeled-noncompliant' ? 'negative' : 'warning';
+  const a = result.team_a.team.abbreviation ?? 'A';
+  const b = result.team_b.team.abbreviation ?? 'B';
+  const label = balance.fairness_label.replace('Team A', a).replace('Team B', b);
+
+  return (
+    <section className={`siq-trade-verdict-bar siq-trade-verdict-bar--${status}`}>
+      <div className="siq-trade-verdict-legality" data-tone={tone}>
+        <div className="siq-trade-verdict-stamp">
+          <span className="ds-eyebrow">Trade verdict</span>
+          <div className="siq-trade-verdict-stamp-row">
+            <Badge tone={tone} icon={tone === 'positive' ? <Check size={14} /> : <TriangleAlert size={14} />}>
+              {LEGALITY_WORD[status] ?? 'Review'}
+            </Badge>
+            {stale ? <Badge tone="warning" icon={<TriangleAlert size={13} />}>Prior result</Badge> : null}
+          </div>
+        </div>
+        <h2>{result.overall_label}</h2>
+        <p>{result.summary}</p>
+      </div>
+      <div className="siq-trade-verdict-balance">
+        <span className="ds-eyebrow">Value balance</span>
+        <BalanceMeter
+          fairnessPct={balance.fairness_pct}
+          tier={balance.fairness_tier}
+          label={label}
+          netUsd={balance.net_usd}
+          leftAbbr={a}
+          rightAbbr={b}
+          lowConfidence={balance.low_confidence}
+        />
+        <div className="siq-trade-grades">
+          <GradeChip grade={balance.team_a_grade} teamAbbr={a} lowConfidence={balance.low_confidence} />
+          <GradeChip grade={balance.team_b_grade} teamAbbr={b} lowConfidence={balance.low_confidence} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function useTradeWorkspace(
   teamId: number | null,
   setError: Dispatch<SetStateAction<string | null>>,
@@ -651,19 +703,7 @@ export default function TradeLabPage() {
 
       {result ? (
         <section className={`siq-trade-results${stale ? ' is-stale' : ''}`} aria-busy={analyzing}>
-          <header className={`siq-trade-verdict siq-trade-verdict--${result.overall_status}`}>
-            <div>
-              <span className="ds-eyebrow">Modeled salary verdict</span>
-              <h2>{result.overall_label}</h2>
-              <p>{result.summary}</p>
-            </div>
-            <Badge
-              tone={result.overall_status === 'modeled-compliant' ? 'positive' : result.overall_status === 'modeled-noncompliant' ? 'negative' : 'warning'}
-              icon={result.overall_status === 'modeled-compliant' ? <Check size={14} /> : <TriangleAlert size={14} />}
-            >
-              {stale ? 'Prior result' : 'Current result'}
-            </Badge>
-          </header>
+          <TradeVerdictBar result={result} stale={stale} />
           <div className="siq-trade-impacts">
             <Impact analysis={result.team_a} />
             <Impact analysis={result.team_b} />

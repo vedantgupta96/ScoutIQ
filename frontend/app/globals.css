@@ -5210,21 +5210,82 @@ textarea::placeholder {
 .siq-trade-results { display: grid; gap: 14px; }
 .siq-trade-results.is-stale { opacity: .72; }
 
-.siq-trade-verdict {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+/* Verdict bar: the decision-first headline — legality stamp + value-balance meter. */
+.siq-trade-verdict-bar {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 18px;
   padding: 16px 18px;
   border: 1px solid var(--border-default);
   border-radius: 8px;
   background: var(--bg-panel);
 }
+.siq-trade-verdict-bar--modeled-compliant { border-color: color-mix(in srgb, var(--positive) 42%, var(--border-default)); }
+.siq-trade-verdict-bar--modeled-noncompliant { border-color: color-mix(in srgb, var(--negative) 46%, var(--border-default)); }
+.siq-trade-verdict-bar--needs-review { border-color: color-mix(in srgb, var(--warning) 44%, var(--border-default)); }
 
-.siq-trade-verdict--modeled-compliant { border-color: color-mix(in srgb, var(--positive) 42%, var(--border-default)); }
-.siq-trade-verdict--modeled-noncompliant { border-color: color-mix(in srgb, var(--negative) 46%, var(--border-default)); }
-.siq-trade-verdict h2 { margin: 3px 0; font-size: clamp(18px, 2vw, 22px); }
-.siq-trade-verdict p { margin: 0; color: var(--text-secondary); }
+.siq-trade-verdict-legality {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding-right: 18px;
+  border-right: 1px solid var(--border-subtle);
+}
+.siq-trade-verdict-stamp { display: grid; gap: 6px; }
+.siq-trade-verdict-stamp-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.siq-trade-verdict-legality h2 { margin: 2px 0 0; font-size: clamp(17px, 1.9vw, 21px); }
+.siq-trade-verdict-legality p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+
+.siq-trade-verdict-balance { display: grid; gap: 10px; align-content: start; }
+.siq-trade-grades { display: flex; gap: 8px; }
+
+/* Balance meter — a calibrated value needle; center = even. */
+.siq-balance { display: grid; gap: 7px; }
+.siq-balance__ends {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px;
+}
+.siq-balance__tier { text-align: center; color: var(--text-secondary); font-weight: 600; letter-spacing: 0; text-transform: none; font-size: 12px; }
+.siq-balance__track {
+  position: relative; height: 12px; border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 16%, var(--bg-inset)), var(--bg-inset) 46%, var(--bg-inset) 54%, color-mix(in srgb, var(--accent) 16%, var(--bg-inset)));
+  border: 1px solid var(--border-subtle);
+}
+.siq-balance__center {
+  position: absolute; top: -3px; bottom: -3px; left: 50%; width: 2px;
+  transform: translateX(-50%); background: var(--border-strong, var(--text-muted)); opacity: .6;
+}
+.siq-balance__needle {
+  position: absolute; top: -4px; bottom: -4px; width: 4px; border-radius: 3px;
+  transform: translateX(-50%); background: var(--accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: left .35s cubic-bezier(.22,.61,.36,1);
+}
+.siq-balance[data-lean="strong"] .siq-balance__needle { background: var(--orange-500, var(--accent)); box-shadow: 0 0 7px color-mix(in srgb, var(--orange-500, var(--accent)) 60%, transparent); }
+.siq-balance__foot { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--text-secondary); }
+.siq-balance__conf {
+  color: var(--warning-text); font-size: 11px; padding: 1px 7px; border-radius: 999px;
+  background: var(--warning-soft); white-space: nowrap;
+}
+
+/* Per-side value grade chip. */
+.siq-grade-chip {
+  display: grid; gap: 1px; justify-items: center; min-width: 58px;
+  padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-inset);
+}
+.siq-grade-chip__mark { font-size: 22px; line-height: 1; font-weight: 700; }
+.siq-grade-chip--positive .siq-grade-chip__mark { color: var(--positive-text); }
+.siq-grade-chip--negative .siq-grade-chip__mark { color: var(--negative-text); }
+.siq-grade-chip--neutral .siq-grade-chip__mark { color: var(--text-secondary); }
+.siq-grade-chip.is-tentative { border-style: dashed; opacity: .82; }
+
+@media (prefers-reduced-motion: reduce) {
+  .siq-balance__needle { transition: none; }
+}
+
+@media (max-width: 720px) {
+  .siq-trade-verdict-bar { grid-template-columns: 1fr; }
+  .siq-trade-verdict-legality { padding-right: 0; border-right: none; padding-bottom: 14px; border-bottom: 1px solid var(--border-subtle); }
+}
 
 .siq-trade-impacts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
