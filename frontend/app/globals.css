@@ -5486,3 +5486,52 @@ textarea::placeholder {
   .siq-trade-picker-row { grid-template-columns: 22px 34px minmax(0, 1fr) 108px; gap: 7px; min-height: 64px; }
   .siq-trade-player-money strong { font-size: 12px; }
 }
+
+/* League: cap landscape */
+.siq-league-table-wrap {
+  overflow-x: auto;
+}
+
+.siq-league-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.siq-league-table th,
+.siq-league-table td {
+  padding: 8px 10px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Numeric columns (Payroll onward) right-align so figures scan and adjacent
+   columns stay visually separated. */
+.siq-league-table th:nth-child(n + 3),
+.siq-league-table td:nth-child(n + 3) {
+  text-align: right;
+}
+
+.siq-league-table th {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.siq-league-sort-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.siq-league-sort-btn:hover,
+.siq-league-sort-btn:focus-visible {
+  color: var(--text-primary);
+}
