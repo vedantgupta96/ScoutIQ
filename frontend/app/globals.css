@@ -5785,6 +5785,30 @@ textarea::placeholder {
 .is-positive { color: var(--positive-text); }
 .is-negative { color: var(--negative-text); }
 
+/* Plain-language verdict banner: reconciles edge-vs-random with absolute value. */
+.siq-strat-verdict {
+  display: flex; gap: 11px; align-items: flex-start; padding: 13px 16px;
+  border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-panel);
+  border-left-width: 3px;
+}
+.siq-strat-verdict p { margin: 0; font-size: 14px; color: var(--text-primary); line-height: 1.45; }
+.siq-strat-verdict-icon { display: grid; place-items: center; margin-top: 1px; flex-shrink: 0; }
+.siq-strat-verdict--confidence { border-left-color: var(--teal-500); }
+.siq-strat-verdict--confidence .siq-strat-verdict-icon { color: var(--confidence-text); }
+.siq-strat-verdict--neutral { border-left-color: var(--amber-500); }
+.siq-strat-verdict--neutral .siq-strat-verdict-icon { color: var(--warning-text); }
+.siq-strat-verdict--negative { border-left-color: var(--negative); }
+.siq-strat-verdict--negative .siq-strat-verdict-icon { color: var(--negative-text); }
+
+/* Section headers inside the signings ledger. */
+.siq-strat-ledger-head {
+  padding: 9px 14px 7px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--text-muted); background: var(--bg-inset); border-top: 1px solid var(--border-subtle);
+}
+.siq-strat-ledger-head:first-child { border-top: none; }
+.siq-strat-ledger-head--win { color: var(--positive-text); }
+.siq-strat-ledger-head--bust { color: var(--negative-text); }
+
 @media (max-width: 860px) {
   .siq-strat-results-grid { grid-template-columns: 1fr; }
 }

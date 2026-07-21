@@ -53,6 +53,26 @@ function money(pct: number, cap: number | null): string {
   const d = usd(pct, cap);
   return d == null ? `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%` : signedM(d);
 }
+// Unsigned magnitude, for "beat by X" phrasing.
+function absMoney(pct: number, cap: number | null): string {
+  const d = usd(Math.abs(pct), cap);
+  return d == null ? `${Math.abs(pct).toFixed(1)}%` : fmtM(d);
+}
+
+// One plain-English line that reconciles "beat random" (relative) with the absolute
+// value per signing — the two numbers that look contradictory on their own.
+function verdictLine(result: BacktestResult, cap: number | null): { text: string; tone: 'confidence' | 'neutral' | 'negative' } {
+  const a = result.alpha_per_slot_pct;   // vs random, % of cap per signing
+  const s = result.surplus_per_slot_pct; // absolute value per signing
+  const beat = a > 0.3, lost = a < -0.3, positive = s >= 0;
+  if (beat && positive)
+    return { tone: 'confidence', text: `Strong rule: it beat signing at random by ${absMoney(a, cap)} per signing and returned positive value overall (${money(s, cap)} per signing).` };
+  if (beat && !positive)
+    return { tone: 'neutral', text: `It beat signing at random by ${absMoney(a, cap)} per signing — but even this rule lost value overall (${money(s, cap)} per signing). A few gems don't offset the many players whose pay outgrows their production over the years you hold them.` };
+  if (lost)
+    return { tone: 'negative', text: `It lost to signing at random by ${absMoney(a, cap)} per signing — this rule did worse than picking names at random.` };
+  return { tone: 'neutral', text: `Roughly a coin-flip vs signing at random (${money(a, cap)} per signing). No real edge either way.` };
+}
 
 function Slider({ label, value, onChange, min, max, step = 1, suffix = '' }: {
   label: string; value: number; onChange: (v: number) => void; min: number; max: number; step?: number; suffix?: string;
@@ -200,6 +220,11 @@ export default function StrategyPage() {
   const cap = result?.reference_cap_usd ?? null;
   const alpha = result?.alpha_per_slot_pct ?? 0;
   const best = topPicks[0];
+  const wins = result ? result.picks.filter((p) => p.hit).length : 0;
+  const busts = result ? result.n_picks - wins : 0;
+  const winners = topPicks.filter((p) => p.realized_surplus_pct > 0).slice(0, 10);
+  const bustList = topPicks.filter((p) => p.realized_surplus_pct <= 0).slice(-10).reverse();
+  const verdict = result ? verdictLine(result, cap) : null;
 
   return (
     <div className="siq-stack">
@@ -257,19 +282,24 @@ export default function StrategyPage() {
         <AssumptionFlag tone="negative" title="The test could not run" icon={<TriangleAlert size={16} />}>{error}</AssumptionFlag>
       )}
 
-      {result && (
+      {result && verdict && (
         <>
+          <div className={`siq-strat-verdict siq-strat-verdict--${verdict.tone}`}>
+            <span className="siq-strat-verdict-icon">{verdict.tone === 'confidence' ? <TrendingUp size={18} /> : <TriangleAlert size={18} />}</span>
+            <p>{verdict.text}</p>
+          </div>
+
           <DecisionStrip
             ariaLabel="Backtest verdict"
             lead={{
               label: 'Edge over signing at random',
               value: money(alpha, cap),
-              detail: alpha >= 0 ? 'More value per signing than picking players at random' : 'Less value per signing than picking players at random',
-              tone: alpha > 0.5 ? 'positive' : alpha < -0.5 ? 'negative' : 'neutral',
+              detail: alpha > 0.3 ? 'More value per signing than picking players at random' : alpha < -0.3 ? 'Less value per signing than picking players at random' : 'About even with picking players at random',
+              tone: alpha > 0.3 ? 'positive' : alpha < -0.3 ? 'negative' : 'neutral',
             }}
             items={[
               { label: 'Value per signing', value: money(result.surplus_per_slot_pct, cap), detail: 'On-court value beyond pay (today’s cap)', tone: result.surplus_per_slot_pct >= 0 ? 'positive' : 'negative' },
-              { label: 'Signings that paid off', value: `${(result.hit_rate * 100).toFixed(0)}%`, detail: `${result.n_picks} signings out-produced their contract`, tone: 'neutral' },
+              { label: 'Signings that paid off', value: `${wins} of ${result.n_picks}`, detail: `${busts} busts · ${(result.hit_rate * 100).toFixed(0)}% out-produced their pay`, tone: 'neutral' },
               { label: 'Best signing', value: best ? money(best.realized_surplus_pct, cap) : '—', detail: best ? best.full_name : 'No signings', tone: 'confidence' },
             ]}
           />
@@ -288,11 +318,20 @@ export default function StrategyPage() {
             </Panel>
           </div>
 
-          <Panel variant="dossier" eyebrow="Every signing · best to worst" icon={<FlaskConical size={15} />} flush
-            action={<Badge tone="warning" size="sm">{result.n_picks} signings</Badge>}>
-            {topPicks.slice(0, 24).map((p) => (
-              <PickRow key={`${p.player_id}-${p.decision_season}`} pick={p} cap={cap} onPick={() => router.push(`/players/${p.player_id}`)} />
+          <Panel variant="dossier" eyebrow="Best signings & biggest busts" icon={<FlaskConical size={15} />} flush
+            action={<Badge tone="neutral" size="sm">{wins} wins · {busts} busts of {result.n_picks}</Badge>}>
+            <div className="siq-strat-ledger-head siq-strat-ledger-head--win">Top signings this rule made</div>
+            {winners.map((p) => (
+              <PickRow key={`w-${p.player_id}-${p.decision_season}`} pick={p} cap={cap} onPick={() => router.push(`/players/${p.player_id}`)} />
             ))}
+            {bustList.length > 0 && (
+              <>
+                <div className="siq-strat-ledger-head siq-strat-ledger-head--bust">Biggest busts this rule made</div>
+                {bustList.map((p) => (
+                  <PickRow key={`b-${p.player_id}-${p.decision_season}`} pick={p} cap={cap} onPick={() => router.push(`/players/${p.player_id}`)} />
+                ))}
+              </>
+            )}
           </Panel>
 
           <AssumptionFlag tone="warning" title="How to read this" icon={<TriangleAlert size={16} />}>
