@@ -282,6 +282,31 @@ outgrows itself. Redis stays out until the backend runs multiple replicas.
 
 ---
 
+## Front-office decision features (2026-07-21)
+
+A run of net-new decision surfaces on top of the stored-valuation base, each grounded in the
+existing valuation / cap / similarity modules (no new model training):
+
+- **Extension decision** (`api/extension.py`, profile "Extension" tab): extend-now-vs-wait verdict
+  from model value against the final guaranteed contract year, plus a cap-escalator **projected
+  market** for the season the player would reach free agency (ADR-0002 — explicitly not a forward
+  forecast) and a trajectory note. Verdict ladder shared with the batched extensions board.
+- **Contract-comp synthesis** (`model/similarity.synthesize_comps`): turns the existing
+  contract-comps list into a **market band** (25–75th percentile of what comps actually earn) and a
+  **suggested target** (model value clamped into that band). Surfaced on the profile "Similar
+  market" tab.
+- **League cap landscape** (`api/routers/league.py`, `/league`): per-team payroll/tier/room/**surplus**/
+  **expiring money** across all 30 teams in one batched pass; tier-distribution summary + sortable
+  table. Grounded axes, no editorial buyer/seller labels.
+- **Extensions board** (Free Agency "Extensions" tab): every rostered extension-eligible player
+  ranked by extend-now gap, reusing the shared `extension_verdict`.
+- **Smooth functional motion**: sliding active-indicator on `SegmentedControl` + `Tabs`, tab-panel
+  cross-fade, light row-enter stagger, and gauge/cap-bar/sim-share fill easing — all gated on
+  `prefers-reduced-motion`, no decorative/ambient motion, no digit count-up.
+
+Also fixed a pre-existing broken test collection inherited from the trade-lab merge
+(`tests/test_trade_scenarios.py` used a `tests.` package import). Backend suite grew to 213 passing.
+
 ## Next
 The Phase 4 accounting slice persists Spotrac UFA/RFA status, source-provided qualifying offers, rights
 team, Bird category, and cap holds. Free-agency responses prefer sourced status with an explicit estimated

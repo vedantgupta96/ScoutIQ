@@ -43,3 +43,26 @@ _Avoid_: salary (realized pay is one input to a cap hit, not the same thing)
 
 **Latest season**:
 The most recent completed season with full loaded stats — the default season every surface values against, advanced once each offseason.
+
+**Extension decision**:
+The extend-now-vs-wait read for a rostered player still under contract: model value against the final guaranteed year's cap hit, with the market projected to the season he would otherwise reach free agency. Reuses the verdict ladder vocabulary (extend now / fair / don't extend). Distinct from an option decision (that decides an existing option year) and from the free-agency board (impending free agents, not extension-eligible).
+
+**Projected market**:
+A player's current percent-of-cap value carried forward to a future season at the CBA cap escalator and expressed in that season's dollars. It is deliberately **not** a forward stat forecast — trajectory enters only through the current season's lag features. See ADR-0002.
+_Avoid_: forecast, projection (of production)
+
+**Contract comps**:
+A player's comparable contracts under the similarity model's contract lens — same-role players and what they are actually paid.
+
+**Market band**:
+The 25th–75th percentile of what a player's contract comps actually earn (min–max when fewer than four comps), in percent of cap and dollars. The real-market counterpart to the model's value.
+
+**Suggested target**:
+A negotiation anchor — the model value clamped into the comp market band (the band median when there is no model value). A player worth more than any comparable contract clamps to the band ceiling rather than inventing an above-market number.
+
+**Surplus**:
+Team-level total model value minus total payroll. The roster aggregate of value versus pay; distinct from a single player's value gap.
+_Avoid_: value gap (that is per-player; surplus is the team total)
+
+**Expiring money**:
+Team payroll with no contract-year in the following season — salary coming off the books, and the raw material of future cap flexibility.
