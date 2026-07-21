@@ -14,7 +14,7 @@ from sqlalchemy import desc, select
 from scoutiq.api.cap import cap_for, load_season_caps
 from scoutiq.api.free_agency import DECISION_THRESHOLD_PCT
 from scoutiq.api.season import LATEST_SEASON, next_season
-from scoutiq.api.valuation import value_player_detail
+from scoutiq.api.valuation import value_player_detail, value_players
 from scoutiq.models import Contract, ContractYear, Player
 
 
@@ -62,6 +62,32 @@ def _trajectory_note(attribution: list[dict] | None) -> str | None:
     if delta <= -1.0:
         return "Trajectory is declining — an extension carries downside risk."
     return None
+
+
+def extension_verdict(value_pct: float, current_pay_pct: float | None) -> tuple[str, str, str, float | None]:
+    """(verdict, tone, rationale, gap_pct) comparing model value to current pay. value_pct must be non-None."""
+    gap_pct = round(value_pct - current_pay_pct, 2) if current_pay_pct is not None else None
+
+    if current_pay_pct is None:
+        verdict, tone = "Extend at market", "neutral"
+        rationale = "No comparable guaranteed salary remaining to gap the model value against."
+    elif gap_pct >= DECISION_THRESHOLD_PCT:
+        verdict, tone = "Extend now", "positive"
+        rationale = (
+            f"Model value ({value_pct:.1f}% of cap) exceeds current pay ({current_pay_pct:.1f}%); "
+            "extending now locks in below-market cost."
+        )
+    elif gap_pct <= -DECISION_THRESHOLD_PCT:
+        verdict, tone = "Don't extend", "negative"
+        rationale = (
+            f"Current pay ({current_pay_pct:.1f}%) already exceeds model value ({value_pct:.1f}%); "
+            "extending now would compound the overpay."
+        )
+    else:
+        verdict, tone = "Fair — extend at market or wait", "neutral"
+        rationale = "Model value and current pay are within a cap-point; either path is defensible."
+
+    return verdict, tone, rationale, gap_pct
 
 
 def decide_extension(db, player_id: int) -> ExtensionDecision:
@@ -200,26 +226,7 @@ def decide_extension(db, player_id: int) -> ExtensionDecision:
             caveat=CAVEAT,
         )
 
-    gap_pct = round(value_pct - current_pay_pct, 2) if current_pay_pct is not None else None
-
-    if current_pay_pct is None:
-        verdict, tone = "Extend at market", "neutral"
-        rationale = "No comparable guaranteed salary remaining to gap the model value against."
-    elif gap_pct >= DECISION_THRESHOLD_PCT:
-        verdict, tone = "Extend now", "positive"
-        rationale = (
-            f"Model value ({value_pct:.1f}% of cap) exceeds current pay ({current_pay_pct:.1f}%); "
-            "extending now locks in below-market cost."
-        )
-    elif gap_pct <= -DECISION_THRESHOLD_PCT:
-        verdict, tone = "Don't extend", "negative"
-        rationale = (
-            f"Current pay ({current_pay_pct:.1f}%) already exceeds model value ({value_pct:.1f}%); "
-            "extending now would compound the overpay."
-        )
-    else:
-        verdict, tone = "Fair — extend at market or wait", "neutral"
-        rationale = "Model value and current pay are within a cap-point; either path is defensible."
+    verdict, tone, rationale, gap_pct = extension_verdict(value_pct, current_pay_pct)
 
     return ExtensionDecision(
         player_id=player_id,
@@ -243,3 +250,91 @@ def decide_extension(db, player_id: int) -> ExtensionDecision:
         trajectory_note=trajectory_note,
         caveat=CAVEAT,
     )
+
+
+@dataclass
+class ExtensionCandidate:
+    player_id: int
+    value_pct: float
+    current_pay_pct: float
+    gap_pct: float
+    verdict: str
+    tone: str
+    final_contract_season: str | None
+
+
+def rank_extension_candidates(db, *, limit: int = 30) -> list[ExtensionCandidate]:
+    """Rostered, extension-eligible players ranked by extend-now value gap (descending)."""
+    contracts = db.scalars(
+        select(Contract)
+        .distinct(Contract.player_id)
+        .order_by(Contract.player_id, desc(Contract.season_start), desc(Contract.scraped_at))
+    ).all()
+    by_contract_id = {c.id: c for c in contracts}
+    if not by_contract_id:
+        return []
+    player_id_by_contract = {c.id: c.player_id for c in contracts}
+
+    rostered = set(
+        db.scalars(select(Player.player_id).where(Player.current_team_id.isnot(None))).all()
+    )
+    by_contract_id = {
+        cid: c for cid, c in by_contract_id.items() if player_id_by_contract[cid] in rostered
+    }
+    if not by_contract_id:
+        return []
+
+    years_by_contract: dict[int, list[ContractYear]] = {}
+    for cy in db.scalars(
+        select(ContractYear)
+        .where(ContractYear.contract_id.in_(by_contract_id.keys()))
+        .order_by(ContractYear.contract_id, ContractYear.season)
+    ).all():
+        years_by_contract.setdefault(cy.contract_id, []).append(cy)
+
+    eligible: dict[int, dict] = {}
+    for cid, years in years_by_contract.items():
+        remaining = [cy for cy in years if cy.season > LATEST_SEASON]
+        guaranteed_remaining = [
+            cy for cy in remaining if not (cy.is_player_option or cy.is_team_option)
+        ]
+        if not guaranteed_remaining:
+            continue
+        last_guaranteed = guaranteed_remaining[-1]
+        if last_guaranteed.cap_pct is None:
+            continue
+        current_pay_pct = round(float(last_guaranteed.cap_pct) * 100, 2)
+        player_id = player_id_by_contract[cid]
+        final_contract_season = max(cy.season for cy in years)
+        eligible[player_id] = {
+            "current_pay_pct": current_pay_pct,
+            "final_contract_season": final_contract_season,
+        }
+
+    if not eligible:
+        return []
+
+    valuations = value_players(db, [(pid, LATEST_SEASON) for pid in eligible])
+
+    candidates: list[ExtensionCandidate] = []
+    for player_id, info in eligible.items():
+        val = valuations.get((player_id, LATEST_SEASON))
+        if val is None:
+            continue
+        value_pct = val.value_pct
+        current_pay_pct = info["current_pay_pct"]
+        verdict, tone, _rationale, gap_pct = extension_verdict(value_pct, current_pay_pct)
+        candidates.append(
+            ExtensionCandidate(
+                player_id=player_id,
+                value_pct=value_pct,
+                current_pay_pct=current_pay_pct,
+                gap_pct=gap_pct,
+                verdict=verdict,
+                tone=tone,
+                final_contract_season=info["final_contract_season"],
+            )
+        )
+
+    candidates.sort(key=lambda c: c.gap_pct, reverse=True)
+    return candidates[:limit]
