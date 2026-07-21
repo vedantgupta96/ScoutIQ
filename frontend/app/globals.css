@@ -894,7 +894,9 @@ textarea::placeholder {
   cursor: pointer;
 }
 
-.siq-workspace-tabs button:hover {
+/* Only non-active tabs get a hover background — otherwise it paints over the
+   sliding indicator and leaves on-accent text unreadable on the active tab. */
+.siq-workspace-tabs button:not(.is-active):hover {
   color: var(--text-primary);
   background: var(--bg-hover);
 }
@@ -2209,7 +2211,7 @@ textarea::placeholder {
   transition: color var(--duration-fast) var(--ease-out);
 }
 
-.siq-segmented__option:hover { color: var(--text-primary); }
+.siq-segmented__option:not(.siq-segmented__option--active):hover { color: var(--text-primary); }
 
 /* The sliding indicator provides the active background; the option only recolors. */
 .siq-segmented__option--active {
