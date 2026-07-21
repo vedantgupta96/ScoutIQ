@@ -1113,7 +1113,7 @@ function ModelInputs({
         icon={<Info size={16} />}
       >
         {val.caveat ?? (
-          'This is a production-implied valuation, not a market-value estimate. It does not account for injury risk, defensive impact beyond box-score proxies, or gravity effects. Check the Model & backtest view for full performance metrics.'
+          'This is a production-implied valuation, not a market-value estimate. It does not account for injury risk, defensive impact beyond box-score proxies, or gravity effects. Check the Model trust view for full performance metrics.'
         )}
       </AssumptionFlag>
     </div>

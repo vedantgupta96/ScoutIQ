@@ -14,7 +14,7 @@ const NAV = [
   { id: 'offseason', href: '/offseason', label: 'Offseason plan', mobileLabel: 'Plan', Icon: CalendarRange },
   { id: 'trade-lab', href: '/trade-lab', label: 'Trade lab', mobileLabel: 'Trade', Icon: ArrowLeftRight },
   { id: 'simulator', href: '/simulator', label: 'Cap simulator', mobileLabel: 'Cap sim', Icon: SlidersHorizontal },
-  { id: 'model', href: '/model', label: 'Model & backtest', mobileLabel: 'Model', Icon: Target },
+  { id: 'model', href: '/model', label: 'Model trust', mobileLabel: 'Trust', Icon: Target },
 ];
 
 const TITLES: Record<string, string> = {
@@ -25,7 +25,7 @@ const TITLES: Record<string, string> = {
   '/offseason': 'Offseason plan',
   '/trade-lab': 'Trade lab',
   '/simulator': 'Cap simulator',
-  '/model':     'Model & backtest',
+  '/model':     'Model trust',
 };
 
 function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) {

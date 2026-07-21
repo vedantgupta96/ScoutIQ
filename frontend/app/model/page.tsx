@@ -478,7 +478,7 @@ export default function ModelPage() {
 
   return (
     <div className="siq-stack">
-      <h1 className="siq-sr-only">Model performance</h1>
+      <h1 className="siq-sr-only">Model trust</h1>
       {/* Headline metrics */}
       {backtestError && (
         <AssumptionFlag tone="negative" title="Backtest metadata unavailable" icon={<TriangleAlert size={16} />}>
