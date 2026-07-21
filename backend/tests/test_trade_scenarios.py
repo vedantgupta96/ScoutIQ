@@ -11,7 +11,7 @@ from scoutiq.api.routers import trades as trades_router
 from scoutiq.model.roster_fit import build_fit_context
 from scoutiq.models import DraftPick, Team
 
-from tests.test_trades import _workspace
+from test_trades import _workspace
 
 
 class FakePicksDB:
