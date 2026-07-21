@@ -16,15 +16,18 @@ import {
   Target,
   DollarSign,
   GitCompare,
+  Lock,
 } from 'lucide-react';
 import {
   getPlayerContract,
+  getPlayerExtension,
   getPlayerRationale,
   getPlayerScoutRatings,
   getSimilarPlayers,
   getValuation,
   PlayerContractResponse,
   PlayerContractYear,
+  PlayerExtensionResponse,
   PlayerRationaleResponse,
   PlayerScoutRatingsResponse,
   PlayerScoutTraitRating,
@@ -41,6 +44,7 @@ import { Button, ButtonLink } from '@/components/ui/Button';
 import { Tabs } from '@/components/ui/Tabs';
 import { StatTile } from '@/components/ui/StatTile';
 import { VerdictPill } from '@/components/ui/VerdictPill';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
 import { TeamLogo } from '@/components/ui/TeamLogo';
@@ -330,6 +334,70 @@ function ContractCard({
   );
 }
 
+function ExtensionCard({
+  extension,
+  error,
+}: {
+  extension: PlayerExtensionResponse | null;
+  error: string | null;
+}) {
+  if (error) {
+    return null;
+  }
+
+  return (
+    <Panel variant="board" teamAccent eyebrow="Extension decision" icon={<Lock size={15} />}>
+      {extension == null ? (
+        <p className="siq-profile-state">Loading extension read…</p>
+      ) : !extension.eligible ? (
+        <EmptyState title={extension.ineligible_reason ?? 'Not extension-eligible.'} />
+      ) : (
+        <>
+          <div className="siq-decision-actions">
+            <span
+              className="siq-verdict-beat"
+              style={{
+                color: extension.tone === 'positive' ? 'var(--positive)'
+                  : extension.tone === 'negative' ? 'var(--negative)'
+                  : 'var(--border-strong)',
+              }}
+            >
+              <VerdictPill gapPct={extension.gap_pct} label={extension.verdict} tone={extension.tone as 'positive' | 'negative' | 'neutral'} size="lg" />
+            </span>
+          </div>
+          <p className="ds-note ds-m0">{extension.rationale}</p>
+          <div className="siq-contract-summary-strip">
+            <StatTile
+              label="Model value"
+              value={extension.value_pct != null ? fmtPct(extension.value_pct) : '—'}
+              sub={extension.value_pct != null ? `80% range ${fmtPct(extension.value_lo_pct ?? extension.value_pct)} to ${fmtPct(extension.value_hi_pct ?? extension.value_pct)}` : `${extension.value_season} — no loaded stats`}
+              size="sm"
+            />
+            <StatTile
+              label="Current pay"
+              value={extension.current_pay_pct != null ? fmtPct(extension.current_pay_pct) : '—'}
+              sub="Final guaranteed year, % of cap"
+              size="sm"
+            />
+            <StatTile
+              label="Projected market"
+              value={extension.projected_aav_usd != null ? fmtM(extension.projected_aav_usd) : '—'}
+              sub={extension.entering_season
+                ? `${extension.entering_season}${extension.projected_aav_lo_usd != null && extension.projected_aav_hi_usd != null ? ` · ${fmtM(extension.projected_aav_lo_usd)}–${fmtM(extension.projected_aav_hi_usd)}` : ''}`
+                : 'Entering season unavailable'}
+              size="sm"
+            />
+          </div>
+          {extension.trajectory_note && (
+            <p className="ds-note ds-m0">{extension.trajectory_note}</p>
+          )}
+          <p className="ds-note ds-m0 siq-profile-contract-caveat">{extension.caveat}</p>
+        </>
+      )}
+    </Panel>
+  );
+}
+
 const SIMILAR_MODE_LABELS: Record<SimilarPlayersMode, string> = {
   twins: 'Twins',
   contract_comps: 'Contract comps',
@@ -460,12 +528,13 @@ function SimilarPlayersCard({
   );
 }
 
-type WorkspaceTab = 'brief' | 'market' | 'contract' | 'scout' | 'model';
+type WorkspaceTab = 'brief' | 'market' | 'contract' | 'extension' | 'scout' | 'model';
 
 const WORKSPACE_TABS: { key: WorkspaceTab; label: string; icon: ReactNode }[] = [
   { key: 'brief', label: 'Front-office read', icon: <Target size={14} /> },
   { key: 'market', label: 'Similar market', icon: <Users size={14} /> },
   { key: 'contract', label: 'Contract', icon: <FileText size={14} /> },
+  { key: 'extension', label: 'Extension', icon: <Lock size={14} /> },
   { key: 'scout', label: 'Scout', icon: <ClipboardCheck size={14} /> },
   { key: 'model', label: 'Model', icon: <BarChart3 size={14} /> },
 ];
@@ -1127,6 +1196,8 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
 
   const [contract, setContract] = useState<PlayerContractResponse | null>(null);
   const [contractError, setContractError] = useState<string | null>(null);
+  const [extension, setExtension] = useState<PlayerExtensionResponse | null>(null);
+  const [extensionError, setExtensionError] = useState<string | null>(null);
   const [similarMode, setSimilarMode] = useState<SimilarPlayersMode>('twins');
   const [similarMarket, setSimilarMarket] = useState<SimilarPlayersResponse | null>(null);
   const [similarError, setSimilarError] = useState<string | null>(null);
@@ -1152,6 +1223,12 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
     getPlayerScoutRatings(playerId)
       .then(setScoutRatings)
       .catch((e: unknown) => setScoutError(e instanceof Error ? e.message : 'Failed to load scout ratings.'));
+
+    setExtension(null);
+    setExtensionError(null);
+    getPlayerExtension(playerId)
+      .then(setExtension)
+      .catch((e: unknown) => setExtensionError(e instanceof Error ? e.message : 'Failed to load extension read.'));
   }, [playerId]);
 
   useEffect(() => {
@@ -1253,6 +1330,10 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
                 error={contractError}
                 onSimulateExtension={() => router.push(extensionHref)}
               />
+            )}
+
+            {activeTab === 'extension' && (
+              <ExtensionCard extension={extension} error={extensionError} />
             )}
 
             {activeTab === 'scout' && (

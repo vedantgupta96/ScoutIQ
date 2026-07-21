@@ -1,6 +1,7 @@
 """GET /players/{player_id}/valuation — production-implied value for a player's most recent season."""
 from __future__ import annotations
 
+import dataclasses
 import re
 from datetime import datetime, timezone
 from typing import Literal
@@ -10,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, desc, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from scoutiq.api import rosters
+from scoutiq.api import extension, rosters
 from scoutiq.api.deps import DB
 from scoutiq.api.rosters import PlayerSummary, _player_summary_from_parts, latest_stats_row
 from scoutiq.api.season import LATEST_SEASON, next_season
@@ -693,6 +694,19 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
         "caveat": valuation.caveat,
         "computed_at": valuation.computed_at,
     }
+
+
+@router.get("/{player_id}/extension")
+def get_extension(player_id: int, db: DB = None):
+    """Return an extend/wait/decline recommendation for a player's current contract."""
+    try:
+        result = extension.decide_extension(db, player_id)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    return dataclasses.asdict(result)
 
 
 @router.get("/{player_id}/scout-ratings", response_model=PlayerScoutRatings)

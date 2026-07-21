@@ -188,6 +188,29 @@ export interface PlayerContractResponse {
   caveat: string;
 }
 
+export interface PlayerExtensionResponse {
+  player_id: number;
+  eligible: boolean;
+  ineligible_reason: string | null;
+  value_season: string;
+  value_pct: number | null;
+  value_lo_pct: number | null;
+  value_hi_pct: number | null;
+  current_pay_pct: number | null;
+  final_contract_season: string | null;
+  entering_season: string | null;
+  projected_aav_usd: number | null;
+  projected_aav_lo_usd: number | null;
+  projected_aav_hi_usd: number | null;
+  projected_cap_usd: number | null;
+  gap_pct: number | null;
+  verdict: string;
+  tone: string;
+  rationale: string;
+  trajectory_note: string | null;
+  caveat: string;
+}
+
 export type SimilarPlayersMode = 'twins' | 'contract_comps' | 'replacements';
 
 export interface SimilarPlayerResult {
@@ -892,6 +915,10 @@ export function getValuation(id: number, season?: string, signal?: AbortSignal):
 
 export function getPlayerContract(id: number, signal?: AbortSignal): Promise<PlayerContractResponse> {
   return apiFetch<PlayerContractResponse>(`/players/${id}/contract`, { signal });
+}
+
+export function getPlayerExtension(id: number, signal?: AbortSignal): Promise<PlayerExtensionResponse> {
+  return apiFetch<PlayerExtensionResponse>(`/players/${id}/extension`, { signal });
 }
 
 export function getSimilarPlayers(
