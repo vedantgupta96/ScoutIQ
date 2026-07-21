@@ -33,11 +33,11 @@ RANDOM_SEED = 20260721
 SIGNALS = ("gap", "value", "bpm", "ws", "vorp")
 
 CAVEAT = (
-    "Selection uses the model's value signal as-of the decision season; outcomes are graded "
-    "on real Win Shares (a model-free ~2% of cap per win) minus salary actually paid, so the "
-    "model never grades itself. Players who leave the league contribute 0 for missing seasons "
-    "(dead money is not tracked), which under-penalises busts. Few decision cohorts means wide "
-    "error bars — read the benchmark gap, not the absolute number."
+    "Players are chosen by the model's bargain signal as-of that offseason, then graded on what "
+    "they actually did on the floor — real Win Shares (a model-free ~2.5% of cap per win) minus "
+    "what they were paid — so the model never grades its own picks. A signing who leaves the "
+    "league counts as neutral (buyout money isn't tracked), which goes easy on busts. With only "
+    "~13 offseasons to test, trust the gap vs. signing at random, not the exact number."
 )
 
 

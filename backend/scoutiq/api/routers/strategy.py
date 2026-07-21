@@ -12,9 +12,13 @@ import time
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from sqlalchemy import select
+
 from scoutiq.api.deps import DB
+from scoutiq.api.season import LATEST_SEASON
 from scoutiq.backtest.engine import SIGNALS, StrategySpec, run_backtest
 from scoutiq.backtest.panel import build_panel
+from scoutiq.models import CapConstants
 
 router = APIRouter(prefix="/strategy", tags=["strategy"])
 
@@ -73,26 +77,26 @@ class StrategyRequest(BaseModel):
 PRESETS = [
     {
         "id": "value",
-        "name": "Value — most undervalued",
-        "description": "Buy the biggest model bargains among rotation players; hold 3 seasons.",
+        "name": "Bargain hunter",
+        "description": "Sign the biggest bargains — players the model values well above their pay — and keep them 3 seasons.",
         "spec": {"signal": "gap", "require_undervalued": True, "portfolio_size": 10, "horizon": 3},
     },
     {
         "id": "youth-upside",
-        "name": "Youth upside",
-        "description": "Undervalued players 23 or younger — bet on bargains that grow.",
+        "name": "Young and cheap",
+        "description": "Bargains age 23 and under — bet on players who grow into the deal.",
         "spec": {"signal": "gap", "require_undervalued": True, "max_age": 23, "portfolio_size": 10, "horizon": 3},
     },
     {
         "id": "chase-production",
-        "name": "Chase production",
-        "description": "Sign the highest Win-Shares players regardless of cost (a naive baseline).",
+        "name": "Sign the biggest names",
+        "description": "Grab the top producers (Win Shares) whatever the cost — the star-chasing baseline.",
         "spec": {"signal": "ws", "portfolio_size": 10, "horizon": 3},
     },
     {
         "id": "two-way-value",
-        "name": "Two-way value",
-        "description": "Undervalued players with a real defensive/all-around edge (BPM ≥ 2).",
+        "name": "Two-way bargains",
+        "description": "Bargains who also move the needle on both ends (BPM 2+).",
         "spec": {"signal": "gap", "require_undervalued": True, "min_bpm": 2.0, "portfolio_size": 10, "horizon": 3},
     },
 ]
@@ -120,4 +124,9 @@ def get_meta(db: DB = None):
 def post_backtest(req: StrategyRequest, db: DB = None):
     panel = _cached_panel(db)
     result = run_backtest(panel, req.to_spec())
-    return vars(result)
+    out = vars(result)
+    # Today's cap lets the UI translate cap-% figures into dollars GMs think in.
+    cap = db.scalar(select(CapConstants.salary_cap).where(CapConstants.season == LATEST_SEASON))
+    out["reference_cap_usd"] = int(cap) if cap else None
+    out["reference_season"] = LATEST_SEASON
+    return out

@@ -1090,6 +1090,8 @@ export interface BacktestResult {
   alpha_per_slot_pct: number;
   picks: BacktestPick[];
   caveat: string;
+  reference_cap_usd: number | null;
+  reference_season: string;
 }
 export interface StrategyMeta { seasons: string[]; decision_seasons: string[]; signals: StrategySignal[]; n_player_seasons: number }
 export function getStrategyPresets(signal?: AbortSignal): Promise<{ presets: StrategyPreset[]; signals: StrategySignal[] }> {

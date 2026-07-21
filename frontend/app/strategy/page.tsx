@@ -19,19 +19,22 @@ import { Select } from '@/components/ui/Select';
 import { Avatar } from '@/components/ui/Avatar';
 import { DecisionStrip } from '@/components/ui/DecisionStrip';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
+import { fmtM } from '@/lib/utils';
 
+// Rank options — basketball-native names, not model jargon.
 const SIGNAL_LABEL: Record<StrategySignal, string> = {
-  gap: 'Value gap (undervaluation)',
-  value: 'Model value',
-  ws: 'Win Shares',
+  gap: 'Best bargains (value vs pay)',
+  value: 'Highest model value',
+  ws: 'Most production (Win Shares)',
   bpm: 'Box Plus/Minus',
   vorp: 'VORP',
 };
 
+// Benchmarks framed as rival GM approaches.
 const BENCH_LABEL: Record<string, string> = {
-  random: 'Random rotation player',
-  chase_production: 'Chase production (top WS)',
-  chase_salary: 'Chase salary (highest paid)',
+  random: 'Signing at random',
+  chase_production: 'Signing the biggest names',
+  chase_salary: 'Paying the most',
 };
 
 const DEFAULT: StrategyRequest = {
@@ -39,8 +42,16 @@ const DEFAULT: StrategyRequest = {
   min_mpg: 20, min_gp: 40,
 };
 
-function pct(v: number, dp = 1): string {
-  return `${v > 0 ? '+' : ''}${v.toFixed(dp)}%`;
+// Cap-% → today's dollars, the unit a GM actually thinks in.
+function usd(pct: number, cap: number | null): number | null {
+  return cap == null ? null : (pct / 100) * cap;
+}
+function signedM(dollars: number): string {
+  return `${dollars >= 0 ? '+' : '−'}${fmtM(Math.abs(dollars))}`;
+}
+function money(pct: number, cap: number | null): string {
+  const d = usd(pct, cap);
+  return d == null ? `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%` : signedM(d);
 }
 
 function Slider({ label, value, onChange, min, max, step = 1, suffix = '' }: {
@@ -62,39 +73,46 @@ function Slider({ label, value, onChange, min, max, step = 1, suffix = '' }: {
   );
 }
 
-// Cumulative realized-surplus equity curve over decision cohorts.
-function EquityCurve({ result }: { result: BacktestResult }) {
-  const pts = result.equity_curve;
-  const W = 640, H = 220, padL = 44, padR = 12, padT = 14, padB = 26;
-  const values = pts.map((p) => p.cumulative_surplus_pct);
+// How each offseason's signing class panned out 3 seasons later (per class, not cumulative).
+function ClassChart({ result }: { result: BacktestResult }) {
+  const cap = result.reference_cap_usd;
+  const pts = result.equity_curve.map((p) => ({ season: p.season, value: usd(p.cohort_surplus_pct, cap) ?? p.cohort_surplus_pct }));
+  const W = 640, H = 220, padL = 52, padR = 12, padT = 14, padB = 26;
+  const values = pts.map((p) => p.value);
   const min = Math.min(0, ...values), max = Math.max(0, ...values);
   const span = max - min || 1;
   const x = (i: number) => padL + (pts.length <= 1 ? 0 : (i / (pts.length - 1)) * (W - padL - padR));
   const y = (v: number) => padT + (1 - (v - min) / span) * (H - padT - padB);
-  const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(p.cumulative_surplus_pct).toFixed(1)}`).join(' ');
   const zeroY = y(0);
+  const axis = (v: number) => (cap == null ? `${v.toFixed(0)}%` : fmtM(v));
 
   return (
-    <svg className="siq-strat-equity-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Cumulative realized surplus by decision season">
+    <svg className="siq-strat-equity-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Value produced by each offseason signing class">
       <line x1={padL} y1={zeroY} x2={W - padR} y2={zeroY} stroke="var(--border-strong)" strokeDasharray="3 3" />
+      <text x={padL - 6} y={y(max) + 3} textAnchor="end" fontSize="9" fill="var(--text-muted)" fontFamily="var(--font-mono)">{axis(max)}</text>
       <text x={padL - 6} y={zeroY + 3} textAnchor="end" fontSize="9" fill="var(--text-muted)" fontFamily="var(--font-mono)">0</text>
-      <text x={padL - 6} y={y(max) + 3} textAnchor="end" fontSize="9" fill="var(--text-muted)" fontFamily="var(--font-mono)">{max.toFixed(0)}</text>
-      <text x={padL - 6} y={y(min) + 3} textAnchor="end" fontSize="9" fill="var(--text-muted)" fontFamily="var(--font-mono)">{min.toFixed(0)}</text>
-      <path d={`${line} L ${x(pts.length - 1)} ${zeroY} L ${x(0)} ${zeroY} Z`} fill="var(--accent)" opacity="0.08" />
-      <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2" />
-      {pts.map((p, i) => (
-        <g key={p.season}>
-          <circle cx={x(i)} cy={y(p.cumulative_surplus_pct)} r="2.5" fill="var(--accent)" />
-          {i % 2 === 0 && <text x={x(i)} y={H - 8} textAnchor="middle" fontSize="8" fill="var(--text-muted)" fontFamily="var(--font-mono)">{p.season.slice(2)}</text>}
-        </g>
-      ))}
+      <text x={padL - 6} y={y(min) + 3} textAnchor="end" fontSize="9" fill="var(--text-muted)" fontFamily="var(--font-mono)">{axis(min)}</text>
+      {pts.map((p, i) => {
+        const pos = p.value >= 0;
+        const bw = Math.max(6, (W - padL - padR) / pts.length - 8);
+        const top = pos ? y(p.value) : zeroY;
+        const h = Math.abs(y(p.value) - zeroY);
+        return (
+          <g key={p.season}>
+            <rect x={x(i) - bw / 2} y={top} width={bw} height={Math.max(1, h)} rx="2"
+              fill={pos ? 'var(--positive)' : 'var(--negative)'} opacity="0.85" />
+            {i % 2 === 0 && <text x={x(i)} y={H - 8} textAnchor="middle" fontSize="8" fill="var(--text-muted)" fontFamily="var(--font-mono)">{p.season.slice(2)}</text>}
+          </g>
+        );
+      })}
     </svg>
   );
 }
 
 function BenchmarkBars({ result }: { result: BacktestResult }) {
+  const cap = result.reference_cap_usd;
   const rows = [
-    { key: 'strategy', label: 'This strategy', value: result.surplus_per_slot_pct, accent: true },
+    { key: 'strategy', label: 'Your rule', value: result.surplus_per_slot_pct, accent: true },
     ...Object.entries(result.benchmarks).map(([k, b]) => ({ key: k, label: BENCH_LABEL[k] ?? k, value: b.surplus_per_slot_pct, accent: false })),
   ];
   const maxAbs = Math.max(1, ...rows.map((r) => Math.abs(r.value)));
@@ -113,7 +131,7 @@ function BenchmarkBars({ result }: { result: BacktestResult }) {
               />
               <span className="siq-strat-bar-mid" />
             </span>
-            <strong className={`ds-tnum siq-strat-bar-val ${pos ? 'is-positive' : 'is-negative'}`}>{pct(r.value)}</strong>
+            <strong className={`ds-tnum siq-strat-bar-val ${pos ? 'is-positive' : 'is-negative'}`}>{money(r.value, cap)}</strong>
           </div>
         );
       })}
@@ -121,17 +139,17 @@ function BenchmarkBars({ result }: { result: BacktestResult }) {
   );
 }
 
-function PickRow({ pick, onPick }: { pick: BacktestPick; onPick: () => void }) {
+function PickRow({ pick, cap, onPick }: { pick: BacktestPick; cap: number | null; onPick: () => void }) {
   return (
     <button className="siq-row siq-row--12 siq-strat-pick-row" onClick={onPick}>
       <Avatar name={pick.full_name} playerId={pick.player_id} size="sm" />
       <span className="siq-min0 siq-strat-pick-id">
         <strong>{pick.full_name}</strong>
-        <small className="ds-note">{pick.decision_season} · gap {pick.signal_value >= 0 ? '+' : ''}{pick.signal_value.toFixed(1)} · held {pick.seasons_realized}y</small>
+        <small className="ds-note">{pick.decision_season} · bargain {pick.signal_value >= 0 ? '+' : ''}{pick.signal_value.toFixed(1)} · kept {pick.seasons_realized}y</small>
       </span>
-      <Badge tone={pick.hit ? 'positive' : 'negative'} size="sm">{pick.hit ? 'hit' : 'miss'}</Badge>
+      <Badge tone={pick.hit ? 'positive' : 'negative'} size="sm">{pick.hit ? 'win' : 'bust'}</Badge>
       <strong className={`ds-tnum ds-right siq-strat-pick-surplus ${pick.realized_surplus_pct >= 0 ? 'is-positive' : 'is-negative'}`}>
-        {pct(pick.realized_surplus_pct)}
+        {money(pick.realized_surplus_pct, cap)}
       </strong>
     </button>
   );
@@ -168,7 +186,7 @@ export default function StrategyPage() {
     try {
       setResult(await runBacktest(req));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Backtest failed.');
+      setError(e instanceof Error ? e.message : 'The test could not run.');
     } finally {
       setRunning(false);
     }
@@ -179,17 +197,19 @@ export default function StrategyPage() {
     [result],
   );
 
+  const cap = result?.reference_cap_usd ?? null;
   const alpha = result?.alpha_per_slot_pct ?? 0;
+  const best = topPicks[0];
 
   return (
     <div className="siq-stack">
       <header className="siq-strat-heading">
-        <span className="ds-eyebrow">Historical strategy backtest · 2012-13 → 2024-25 decisions</span>
+        <span className="ds-eyebrow">Test a signing philosophy across 13 NBA offseasons</span>
         <h1>Backtesting</h1>
-        <p>Define a roster-building rule, replay it across NBA history, and see whether it beat the market on realized value-for-dollar. Selection uses the model&apos;s value signal; results are graded on real production (Win Shares), so the model never grades itself.</p>
+        <p>Pick a rule for which players to sign, replay it across every offseason since 2012-13, and see whether it built more value than a GM signing at random. The model picks the players; real on-court production (Win Shares) grades them — so the model never grades its own picks.</p>
       </header>
 
-      <Panel variant="card" padded eyebrow="Strategy" icon={<FlaskConical size={15} />}>
+      <Panel variant="card" padded eyebrow="Signing rule" icon={<FlaskConical size={15} />}>
         <div className="siq-strat-presets">
           {presets.map((p) => (
             <button
@@ -205,36 +225,36 @@ export default function StrategyPage() {
 
         <div className="siq-strat-builder">
           <label className="siq-strat-field">
-            <span className="ds-eyebrow">Rank players by</span>
+            <span className="ds-eyebrow">Target players by</span>
             <Select value={req.signal} onChange={(e) => set('signal', e.target.value as StrategySignal)}>
               {(Object.keys(SIGNAL_LABEL) as StrategySignal[]).map((s) => (
                 <option key={s} value={s}>{SIGNAL_LABEL[s]}</option>
               ))}
             </Select>
           </label>
-          <Slider label="Portfolio size" value={req.portfolio_size ?? 10} onChange={(v) => set('portfolio_size', v)} min={1} max={30} />
-          <Slider label="Hold (seasons)" value={req.horizon ?? 3} onChange={(v) => set('horizon', v)} min={1} max={5} />
+          <Slider label="Signings per offseason" value={req.portfolio_size ?? 10} onChange={(v) => set('portfolio_size', v)} min={1} max={30} />
+          <Slider label="Seasons you keep them" value={req.horizon ?? 3} onChange={(v) => set('horizon', v)} min={1} max={5} />
           <Slider label="Min minutes/game" value={req.min_mpg ?? 20} onChange={(v) => set('min_mpg', v)} min={0} max={40} />
-          <Slider label="Min games" value={req.min_gp ?? 40} onChange={(v) => set('min_gp', v)} min={0} max={82} />
+          <Slider label="Min games played" value={req.min_gp ?? 40} onChange={(v) => set('min_gp', v)} min={0} max={82} />
           <Slider label="Max age" value={req.max_age ?? 45} onChange={(v) => set('max_age', v === 45 ? null : v)} min={19} max={45} />
           <Slider label="Min BPM" value={req.min_bpm ?? -15} onChange={(v) => set('min_bpm', v === -15 ? null : v)} min={-15} max={12} />
           <label className="siq-strat-field siq-strat-toggle">
             <input type="checkbox" checked={!!req.require_undervalued} onChange={(e) => set('require_undervalued', e.target.checked)} />
-            <span>Undervalued only (model value &gt; pay)</span>
+            <span>Bargains only (model value above pay)</span>
           </label>
         </div>
 
         <div className="siq-strat-run">
-          <span className="ds-note">Max age 45 / Min BPM −15 mean &ldquo;no limit.&rdquo; Backtest holds each cohort {req.horizon} seasons across ~13 decision years.</span>
+          <span className="ds-note">Max age 45 / Min BPM −15 mean &ldquo;no limit.&rdquo; Each offseason&apos;s signings are kept {req.horizon} seasons, tested across 13 offseasons.</span>
           <Button variant="primary" onClick={run} disabled={running}
             icon={running ? <LoaderCircle size={16} className="siq-spin" /> : <Play size={16} />}>
-            {running ? 'Running…' : 'Run backtest'}
+            {running ? 'Testing…' : 'Run the test'}
           </Button>
         </div>
       </Panel>
 
       {error && (
-        <AssumptionFlag tone="negative" title="Backtest failed" icon={<TriangleAlert size={16} />}>{error}</AssumptionFlag>
+        <AssumptionFlag tone="negative" title="The test could not run" icon={<TriangleAlert size={16} />}>{error}</AssumptionFlag>
       )}
 
       {result && (
@@ -242,36 +262,36 @@ export default function StrategyPage() {
           <DecisionStrip
             ariaLabel="Backtest verdict"
             lead={{
-              label: 'Alpha vs random',
-              value: pct(alpha),
-              detail: alpha >= 0 ? 'Beat a random rotation-player portfolio, per roster slot' : 'Lost to a random rotation-player portfolio, per roster slot',
+              label: 'Edge over signing at random',
+              value: money(alpha, cap),
+              detail: alpha >= 0 ? 'More value per signing than picking players at random' : 'Less value per signing than picking players at random',
               tone: alpha > 0.5 ? 'positive' : alpha < -0.5 ? 'negative' : 'neutral',
             }}
             items={[
-              { label: 'Realized surplus / slot', value: pct(result.surplus_per_slot_pct), detail: '% of cap of value beyond pay', tone: result.surplus_per_slot_pct >= 0 ? 'positive' : 'negative' },
-              { label: 'Hit rate', value: `${(result.hit_rate * 100).toFixed(0)}%`, detail: `${result.n_picks} picks that beat their pay`, tone: 'neutral' },
-              { label: 'Risk-adjusted', value: result.sharpe.toFixed(2), detail: 'Surplus ÷ volatility (Sharpe-like)', tone: 'confidence' },
+              { label: 'Value per signing', value: money(result.surplus_per_slot_pct, cap), detail: 'On-court value beyond pay (today’s cap)', tone: result.surplus_per_slot_pct >= 0 ? 'positive' : 'negative' },
+              { label: 'Signings that paid off', value: `${(result.hit_rate * 100).toFixed(0)}%`, detail: `${result.n_picks} signings out-produced their contract`, tone: 'neutral' },
+              { label: 'Best signing', value: best ? money(best.realized_surplus_pct, cap) : '—', detail: best ? best.full_name : 'No signings', tone: 'confidence' },
             ]}
           />
 
           <div className="siq-strat-results-grid">
-            <Panel variant="instrument" eyebrow="Cumulative realized surplus" icon={<TrendingUp size={15} />}
-              action={<Badge tone="accent" size="sm" dot>{result.decision_seasons.length} cohorts</Badge>}>
-              <EquityCurve result={result} />
-              <p className="ds-note siq-strat-chart-note">Cumulative % of cap of value-for-dollar if the strategy were run every season. Down-only means it lost every cohort.</p>
+            <Panel variant="instrument" eyebrow="Value by offseason class" icon={<TrendingUp size={15} />}
+              action={<Badge tone="accent" size="sm" dot>{result.decision_seasons.length} offseasons</Badge>}>
+              <ClassChart result={result} />
+              <p className="ds-note siq-strat-chart-note">Each bar is one offseason&apos;s signings, graded 3 seasons later. Green = the class produced more than it was paid; red = it cost more than it returned.</p>
             </Panel>
 
-            <Panel variant="board" eyebrow="Vs benchmarks · per roster slot" icon={<TrendingUp size={15} />}
-              action={<Badge tone="neutral" variant="outline" size="sm">% of cap</Badge>}>
+            <Panel variant="board" eyebrow="Vs other ways to sign" icon={<TrendingUp size={15} />}
+              action={<Badge tone="neutral" variant="outline" size="sm">per signing</Badge>}>
               <BenchmarkBars result={result} />
-              <p className="ds-note siq-strat-chart-note">Realized surplus per roster slot. The gap to &ldquo;Random&rdquo; is the honest signal — absolute levels are conservative.</p>
+              <p className="ds-note siq-strat-chart-note">Value per signing under each approach. The gap to &ldquo;Signing at random&rdquo; is what matters — the raw figures run low on purpose.</p>
             </Panel>
           </div>
 
-          <Panel variant="dossier" eyebrow="Pick ledger · best to worst" icon={<FlaskConical size={15} />} flush
-            action={<Badge tone="warning" size="sm">{result.n_picks} picks</Badge>}>
+          <Panel variant="dossier" eyebrow="Every signing · best to worst" icon={<FlaskConical size={15} />} flush
+            action={<Badge tone="warning" size="sm">{result.n_picks} signings</Badge>}>
             {topPicks.slice(0, 24).map((p) => (
-              <PickRow key={`${p.player_id}-${p.decision_season}`} pick={p} onPick={() => router.push(`/players/${p.player_id}`)} />
+              <PickRow key={`${p.player_id}-${p.decision_season}`} pick={p} cap={cap} onPick={() => router.push(`/players/${p.player_id}`)} />
             ))}
           </Panel>
 
