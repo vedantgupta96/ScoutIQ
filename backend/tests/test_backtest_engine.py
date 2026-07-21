@@ -113,3 +113,27 @@ def test_empty_universe_is_graceful():
     assert res.n_picks == 0
     assert res.total_surplus_pct == 0.0
     assert res.sharpe == 0.0
+
+
+def test_current_targets_from_latest_season():
+    # The rule's "would sign now" list comes from the latest panel season, ranked by signal.
+    panel = make_panel([
+        stat(1, "S1", value_pct=20, actual_pct=5, gap_pct=15),
+        stat(2, "S2", value_pct=30, actual_pct=5, gap_pct=25),   # latest season, top gap
+        stat(3, "S2", value_pct=25, actual_pct=5, gap_pct=20),
+        stat(4, "S2", mpg=10, value_pct=40, actual_pct=1, gap_pct=39),  # fails floor
+    ])
+    res = run_backtest(panel, StrategySpec(signal="gap", portfolio_size=2, horizon=1))
+    assert res.current_season == "S2"
+    assert [t["player_id"] for t in res.current_targets] == [2, 3]   # eligible, gap desc
+
+
+def test_edge_confidence_interval_present_and_ordered():
+    panel = make_panel([
+        stat(1, "S1", value_pct=20, actual_pct=5, gap_pct=15),
+        stat(2, "S1", value_pct=12, actual_pct=12, gap_pct=0),
+        stat(1, "S2", ws=10, actual_pct=5), stat(2, "S2", ws=1, actual_pct=12),
+    ])
+    res = run_backtest(panel, StrategySpec(signal="gap", portfolio_size=2, horizon=1))
+    assert res.alpha_lo_pct <= res.alpha_hi_pct
+    assert isinstance(res.edge_conclusive, bool)

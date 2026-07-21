@@ -29,6 +29,9 @@ WINS_PER_VORP = 2.7
 # Benchmark sampling (seeded → deterministic).
 RANDOM_BENCHMARK_SAMPLES = 200
 RANDOM_SEED = 20260721
+# Bootstrap the edge-vs-random so a thin ~13-cohort sample can't masquerade as a real edge.
+BOOTSTRAP_SAMPLES = 1000
+BOOTSTRAP_INTERVAL = 0.80   # 80% interval, matching the app's uncertainty convention
 
 SIGNALS = ("gap", "value", "bpm", "ws", "vorp")
 
@@ -256,6 +259,42 @@ def _benchmark(panel: Panel, spec: StrategySpec, decision_seasons: list[str], ki
     return _aggregate(all_picks)
 
 
+def _bootstrap_edge(pick_totals: list[float], random_per_slot: float, rng: random.Random) -> tuple[float, float, bool]:
+    """80% bootstrap interval on the edge vs random. `conclusive` = interval excludes 0."""
+    k = len(pick_totals)
+    if k < 2:
+        return 0.0, 0.0, False
+    means = []
+    for _ in range(BOOTSTRAP_SAMPLES):
+        total = sum(pick_totals[rng.randrange(k)] for _ in range(k))
+        means.append(total / k - random_per_slot)
+    means.sort()
+    tail = (1 - BOOTSTRAP_INTERVAL) / 2
+    lo = means[int(tail * BOOTSTRAP_SAMPLES)]
+    hi = means[min(BOOTSTRAP_SAMPLES - 1, int((1 - tail) * BOOTSTRAP_SAMPLES))]
+    conclusive = (lo > 0 and hi > 0) or (lo < 0 and hi < 0)
+    return round(lo, 3), round(hi, 3), conclusive
+
+
+def current_targets(panel: Panel, spec: StrategySpec) -> tuple[str | None, list[dict]]:
+    """Who the rule would sign right now — apply the same filters + ranking to the latest
+    season (forward-looking, so no realized grade). This is the backtest → action bridge."""
+    if not panel.seasons:
+        return None, []
+    season = panel.seasons[-1]
+    eligible = [r for r in panel.by_season.get(season, []) if _eligible(r, spec)]
+    top = _rank_top(eligible, spec.signal, spec.portfolio_size)
+    out = []
+    for r in top:
+        sig = _signal_value(r, spec.signal)
+        out.append({
+            "player_id": r.player_id, "full_name": r.full_name, "position": r.position,
+            "age": r.age, "mpg": r.mpg, "value_pct": r.value_pct, "actual_pct": r.actual_pct,
+            "gap_pct": r.gap_pct, "signal_value": round(sig, 2) if sig != float("-inf") else None,
+        })
+    return season, out
+
+
 @dataclass
 class BacktestResult:
     spec: dict
@@ -270,6 +309,11 @@ class BacktestResult:
     max_drawdown_pct: float
     benchmarks: dict                   # kind -> aggregate; each has surplus_per_slot_pct
     alpha_per_slot_pct: float          # strategy per-slot − random per-slot
+    alpha_lo_pct: float                # 80% bootstrap interval on the edge
+    alpha_hi_pct: float
+    edge_conclusive: bool              # interval excludes 0
+    current_season: str | None         # season the "would sign now" list is drawn from
+    current_targets: list[dict]        # who the rule would sign today
     picks: list[dict]
     caveat: str
 
@@ -300,6 +344,8 @@ def run_backtest(panel: Panel, spec: StrategySpec) -> BacktestResult:
     }
     random_per_slot = benchmarks["random"]["surplus_per_slot_pct"]
     alpha = round(mean - random_per_slot, 3)
+    alpha_lo, alpha_hi, conclusive = _bootstrap_edge(totals, random_per_slot, random.Random(RANDOM_SEED + 1))
+    season_now, targets = current_targets(panel, spec)
 
     return BacktestResult(
         spec=vars(spec).copy(),
@@ -314,6 +360,11 @@ def run_backtest(panel: Panel, spec: StrategySpec) -> BacktestResult:
         max_drawdown_pct=_max_drawdown([e["cumulative_surplus_pct"] for e in equity]),
         benchmarks=benchmarks,
         alpha_per_slot_pct=alpha,
+        alpha_lo_pct=alpha_lo,
+        alpha_hi_pct=alpha_hi,
+        edge_conclusive=conclusive,
+        current_season=season_now,
+        current_targets=targets,
         picks=[vars(p) for p in all_picks],
         caveat=CAVEAT,
     )

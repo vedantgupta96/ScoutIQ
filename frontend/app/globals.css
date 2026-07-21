@@ -5809,6 +5809,13 @@ textarea::placeholder {
 .siq-strat-ledger-head--win { color: var(--positive-text); }
 .siq-strat-ledger-head--bust { color: var(--negative-text); }
 
+/* Forward-looking targets (the backtest→action bridge): value vs pay column + footnote. */
+.siq-strat-target-vals { display: grid; gap: 1px; min-width: 92px; }
+.siq-strat-target-vals strong { font-size: 13px; color: var(--text-primary); }
+.siq-strat-targets-note { margin: 0; padding: 11px 14px; border-top: 1px solid var(--border-subtle); }
+.siq-strat-inline-link { color: var(--accent); text-decoration: none; }
+.siq-strat-inline-link:hover { text-decoration: underline; }
+
 @media (max-width: 860px) {
   .siq-strat-results-grid { grid-template-columns: 1fr; }
 }

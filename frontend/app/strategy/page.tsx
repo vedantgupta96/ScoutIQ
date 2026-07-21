@@ -11,6 +11,7 @@ import {
   type StrategySignal,
   type BacktestResult,
   type BacktestPick,
+  type CurrentTarget,
 } from '@/lib/api';
 import { Panel } from '@/components/ui/Panel';
 import { Badge } from '@/components/ui/Badge';
@@ -65,10 +66,14 @@ function verdictLine(result: BacktestResult, cap: number | null): { text: string
   const a = result.alpha_per_slot_pct;   // vs random, % of cap per signing
   const s = result.surplus_per_slot_pct; // absolute value per signing
   const beat = a > 0.3, lost = a < -0.3, positive = s >= 0;
+  // With only ~13 offseasons the edge can be noise — say so.
+  const sure = result.edge_conclusive
+    ? ' The edge holds up statistically.'
+    : ' But with only 13 offseasons the edge isn’t statistically clear — treat it as suggestive, not proven.';
   if (beat && positive)
-    return { tone: 'confidence', text: `Strong rule: it beat signing at random by ${absMoney(a, cap)} per signing and returned positive value overall (${money(s, cap)} per signing).` };
+    return { tone: 'confidence', text: `Strong rule: it beat signing at random by ${absMoney(a, cap)} per signing and returned positive value overall (${money(s, cap)} per signing).${sure}` };
   if (beat && !positive)
-    return { tone: 'neutral', text: `It beat signing at random by ${absMoney(a, cap)} per signing — but even this rule lost value overall (${money(s, cap)} per signing). A few gems don't offset the many players whose pay outgrows their production over the years you hold them.` };
+    return { tone: 'neutral', text: `It beat signing at random by ${absMoney(a, cap)} per signing — but even this rule lost value overall (${money(s, cap)} per signing). A few gems don't offset the many players whose pay outgrows their production over the years you hold them.${sure}` };
   if (lost)
     return { tone: 'negative', text: `It lost to signing at random by ${absMoney(a, cap)} per signing — this rule did worse than picking names at random.` };
   return { tone: 'neutral', text: `Roughly a coin-flip vs signing at random (${money(a, cap)} per signing). No real edge either way.` };
@@ -171,6 +176,27 @@ function PickRow({ pick, cap, onPick }: { pick: BacktestPick; cap: number | null
       <strong className={`ds-tnum ds-right siq-strat-pick-surplus ${pick.realized_surplus_pct >= 0 ? 'is-positive' : 'is-negative'}`}>
         {money(pick.realized_surplus_pct, cap)}
       </strong>
+    </button>
+  );
+}
+
+// Forward-looking: a player this rule would sign in the current offseason (no grade yet).
+function TargetRow({ target, cap, onPick }: { target: CurrentTarget; cap: number | null; onPick: () => void }) {
+  const gap = target.gap_pct;
+  return (
+    <button className="siq-row siq-row--12 siq-strat-pick-row" onClick={onPick}>
+      <Avatar name={target.full_name} playerId={target.player_id} size="sm" />
+      <span className="siq-min0 siq-strat-pick-id">
+        <strong>{target.full_name}</strong>
+        <small className="ds-note">
+          {target.age != null ? `age ${target.age}` : '—'}{target.position ? ` · ${target.position}` : ''}
+          {gap != null ? ` · bargain ${gap >= 0 ? '+' : ''}${gap.toFixed(1)}` : ''}
+        </small>
+      </span>
+      <span className="ds-tnum ds-right siq-strat-target-vals">
+        <strong>{target.value_pct != null ? money(target.value_pct, cap).replace('+', '') : '—'}</strong>
+        <small className="ds-note">value vs {target.actual_pct != null ? money(target.actual_pct, cap).replace('+', '') : '—'} pay</small>
+      </span>
     </button>
   );
 }
@@ -294,7 +320,7 @@ export default function StrategyPage() {
             lead={{
               label: 'Edge over signing at random',
               value: money(alpha, cap),
-              detail: alpha > 0.3 ? 'More value per signing than picking players at random' : alpha < -0.3 ? 'Less value per signing than picking players at random' : 'About even with picking players at random',
+              detail: `80% range ${money(result.alpha_lo_pct, cap)} to ${money(result.alpha_hi_pct, cap)} · ${result.edge_conclusive ? 'a clear edge' : 'not conclusive'}`,
               tone: alpha > 0.3 ? 'positive' : alpha < -0.3 ? 'negative' : 'neutral',
             }}
             items={[
@@ -317,6 +343,17 @@ export default function StrategyPage() {
               <p className="ds-note siq-strat-chart-note">Value per signing under each approach. The gap to &ldquo;Signing at random&rdquo; is what matters — the raw figures run low on purpose.</p>
             </Panel>
           </div>
+
+          {result.current_targets.length > 0 && (
+            <Panel variant="dossier" eyebrow={`What this rule would sign now · ${result.current_season ?? ''}`} icon={<Play size={15} />} flush
+              action={<Badge tone="accent" size="sm" dot>{result.current_targets.length} targets</Badge>}>
+              <div className="siq-strat-ledger-head">Today’s players your rule targets — no grade yet, this is the forward call</div>
+              {result.current_targets.map((t) => (
+                <TargetRow key={t.player_id} target={t} cap={cap} onPick={() => router.push(`/players/${t.player_id}`)} />
+              ))}
+              <p className="ds-note siq-strat-targets-note">Cross-check these against contract status in <a className="siq-strat-inline-link" href="/free-agency">Free agency</a> — the backtest says the philosophy travels; these are who it points to right now.</p>
+            </Panel>
+          )}
 
           <Panel variant="dossier" eyebrow="Best signings & biggest busts" icon={<FlaskConical size={15} />} flush
             action={<Badge tone="neutral" size="sm">{wins} wins · {busts} busts of {result.n_picks}</Badge>}>

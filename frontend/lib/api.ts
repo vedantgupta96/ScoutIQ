@@ -1075,6 +1075,11 @@ export interface BacktestPick {
   realized_surplus_pct: number; seasons_realized: number; hit: boolean;
 }
 export interface BacktestEquityPoint { season: string; cohort_surplus_pct: number; cumulative_surplus_pct: number }
+export interface CurrentTarget {
+  player_id: number; full_name: string; position: string | null;
+  age: number | null; mpg: number;
+  value_pct: number | null; actual_pct: number | null; gap_pct: number | null; signal_value: number | null;
+}
 export interface BacktestResult {
   spec: Record<string, unknown>;
   decision_seasons: string[];
@@ -1088,6 +1093,11 @@ export interface BacktestResult {
   max_drawdown_pct: number;
   benchmarks: Record<string, StrategyBenchmark>;
   alpha_per_slot_pct: number;
+  alpha_lo_pct: number;
+  alpha_hi_pct: number;
+  edge_conclusive: boolean;
+  current_season: string | null;
+  current_targets: CurrentTarget[];
   picks: BacktestPick[];
   caveat: string;
   reference_cap_usd: number | null;

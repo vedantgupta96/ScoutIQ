@@ -205,10 +205,13 @@ Portfolio metrics (financial analogs):
   curve, benchmark bars, best-to-worst pick ledger with profile click-through, caveat.
   Live-verified: the naive "Value" preset returns **−9.2% alpha vs random** — a real,
   honest finding (extreme value signals mean-revert; cheap players get expensive).
-- **Phase 4 — Depth (next).** Confidence bands (bootstrap over cohorts), per-benchmark
-  equity overlays, saved strategies (`saved_strategies` table).
-- **Phase 5 — Forward bridge (next).** Apply a chosen strategy to the current FA class /
-  Offseason Plan targets (backtest → action).
+- **Phase 4 ✅ light (2026-07-21)** 80% bootstrap interval on the edge-vs-random
+  (`alpha_lo/hi_pct`, `edge_conclusive`); surfaced in the verdict ("holds up
+  statistically" / "not conclusive") and the scorecard range. Saved strategies deferred.
+- **Phase 5 ✅ (2026-07-21)** Forward bridge: `current_targets(panel, spec)` applies the
+  same filters + ranking to the latest season → the players the rule would sign now, shown
+  in a "What this rule would sign now" panel with a Free-agency cross-link. Live: the
+  Win-Shares/age-≤28 bargain rule points to SGA, Amen Thompson, Wembanyama, Chet Holmgren.
 - **Phase 6 (stretch) — Fidelity.** Walk-forward retrained signal; FA-market universe.
 
 ## 10. Decisions — LOCKED 2026-07-21
