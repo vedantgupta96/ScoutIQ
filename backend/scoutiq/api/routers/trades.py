@@ -9,15 +9,24 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 
 from scoutiq.api import rosters
-from scoutiq.api.cap import SeasonCapData, cap_for, classify_tier, load_season_caps
+from scoutiq.api.cap import SeasonCapData, build_season_sequence, cap_for, classify_tier, load_season_caps
 from scoutiq.api.deps import DB
 from scoutiq.api.roster_fit import load_fit_context, needs_response
 from scoutiq.api.rosters import CAVEAT, TeamSummary
 from scoutiq.api.season import LATEST_SEASON, is_valid_season
+from scoutiq.api.trade_assets import (
+    PICK_VALUE_CAVEAT,
+    upcoming_draft_year,
+    SURPLUS_CAVEAT,
+    TEAM_STATES,
+    evaluate_pick_legality,
+    remaining_contract_surplus,
+    value_pick,
+)
 from scoutiq.api.trades import overall_status, salary_match
 from scoutiq.api.valuation import value_players
 from scoutiq.model.roster_fit import profile_roster
-from scoutiq.models import Player, Team
+from scoutiq.models import DraftPick, Player, Team
 
 router = APIRouter(prefix="/trades", tags=["trades"])
 
@@ -29,7 +38,8 @@ NOT_MODELED = [
     "Pre-existing traded-player exceptions", "Non-aggregated multi-player allocation above the second apron",
     "Sign-and-trades", "No-trade clauses and player consent", "Trade kickers and bonuses",
     "Poison-pill and base-year compensation", "Guarantee adjustments", "Trade eligibility dates and waiting periods",
-    "Draft assets", "Cash", "Trades involving three or more teams",
+    "Pick swaps (informational only)", "Lottery-odds pick projection", "Full conditional-Stepien modeling",
+    "Cash", "Trades involving three or more teams",
 ]
 
 
@@ -39,6 +49,14 @@ class TradeRequest(BaseModel):
     team_b_id: int
     team_a_sends: list[int] = Field(default_factory=list)
     team_b_sends: list[int] = Field(default_factory=list)
+    # Draft-pick asset ids (draft_picks.id) each side sends.
+    team_a_sends_picks: list[int] = Field(default_factory=list)
+    team_b_sends_picks: list[int] = Field(default_factory=list)
+    # Team-state lens: explicit time-discount posture per side.
+    team_a_state: str = "neutral"
+    team_b_state: str = "neutral"
+    # Optional expected-pick-number overrides keyed by draft_picks.id.
+    expected_picks: dict[int, int] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_request(self):
@@ -51,6 +69,17 @@ class TradeRequest(BaseModel):
                 raise ValueError("A trade package cannot contain duplicate players")
         if set(self.team_a_sends) & set(self.team_b_sends):
             raise ValueError("A player cannot appear in both trade packages")
+        for package in (self.team_a_sends_picks, self.team_b_sends_picks):
+            if len(package) != len(set(package)):
+                raise ValueError("A trade package cannot contain duplicate picks")
+        if set(self.team_a_sends_picks) & set(self.team_b_sends_picks):
+            raise ValueError("A pick cannot appear in both trade packages")
+        for state in (self.team_a_state, self.team_b_state):
+            if state not in TEAM_STATES:
+                raise ValueError(f"team state must be one of {TEAM_STATES}")
+        for expected in self.expected_picks.values():
+            if not 1 <= expected <= 60:
+                raise ValueError("expected pick numbers must be between 1 and 60")
         return self
 
 
@@ -184,6 +213,113 @@ def get_trade_workspace(team_id: int, response: Response, season: str, db: DB = 
     return _load_trade_workspaces(db, [team_id], season)[team_id]
 
 
+class TradePickAsset(BaseModel):
+    pick_id: int
+    draft_year: int
+    round: int
+    original_team: TeamSummary | None
+    protected_top: int | None
+    swap_rights_team: TeamSummary | None
+    converts_to: str | None
+    source: str
+    notes: str | None
+    label: str
+    expected_pick: int
+    conveyed_pick: int
+    years_out: int
+    deferral_years: int
+    raw_pct: float
+    discounted_pct: float
+    value_usd: int | None
+
+
+class TradeTeamPicksResponse(BaseModel):
+    team: TeamSummary
+    upcoming_draft_year: int
+    team_state: str
+    picks: list[TradePickAsset]
+    caveat: str
+
+
+def _pick_label(pick: DraftPick, teams_by_id: dict[int, Team]) -> str:
+    origin = teams_by_id.get(pick.original_team_id)
+    origin_abbr = origin.abbreviation if origin else "???"
+    protection = f" (top-{pick.protected_top} protected)" if pick.protected_top else ""
+    round_label = "1st" if pick.round == 1 else "2nd"
+    return f"{pick.draft_year} {origin_abbr} {round_label}{protection}"
+
+
+def _pick_assets(
+    db: DB,
+    picks: list[DraftPick],
+    *,
+    team_state: str,
+    salary_cap: int | None,
+    expected_overrides: dict[int, int] | None = None,
+) -> list[TradePickAsset]:
+    team_ids = {p.original_team_id for p in picks} | {
+        p.swap_rights_team_id for p in picks if p.swap_rights_team_id
+    }
+    teams_by_id = {
+        t.team_id: t
+        for t in (db.scalars(select(Team).where(Team.team_id.in_(team_ids))).all() if team_ids else [])
+    }
+    upcoming = upcoming_draft_year(db)
+    assets = []
+    for pick in picks:
+        value = value_pick(
+            pick,
+            upcoming_draft_year=upcoming,
+            team_state=team_state,
+            salary_cap=salary_cap,
+            expected_pick=(expected_overrides or {}).get(pick.id),
+        )
+        assets.append(TradePickAsset(
+            pick_id=pick.id,
+            draft_year=pick.draft_year,
+            round=pick.round,
+            original_team=rosters.team_summary(teams_by_id.get(pick.original_team_id)),
+            protected_top=pick.protected_top,
+            swap_rights_team=rosters.team_summary(teams_by_id.get(pick.swap_rights_team_id)) if pick.swap_rights_team_id else None,
+            converts_to=pick.converts_to,
+            source=pick.source,
+            notes=pick.notes,
+            label=_pick_label(pick, teams_by_id),
+            **value.__dict__,
+        ))
+    return assets
+
+
+@router.get("/teams/{team_id}/picks", response_model=TradeTeamPicksResponse)
+def get_team_picks(
+    team_id: int,
+    response: Response,
+    season: str = LATEST_SEASON,
+    team_state: str = "neutral",
+    db: DB = None,
+):
+    """Draft picks the team currently owns, valued under its team-state lens."""
+    if team_state not in TEAM_STATES:
+        raise HTTPException(422, f"team_state must be one of {TEAM_STATES}")
+    team = db.get(Team, team_id)
+    if team is None:
+        raise HTTPException(404, f"Team not found: {team_id}")
+    cap = cap_for(season, load_season_caps(db))
+    picks = db.scalars(
+        select(DraftPick)
+        .where(DraftPick.current_team_id == team_id)
+        .order_by(DraftPick.draft_year, DraftPick.round)
+    ).all()
+    response.headers["Cache-Control"] = f"public, max-age={WORKSPACE_CACHE_SECONDS}"
+    return TradeTeamPicksResponse(
+        team=rosters.team_summary(team),
+        upcoming_draft_year=upcoming_draft_year(db),
+        team_state=team_state,
+        picks=_pick_assets(db, picks, team_state=team_state, salary_cap=cap.salary_cap if cap else None),
+        caveat=PICK_VALUE_CAVEAT,
+    )
+
+
 def _selected_values(db: DB, player_ids: set[int]) -> dict[int, float]:
     """Run one model batch for selected players only, never an entire roster."""
     if not player_ids:
@@ -209,6 +345,12 @@ def _team_analysis(
     values: dict[int, float],
     cap: SeasonCapData,
     fit_context,
+    *,
+    team_state: str = "neutral",
+    picks_outgoing: list[TradePickAsset] | None = None,
+    picks_incoming: list[TradePickAsset] | None = None,
+    pick_legality=None,
+    surplus_by_pid: dict | None = None,
 ):
     roster_by_id = {player.player_id: player for player in workspace.players}
     other_by_id = {player.player_id: player for player in other_workspace.players}
@@ -290,7 +432,81 @@ def _team_analysis(
         "fit_before": before,
         "fit_after": after,
         "fit_changes": fit_changes[:3],
+        "team_state": team_state,
+        "picks_outgoing": [p.model_dump() for p in (picks_outgoing or [])],
+        "picks_incoming": [p.model_dump() for p in (picks_incoming or [])],
+        "pick_legality": pick_legality.__dict__ if pick_legality else None,
+        "assets": _asset_ledger(
+            sends, receives, surplus_by_pid or {}, picks_outgoing or [], picks_incoming or []
+        ),
     }
+
+
+def _asset_ledger(
+    sends: list[int],
+    receives: list[int],
+    surplus_by_pid: dict,
+    picks_outgoing: list[TradePickAsset],
+    picks_incoming: list[TradePickAsset],
+) -> dict:
+    """Net asset view: remaining-contract surplus for players + discounted pick value."""
+    def _surplus(pid: int) -> int | None:
+        entry = surplus_by_pid.get(pid)
+        return entry.total_surplus_usd if entry else None
+
+    sent_surplus = [_surplus(pid) for pid in sends]
+    received_surplus = [_surplus(pid) for pid in receives]
+    picks_sent_usd = sum(p.value_usd or 0 for p in picks_outgoing)
+    picks_received_usd = sum(p.value_usd or 0 for p in picks_incoming)
+    surplus_sent = sum(v for v in sent_surplus if v is not None)
+    surplus_received = sum(v for v in received_surplus if v is not None)
+    return {
+        "player_surplus_sent_usd": surplus_sent,
+        "player_surplus_received_usd": surplus_received,
+        "player_surplus_coverage_sent": sum(v is not None for v in sent_surplus),
+        "player_surplus_coverage_received": sum(v is not None for v in received_surplus),
+        "players_detail": {
+            str(pid): {
+                "total_surplus_usd": entry.total_surplus_usd,
+                "expiring": entry.expiring,
+                "years": [year.__dict__ for year in entry.years],
+            }
+            for pid, entry in surplus_by_pid.items()
+            if pid in set(sends) | set(receives)
+        },
+        "picks_sent_usd": picks_sent_usd,
+        "picks_received_usd": picks_received_usd,
+        "net_usd": (surplus_received + picks_received_usd) - (surplus_sent + picks_sent_usd),
+    }
+
+
+def _load_trade_picks(db: DB, req: TradeRequest) -> tuple[list[DraftPick], list[DraftPick]]:
+    """Fetch and ownership-validate each side's outgoing picks."""
+    all_ids = set(req.team_a_sends_picks) | set(req.team_b_sends_picks)
+    if not all_ids:
+        return [], []
+    picks = db.scalars(select(DraftPick).where(DraftPick.id.in_(all_ids))).all()
+    by_id = {p.id: p for p in picks}
+    missing = [pid for pid in all_ids if pid not in by_id]
+    if missing:
+        raise HTTPException(422, f"Unknown draft pick ids: {missing}")
+    for pick_ids, owner_id in ((req.team_a_sends_picks, req.team_a_id), (req.team_b_sends_picks, req.team_b_id)):
+        not_owned = [pid for pid in pick_ids if by_id[pid].current_team_id != owner_id]
+        if not_owned:
+            raise HTTPException(422, f"Picks not owned by the sending team: {not_owned}")
+    return [by_id[pid] for pid in req.team_a_sends_picks], [by_id[pid] for pid in req.team_b_sends_picks]
+
+
+def _status_with_picks(salary_status: str, *legalities) -> str:
+    """Escalate the salary verdict with pick-legality outcomes (Stepien fail = noncompliant)."""
+    statuses = [legality.status for legality in legalities if legality]
+    if salary_status == "incomplete":
+        return salary_status
+    if "fail" in statuses:
+        return "modeled-noncompliant"
+    if "needs-review" in statuses and salary_status == "modeled-compliant":
+        return "needs-review"
+    return salary_status
 
 
 @router.post("/analyze")
@@ -299,15 +515,59 @@ def analyze_trade(req: TradeRequest, db: DB = None):
     if cap is None:
         raise HTTPException(503, "No cap constants available")
     workspaces = _load_trade_workspaces(db, [req.team_a_id, req.team_b_id], req.season, cap=cap)
-    values = _selected_values(db, set(req.team_a_sends) | set(req.team_b_sends))
+    all_players = set(req.team_a_sends) | set(req.team_b_sends)
+    values = _selected_values(db, all_players)
     fit_context = load_fit_context(db, LATEST_SEASON)
-    a = _team_analysis(req.team_a_sends, req.team_b_sends, workspaces[req.team_a_id], workspaces[req.team_b_id], values, cap, fit_context)
-    b = _team_analysis(req.team_b_sends, req.team_a_sends, workspaces[req.team_b_id], workspaces[req.team_a_id], values, cap, fit_context)
-    status = overall_status(a["salary_match"]["status"], b["salary_match"]["status"])
+
+    a_picks, b_picks = _load_trade_picks(db, req)
+    upcoming = upcoming_draft_year(db)
+    legality_a = evaluate_pick_legality(
+        db, req.team_a_id, req.team_a_sends_picks, req.team_b_sends_picks, upcoming_year=upcoming
+    ) if (a_picks or b_picks) else None
+    legality_b = evaluate_pick_legality(
+        db, req.team_b_id, req.team_b_sends_picks, req.team_a_sends_picks, upcoming_year=upcoming
+    ) if (a_picks or b_picks) else None
+
+    # Cap sequence through the longest plausible remaining contract, for surplus pricing.
+    season_caps = {c.season: c for c in build_season_sequence(req.season, 6, load_season_caps(db))}
+    surplus_a = remaining_contract_surplus(
+        db, sorted(all_players), values, season_caps,
+        from_season=req.season, team_state=req.team_a_state,
+    )
+    surplus_b = remaining_contract_surplus(
+        db, sorted(all_players), values, season_caps,
+        from_season=req.season, team_state=req.team_b_state,
+    )
+
+    def assets_for(picks: list[DraftPick], state: str) -> list[TradePickAsset]:
+        return _pick_assets(
+            db, picks, team_state=state, salary_cap=cap.salary_cap, expected_overrides=req.expected_picks
+        )
+
+    a = _team_analysis(
+        req.team_a_sends, req.team_b_sends, workspaces[req.team_a_id], workspaces[req.team_b_id],
+        values, cap, fit_context,
+        team_state=req.team_a_state,
+        picks_outgoing=assets_for(a_picks, req.team_a_state),
+        picks_incoming=assets_for(b_picks, req.team_a_state),
+        pick_legality=legality_a,
+        surplus_by_pid=surplus_a,
+    )
+    b = _team_analysis(
+        req.team_b_sends, req.team_a_sends, workspaces[req.team_b_id], workspaces[req.team_a_id],
+        values, cap, fit_context,
+        team_state=req.team_b_state,
+        picks_outgoing=assets_for(b_picks, req.team_b_state),
+        picks_incoming=assets_for(a_picks, req.team_b_state),
+        pick_legality=legality_b,
+        surplus_by_pid=surplus_b,
+    )
+    salary_status = overall_status(a["salary_match"]["status"], b["salary_match"]["status"])
+    status = _status_with_picks(salary_status, legality_a, legality_b)
     summary = {
         "modeled-compliant": "Both teams fit at least one modeled salary-matching path.",
-        "modeled-noncompliant": "At least one team exceeds every eligible modeled salary limit.",
-        "needs-review": "At least one package requires a CBA allocation path outside this model.",
+        "modeled-noncompliant": "At least one team fails a modeled salary or pick-legality rule.",
+        "needs-review": "At least one package requires a CBA path outside this model (allocation or conditional pick protection).",
         "incomplete": "Select at least one player from each team to evaluate salary matching.",
     }[status]
     return {
@@ -319,6 +579,10 @@ def analyze_trade(req: TradeRequest, db: DB = None):
         "summary": summary,
         "team_a": a,
         "team_b": b,
-        "assumptions": ["Payroll uses target-season active contract and salary hits for current rosters."],
+        "assumptions": [
+            "Payroll uses target-season active contract and salary hits for current rosters.",
+            PICK_VALUE_CAVEAT,
+            SURPLUS_CAVEAT,
+        ],
         "not_modeled": NOT_MODELED,
     }

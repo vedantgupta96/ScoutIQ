@@ -142,6 +142,23 @@ def test_trade_endpoint_is_lean_when_incomplete(monkeypatch):
     assert body["team_a"]["selected_outgoing"] == []
 
 
+class _NoContractsDB:
+    """Bare session for analyze tests: no contracts or picks, so those layers degrade."""
+
+    class _Empty:
+        def all(self):
+            return []
+
+        def first(self):
+            return None
+
+    def execute(self, stmt):
+        return self._Empty()
+
+    def scalars(self, stmt):
+        return self._Empty()
+
+
 def _trade_response(monkeypatch, salary_a=10_000_000, salary_b=10_000_000,
                     value_a=10.0, value_b=8.0, sends_a=None, sends_b=None):
     cap = SeasonCapData("2026-27", 160_000_000, 190_000_000, 200_000_000, 210_000_000,
@@ -163,7 +180,7 @@ def _trade_response(monkeypatch, salary_a=10_000_000, salary_b=10_000_000,
         lambda db, ids: {pid: value for pid, value in ((10, value_a), (20, value_b)) if value is not None},
     )
     monkeypatch.setattr(trades_router, "load_fit_context", lambda db, season: build_fit_context([]))
-    app.dependency_overrides[get_db] = lambda: object()
+    app.dependency_overrides[get_db] = lambda: _NoContractsDB()
     try:
         return TestClient(app).post("/trades/analyze", json={
             "season": "2026-27", "team_a_id": 1, "team_b_id": 2,

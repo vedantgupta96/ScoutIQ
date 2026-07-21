@@ -973,7 +973,34 @@ export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return apiFetch<HealthResponse>('/health', { signal });
 }
 
-export interface TradeRequest { season: string; team_a_id: number; team_b_id: number; team_a_sends: number[]; team_b_sends: number[] }
+export type TradeTeamState = 'contending' | 'neutral' | 'rebuilding';
+export interface TradeRequest {
+  season: string; team_a_id: number; team_b_id: number;
+  team_a_sends: number[]; team_b_sends: number[];
+  team_a_sends_picks?: number[]; team_b_sends_picks?: number[];
+  team_a_state?: TradeTeamState; team_b_state?: TradeTeamState;
+  /** Optional expected-pick-number overrides keyed by draft_picks.id. */
+  expected_picks?: Record<number, number>;
+}
+export interface TradePickAsset {
+  pick_id: number; draft_year: number; round: number;
+  original_team: TeamSummary | null; protected_top: number | null;
+  swap_rights_team: TeamSummary | null; converts_to: string | null;
+  source: string; notes: string | null; label: string;
+  expected_pick: number; conveyed_pick: number; years_out: number; deferral_years: number;
+  raw_pct: number; discounted_pct: number; value_usd: number | null;
+}
+export interface TradeTeamPicksResponse {
+  team: TeamSummary; upcoming_draft_year: number; team_state: TradeTeamState;
+  picks: TradePickAsset[]; caveat: string;
+}
+export interface TradePickLegality { status: 'pass' | 'fail' | 'needs-review' | 'not-applicable'; reasons: string[] }
+export interface TradeAssetLedger {
+  player_surplus_sent_usd: number; player_surplus_received_usd: number;
+  player_surplus_coverage_sent: number; player_surplus_coverage_received: number;
+  players_detail: Record<string, { total_surplus_usd: number; expiring: boolean; years: unknown[] }>;
+  picks_sent_usd: number; picks_received_usd: number; net_usd: number;
+}
 export interface TradeCapContext { salary_cap: number; tax_line: number; first_apron: number; second_apron: number }
 export interface TradeWorkspacePlayer { player_id: number; full_name: string; position: string | null; cap_hit_usd: number | null; salary_pct: number | null; pay_source: string | null }
 export interface TradeTeamWorkspace {
@@ -991,10 +1018,17 @@ export interface TradeTeamAnalysis {
   value: { sent_usd: number; received_usd: number; delta_usd: number; sent_coverage: number; received_coverage: number; sent_selected: number; received_selected: number };
   fit_before: TeamNeedsResponse; fit_after: TeamNeedsResponse;
   fit_changes: Array<{ key: string; label: string; before_pct: number; after_pct: number; delta_pct: number }>;
+  team_state: TradeTeamState;
+  picks_outgoing: TradePickAsset[]; picks_incoming: TradePickAsset[];
+  pick_legality: TradePickLegality | null;
+  assets: TradeAssetLedger;
 }
 export interface TradeResponse { season: string; role_season: string; is_projected_cap: boolean; overall_status: string; overall_label: string; summary: string; team_a: TradeTeamAnalysis; team_b: TradeTeamAnalysis; assumptions: string[]; not_modeled: string[] }
 export function getTradeWorkspace(teamId: number, season: string, signal?: AbortSignal): Promise<TradeTeamWorkspace> {
   return apiFetch<TradeTeamWorkspace>(`/trades/teams/${teamId}/workspace${queryString({ season })}`, { signal });
+}
+export function getTeamPicks(teamId: number, teamState: TradeTeamState = 'neutral', signal?: AbortSignal): Promise<TradeTeamPicksResponse> {
+  return apiFetch<TradeTeamPicksResponse>(`/trades/teams/${teamId}/picks${queryString({ team_state: teamState })}`, { signal });
 }
 export function analyzeTrade(request: TradeRequest, signal?: AbortSignal): Promise<TradeResponse> {
   return apiFetch<TradeResponse>('/trades/analyze', { method: 'POST', body: JSON.stringify(request), signal });
