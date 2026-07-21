@@ -35,6 +35,7 @@ from scoutiq.model.similarity import (
     SimilarityRecord,
     build_similarity_features,
     rank_similar_players,
+    synthesize_comps,
 )
 from scoutiq.models import (
     CapConstants,
@@ -114,6 +115,20 @@ class SimilarPlayerResult(BaseModel):
     deltas: dict[str, float]
 
 
+class CompSynthesis(BaseModel):
+    n_comps: int
+    model_value_pct: float | None
+    market_low_pct: float
+    market_median_pct: float
+    market_high_pct: float
+    suggested_pct: float | None
+    market_low_usd: int | None
+    market_median_usd: int | None
+    market_high_usd: int | None
+    suggested_usd: int | None
+    basis_note: str
+
+
 class SimilarPlayersResponse(BaseModel):
     player_id: int
     player_name: str
@@ -122,6 +137,7 @@ class SimilarPlayersResponse(BaseModel):
     basis: list[str]
     results: list[SimilarPlayerResult]
     caveat: str
+    comp_synthesis: CompSynthesis | None = None
 
 
 def _next_season(season: str) -> str | None:
@@ -545,6 +561,29 @@ def get_similar_players(
             deltas=item.deltas,
         ))
 
+    comp_synthesis = None
+    if mode == "contract_comps":
+        comp_salary_pcts = [r.salary_pct for r in results if r.salary_pct is not None]
+        target_value_pct = value_by_player.get(player_id)
+        synthesis = synthesize_comps(comp_salary_pcts, target_value_pct)
+        if synthesis is not None:
+            def _usd(pct: float | None) -> int | None:
+                return int(round(pct / 100 * salary_cap)) if pct is not None and salary_cap is not None else None
+
+            comp_synthesis = CompSynthesis(
+                n_comps=synthesis.n_comps,
+                model_value_pct=synthesis.model_value_pct,
+                market_low_pct=synthesis.market_low_pct,
+                market_median_pct=synthesis.market_median_pct,
+                market_high_pct=synthesis.market_high_pct,
+                suggested_pct=synthesis.suggested_pct,
+                market_low_usd=_usd(synthesis.market_low_pct),
+                market_median_usd=_usd(synthesis.market_median_pct),
+                market_high_usd=_usd(synthesis.market_high_pct),
+                suggested_usd=_usd(synthesis.suggested_pct),
+                basis_note=synthesis.basis_note,
+            )
+
     return SimilarPlayersResponse(
         player_id=player_id,
         player_name=player.full_name,
@@ -556,6 +595,7 @@ def get_similar_players(
             "Similarity uses same-season role, efficiency, advanced-stat, age, position, value, and cap-hit "
             "features where available. It is deterministic and separate from the valuation model artifact."
         ),
+        comp_synthesis=comp_synthesis,
     )
 
 

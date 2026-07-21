@@ -511,6 +511,33 @@ function SimilarPlayersCard({
         </p>
       ) : (
         <>
+          {mode === 'contract_comps' && market.comp_synthesis && (
+            <>
+              <div className="siq-contract-summary-strip">
+                <StatTile
+                  label="Model value"
+                  value={market.comp_synthesis.model_value_pct != null ? fmtPct(market.comp_synthesis.model_value_pct) : '—'}
+                  sub="production-implied"
+                  size="sm"
+                />
+                <StatTile
+                  label="Comp market"
+                  value={`${fmtPct(market.comp_synthesis.market_low_pct)}–${fmtPct(market.comp_synthesis.market_high_pct)}`}
+                  sub={`${market.comp_synthesis.market_median_usd != null ? `${fmtM(market.comp_synthesis.market_median_usd)} ` : ''}median · n=${market.comp_synthesis.n_comps}`}
+                  size="sm"
+                />
+                <StatTile
+                  label="Suggested"
+                  value={market.comp_synthesis.suggested_usd != null
+                    ? fmtM(market.comp_synthesis.suggested_usd)
+                    : market.comp_synthesis.suggested_pct != null ? fmtPct(market.comp_synthesis.suggested_pct) : '—'}
+                  sub="value bounded by market"
+                  size="sm"
+                />
+              </div>
+              <p className="ds-note ds-m0">{market.comp_synthesis.basis_note}</p>
+            </>
+          )}
           <div className="siq-compact-tags siq-profile-similar-basis">
             {market.basis.slice(0, 5).map((basis) => (
               <Badge key={basis} tone="neutral" variant="outline" size="sm">{basis}</Badge>
