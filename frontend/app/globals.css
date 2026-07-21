@@ -131,6 +131,7 @@
   --duration-fast: 120ms;
   --duration-base: 180ms;
   --duration-slow: 320ms;
+  --duration-page: 460ms;
 
   /* Layout */
   --sidebar-width: 220px;
@@ -229,6 +230,42 @@ body {
 }
 
 a { color: inherit; }
+
+/* ---- App feel: chrome is not selectable text and not draggable (docs/09) ----
+   The cockpit reads as a native app: UI chrome doesn't highlight or drag. Genuine
+   copyable content opts back in via inputs or the `.siq-selectable` utility. */
+.siq-shell {
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Links and media never drag as a URL/image object, but still navigate/act. */
+a,
+img,
+svg,
+.siq-team-logo,
+.siq-avatar {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  user-drag: none;
+}
+img,
+svg { -webkit-user-select: none; user-select: none; }
+/* Opt selection back in where users legitimately copy text/data. */
+input,
+textarea,
+[contenteditable],
+.siq-selectable,
+.siq-selectable * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+/* Interactive chrome shows a pointer affordance. */
+a[href],
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary,
+label[for],
+select { cursor: pointer; }
 
 .siq-sr-only {
   position: absolute;
@@ -5522,4 +5559,164 @@ textarea::placeholder {
   .siq-trade-picker-list { height: auto; }
   .siq-trade-picker-row { grid-template-columns: 22px 34px minmax(0, 1fr) 108px; gap: 7px; min-height: 64px; }
   .siq-trade-player-money strong { font-size: 12px; }
+}
+
+/* ============================================================
+   docs/09 — Purposeful motion: interaction feedback + entrances
+   (interaction press/hover, route + result entrances, dialog open)
+   ============================================================ */
+
+/* ---- Phase 2: press + hover feedback on interactive chrome ---- */
+.siq-primary-button,
+.siq-secondary-button,
+.siq-ghost-button,
+.siq-icon-button,
+.siq-search-clear,
+.siq-dialog__close,
+.siq-segmented__option {
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+.siq-primary-button:active,
+.siq-secondary-button:active,
+.siq-ghost-button:active {
+  transform: translateY(1px) scale(0.985);
+}
+.siq-icon-button:active,
+.siq-search-clear:active,
+.siq-dialog__close:active,
+.siq-segmented__option:active {
+  transform: scale(0.92);
+}
+
+/* Clickable rows/cards: quick lift on hover, gentle press on click. */
+.siq-case-card,
+.siq-home-mover,
+.siq-offseason-player-link,
+.siq-sim-player-link,
+.siq-similar-dossier-row,
+.siq-roster-ledger-row,
+.siq-trade-picker-row,
+.siq-trade-selected-row {
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
+}
+.siq-case-card:hover,
+.siq-home-mover:hover { transform: translateY(-2px); }
+.siq-offseason-player-link:active,
+.siq-sim-player-link:active,
+.siq-similar-dossier-row:active,
+.siq-roster-ledger-row:active,
+.siq-trade-picker-row:active,
+.siq-case-card:active,
+.siq-home-mover:active { transform: scale(0.994); }
+
+/* Sidebar nav: subtle nudge on press. */
+.siq-sidebar-link,
+.siq-mobile-nav__link {
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+.siq-sidebar-link:active { transform: translateX(1px) scale(0.99); }
+.siq-mobile-nav__link:active { transform: scale(0.94); }
+
+/* ---- Phase 3: entrance + state motion ---- */
+@keyframes siq-enter-rise {
+  from { opacity: 0; transform: translateY(9px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes siq-enter-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes siq-dialog-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes siq-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Each route reveals with a soft, longer crossfade-rise so switching sections
+   (Players → Team war room) glides instead of snapping (shell remounts
+   .siq-content per path). */
+@keyframes siq-page-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.994); filter: blur(1px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+.siq-content {
+  animation: siq-page-in var(--duration-page) var(--ease-expo) both;
+}
+
+/* Reusable entrance utilities. */
+.siq-enter { animation: siq-enter-rise var(--duration-slow) var(--ease-expo) both; }
+.siq-enter-stagger > * { animation: siq-enter-rise var(--duration-slow) var(--ease-expo) both; }
+
+/* Trade result verdict → exchange → impacts cascade in when analysis lands. */
+.siq-trade-results > * { animation: siq-enter-rise var(--duration-slow) var(--ease-expo) both; }
+.siq-trade-results > *:nth-child(1) { animation-delay: 0ms; }
+.siq-trade-results > *:nth-child(2) { animation-delay: 70ms; }
+.siq-trade-results > *:nth-child(3) { animation-delay: 140ms; }
+.siq-trade-results > *:nth-child(4) { animation-delay: 210ms; }
+
+/* Player watchlist cards cascade in each time the list (re)loads — the board
+   remounts after the skeleton, so filters/sort/search/paging all replay this. */
+.siq-pressure-board > * { animation: siq-enter-rise var(--duration-base) var(--ease-out) both; }
+.siq-pressure-board > *:nth-child(1) { animation-delay: 0ms; }
+.siq-pressure-board > *:nth-child(2) { animation-delay: 28ms; }
+.siq-pressure-board > *:nth-child(3) { animation-delay: 56ms; }
+.siq-pressure-board > *:nth-child(4) { animation-delay: 84ms; }
+.siq-pressure-board > *:nth-child(5) { animation-delay: 112ms; }
+.siq-pressure-board > *:nth-child(6) { animation-delay: 140ms; }
+.siq-pressure-board > *:nth-child(7) { animation-delay: 168ms; }
+.siq-pressure-board > *:nth-child(n+8) { animation-delay: 196ms; }
+
+/* Dropdown selects: settle on focus/open so a value change doesn't feel abrupt. */
+.siq-select { transition:
+  border-color var(--duration-fast) var(--ease-out),
+  background var(--duration-fast) var(--ease-out),
+  box-shadow var(--duration-base) var(--ease-out); }
+.siq-select:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* Modal open: backdrop fades, surface rises. */
+.siq-dialog[open] .siq-dialog__surface { animation: siq-dialog-in var(--duration-base) var(--ease-expo) both; }
+.siq-dialog[open]::backdrop { animation: siq-backdrop-in var(--duration-base) var(--ease-out) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Entrances and press transforms collapse to instant under reduced motion. */
+  .siq-content,
+  .siq-enter,
+  .siq-enter-stagger > *,
+  .siq-trade-results > *,
+  .siq-pressure-board > *,
+  .siq-dialog[open] .siq-dialog__surface { animation: none; }
+  .siq-dialog[open]::backdrop { animation: siq-backdrop-in var(--duration-fast) linear both; }
+  .siq-primary-button:active,
+  .siq-secondary-button:active,
+  .siq-ghost-button:active,
+  .siq-icon-button:active,
+  .siq-search-clear:active,
+  .siq-dialog__close:active,
+  .siq-segmented__option:active,
+  .siq-sidebar-link:active,
+  .siq-mobile-nav__link:active,
+  .siq-case-card:hover,
+  .siq-home-mover:hover,
+  .siq-case-card:active,
+  .siq-home-mover:active,
+  .siq-offseason-player-link:active,
+  .siq-sim-player-link:active,
+  .siq-similar-dossier-row:active,
+  .siq-roster-ledger-row:active,
+  .siq-trade-picker-row:active { transform: none; }
 }

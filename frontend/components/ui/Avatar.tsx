@@ -43,6 +43,7 @@ export function Avatar({ name, size = 'md', position, playerId }: AvatarProps) {
           alt=""
           aria-hidden="true"
           loading="lazy"
+          draggable={false}
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
           className="siq-avatar__image"
         />

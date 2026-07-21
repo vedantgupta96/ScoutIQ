@@ -38,6 +38,7 @@ export function TeamLogo({ teamId, abbreviation, name, size = 'md', muted = fals
           alt=""
           aria-hidden="true"
           loading="lazy"
+          draggable={false}
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
           className="siq-team-logo__image"
           style={{
