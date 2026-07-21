@@ -337,13 +337,30 @@ function ContractCard({
 function ExtensionCard({
   extension,
   error,
+  currentSeasonGap,
 }: {
   extension: PlayerExtensionResponse | null;
   error: string | null;
+  currentSeasonGap: number | null;
 }) {
   if (error) {
     return null;
   }
+
+  // The hero "Value gap" measures model value against this season's pay; the extension
+  // gap measures it against the escalated final guaranteed year. When they disagree in
+  // sign, bridge the two so the opposite readings don't look contradictory.
+  const bridge =
+    extension?.eligible &&
+    extension.gap_pct != null &&
+    currentSeasonGap != null &&
+    Math.sign(extension.gap_pct) !== Math.sign(currentSeasonGap) &&
+    Math.abs(extension.gap_pct) >= 1 &&
+    Math.abs(currentSeasonGap) >= 1
+      ? currentSeasonGap > 0
+        ? 'Underpaid on this season’s cap hit, but the deal escalates past the model value by its final guaranteed year — which is what an extension would build on.'
+        : 'Overpaid on this season’s cap hit, yet the final guaranteed year lands below the model value — the anchor an extension would build on.'
+      : null;
 
   return (
     <Panel variant="board" teamAccent eyebrow="Extension decision" icon={<Lock size={15} />}>
@@ -366,6 +383,7 @@ function ExtensionCard({
             </span>
           </div>
           <p className="ds-note ds-m0">{extension.rationale}</p>
+          {bridge && <p className="ds-note ds-m0">{bridge}</p>}
           <div className="siq-contract-summary-strip">
             <StatTile
               label="Model value"
@@ -1360,7 +1378,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
             )}
 
             {activeTab === 'extension' && (
-              <ExtensionCard extension={extension} error={extensionError} />
+              <ExtensionCard extension={extension} error={extensionError} currentSeasonGap={val.gap_pct} />
             )}
 
             {activeTab === 'scout' && (
