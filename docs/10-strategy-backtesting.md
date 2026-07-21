@@ -193,16 +193,22 @@ Portfolio metrics (financial analogs):
 
 ## 9. Phased plan
 
-- **Phase 1 — Rename.** `/model` → "Model Trust" (nav label, `<h1>`, route optional). Frees
-  "Backtesting." Tiny, unblocks naming. _(No engine work.)_
-- **Phase 2 — Backtest engine.** As-of panel + `StrategySpec` + execution loop + realized
-  surplus (option A) + 3–4 preset strategies + 1 benchmark + core metrics. Full tests.
-- **Phase 3 — API + page.** `/strategy/backtest`, builder UI, equity curve, scorecard,
-  pick ledger, caveats.
-- **Phase 4 — Depth.** More benchmarks, risk/Sharpe/drawdown, confidence bands, saved
-  strategies.
-- **Phase 5 — Forward bridge.** Apply a chosen strategy to the current FA class / Offseason
-  Plan targets (backtest → action).
+- **Phase 1 ✅ (2026-07-21)** Renamed `/model` → **"Model trust"** (nav, topbar, `<h1>`,
+  player-page cross-ref). Route kept as `/model`.
+- **Phase 2 ✅ (2026-07-21)** `scoutiq/backtest/engine.py` (pure) + `panel.py` (DB). As-of
+  panel, `StrategySpec`, execution loop, model-free WS→value bridge (market-clearing
+  **2.5% cap/win**, so avg player ≈ 0 surplus), realized surplus, hit rate, Sharpe-like, max
+  drawdown, and 3 benchmarks (random / chase-production / chase-salary). 7 engine tests.
+- **Phase 3 ✅ (2026-07-21)** API `POST /strategy/backtest`, `GET /strategy/presets|meta`
+  (cached 14-season panel). Strategy Lab page `/strategy` (nav "Backtesting"): preset chips
+  + full custom builder, verdict scorecard (alpha vs random), cumulative-surplus equity
+  curve, benchmark bars, best-to-worst pick ledger with profile click-through, caveat.
+  Live-verified: the naive "Value" preset returns **−9.2% alpha vs random** — a real,
+  honest finding (extreme value signals mean-revert; cheap players get expensive).
+- **Phase 4 — Depth (next).** Confidence bands (bootstrap over cohorts), per-benchmark
+  equity overlays, saved strategies (`saved_strategies` table).
+- **Phase 5 — Forward bridge (next).** Apply a chosen strategy to the current FA class /
+  Offseason Plan targets (backtest → action).
 - **Phase 6 (stretch) — Fidelity.** Walk-forward retrained signal; FA-market universe.
 
 ## 10. Decisions — LOCKED 2026-07-21

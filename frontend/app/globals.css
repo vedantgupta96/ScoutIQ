@@ -5720,3 +5720,71 @@ textarea::placeholder {
   .siq-roster-ledger-row:active,
   .siq-trade-picker-row:active { transform: none; }
 }
+
+/* ============================================================
+   Strategy Lab / backtesting (docs/10) — builder, equity curve, benchmarks, ledger
+   ============================================================ */
+.siq-strat-heading h1 { margin: 4px 0 6px; font-size: clamp(22px, 3vw, 30px); }
+.siq-strat-heading p { margin: 0; color: var(--text-secondary); max-width: 78ch; font-size: 13px; }
+
+.siq-strat-presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.siq-strat-preset {
+  padding: 7px 13px; border-radius: 999px; border: 1px solid var(--border-subtle);
+  background: var(--bg-inset); color: var(--text-secondary); font-size: 12px; font-weight: 600;
+  transition: border-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out),
+              background var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+}
+.siq-strat-preset:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.siq-strat-preset:active { transform: scale(0.96); }
+.siq-strat-preset.is-active { border-color: var(--accent); color: var(--accent); background: var(--orange-soft); }
+
+.siq-strat-builder {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px 18px;
+  padding: 4px 0 6px; border-top: 1px solid var(--border-subtle); padding-top: 14px;
+}
+.siq-strat-field { display: grid; gap: 6px; min-width: 0; }
+.siq-strat-slider-row { display: flex; align-items: center; gap: 10px; }
+.siq-strat-slider-row .siq-slider { flex: 1; min-width: 0; }
+.siq-strat-slider-val { color: var(--text-primary); font-size: 13px; min-width: 34px; text-align: right; }
+.siq-strat-toggle { flex-direction: row; align-items: center; gap: 9px; align-self: end; }
+.siq-strat-toggle span { font-size: 12px; color: var(--text-secondary); }
+
+.siq-strat-run {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-subtle); flex-wrap: wrap;
+}
+.siq-strat-run .ds-note { max-width: 62ch; }
+
+.siq-strat-results-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
+.siq-strat-equity-svg { width: 100%; height: auto; display: block; }
+.siq-strat-chart-note { margin: 8px 0 0; }
+
+.siq-strat-bars { display: grid; gap: 10px; padding: 4px 2px; }
+.siq-strat-bar-row { display: grid; grid-template-columns: 130px 1fr 58px; align-items: center; gap: 10px; }
+.siq-strat-bar-label { font-size: 11px; color: var(--text-secondary); }
+.siq-strat-bar-track { position: relative; height: 14px; border-radius: 4px; background: var(--bg-inset); }
+.siq-strat-bar-mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--border-strong); }
+.siq-strat-bar-fill { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; }
+.siq-strat-bar-fill.is-pos { background: color-mix(in srgb, var(--positive) 55%, transparent); }
+.siq-strat-bar-fill.is-neg { background: color-mix(in srgb, var(--negative) 55%, transparent); }
+.siq-strat-bar-fill.is-accent.is-pos { background: var(--positive); }
+.siq-strat-bar-fill.is-accent.is-neg { background: var(--negative); }
+.siq-strat-bar-val { font-size: 12px; text-align: right; }
+
+.siq-strat-pick-row {
+  width: 100%; padding: 9px 14px; border-top: 1px solid var(--border-subtle); text-align: left;
+  transition: background var(--duration-fast) var(--ease-out), transform var(--duration-base) var(--ease-out);
+}
+.siq-strat-pick-row:first-child { border-top: none; }
+.siq-strat-pick-row:hover { background: var(--bg-hover); }
+.siq-strat-pick-row:active { transform: scale(0.995); }
+.siq-strat-pick-id { display: grid; gap: 1px; flex: 1; }
+.siq-strat-pick-id strong { font-size: 13px; }
+.siq-strat-pick-surplus { font-size: 14px; min-width: 62px; }
+
+.is-positive { color: var(--positive-text); }
+.is-negative { color: var(--negative-text); }
+
+@media (max-width: 860px) {
+  .siq-strat-results-grid { grid-template-columns: 1fr; }
+}
