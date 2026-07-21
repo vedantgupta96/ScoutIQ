@@ -3,13 +3,14 @@
 import { ReactNode, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Users, SlidersHorizontal, Target, Shield, Handshake, CalendarRange, ArrowLeftRight, Moon, Sun, Search, Menu, X } from 'lucide-react';
+import { Users, SlidersHorizontal, Target, Shield, Handshake, CalendarRange, ArrowLeftRight, Globe, Moon, Sun, Search, Menu, X } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { getHealth } from '@/lib/api';
 
 const NAV = [
   { id: 'players', href: '/players', label: 'Players', mobileLabel: 'Players', Icon: Users },
   { id: 'teams', href: '/teams', label: 'Team war room', mobileLabel: 'Teams', Icon: Shield },
+  { id: 'league', href: '/league', label: 'League cap', mobileLabel: 'League', Icon: Globe },
   { id: 'free-agency', href: '/free-agency', label: 'Free agency', mobileLabel: 'Market', Icon: Handshake },
   { id: 'offseason', href: '/offseason', label: 'Offseason plan', mobileLabel: 'Plan', Icon: CalendarRange },
   { id: 'trade-lab', href: '/trade-lab', label: 'Trade lab', mobileLabel: 'Trade', Icon: ArrowLeftRight },
@@ -21,6 +22,7 @@ const TITLES: Record<string, string> = {
   '/':          'Front office',
   '/players':   'Players',
   '/teams':     'Team war room',
+  '/league':    'League cap',
   '/free-agency': 'Free agency',
   '/offseason': 'Offseason plan',
   '/trade-lab': 'Trade lab',

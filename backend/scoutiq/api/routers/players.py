@@ -1,6 +1,7 @@
 """GET /players/{player_id}/valuation — production-implied value for a player's most recent season."""
 from __future__ import annotations
 
+import dataclasses
 import re
 from datetime import datetime, timezone
 from typing import Literal
@@ -10,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, desc, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from scoutiq.api import rosters
+from scoutiq.api import extension, rosters
 from scoutiq.api.deps import DB
 from scoutiq.api.rosters import PlayerSummary, _player_summary_from_parts, latest_stats_row
 from scoutiq.api.season import LATEST_SEASON, next_season
@@ -34,6 +35,7 @@ from scoutiq.model.similarity import (
     SimilarityRecord,
     build_similarity_features,
     rank_similar_players,
+    synthesize_comps,
 )
 from scoutiq.models import (
     CapConstants,
@@ -113,6 +115,20 @@ class SimilarPlayerResult(BaseModel):
     deltas: dict[str, float]
 
 
+class CompSynthesis(BaseModel):
+    n_comps: int
+    model_value_pct: float | None
+    market_low_pct: float
+    market_median_pct: float
+    market_high_pct: float
+    suggested_pct: float | None
+    market_low_usd: int | None
+    market_median_usd: int | None
+    market_high_usd: int | None
+    suggested_usd: int | None
+    basis_note: str
+
+
 class SimilarPlayersResponse(BaseModel):
     player_id: int
     player_name: str
@@ -121,6 +137,7 @@ class SimilarPlayersResponse(BaseModel):
     basis: list[str]
     results: list[SimilarPlayerResult]
     caveat: str
+    comp_synthesis: CompSynthesis | None = None
 
 
 def _next_season(season: str) -> str | None:
@@ -544,6 +561,29 @@ def get_similar_players(
             deltas=item.deltas,
         ))
 
+    comp_synthesis = None
+    if mode == "contract_comps":
+        comp_salary_pcts = [r.salary_pct for r in results if r.salary_pct is not None]
+        target_value_pct = value_by_player.get(player_id)
+        synthesis = synthesize_comps(comp_salary_pcts, target_value_pct)
+        if synthesis is not None:
+            def _usd(pct: float | None) -> int | None:
+                return int(round(pct / 100 * salary_cap)) if pct is not None and salary_cap is not None else None
+
+            comp_synthesis = CompSynthesis(
+                n_comps=synthesis.n_comps,
+                model_value_pct=synthesis.model_value_pct,
+                market_low_pct=synthesis.market_low_pct,
+                market_median_pct=synthesis.market_median_pct,
+                market_high_pct=synthesis.market_high_pct,
+                suggested_pct=synthesis.suggested_pct,
+                market_low_usd=_usd(synthesis.market_low_pct),
+                market_median_usd=_usd(synthesis.market_median_pct),
+                market_high_usd=_usd(synthesis.market_high_pct),
+                suggested_usd=_usd(synthesis.suggested_pct),
+                basis_note=synthesis.basis_note,
+            )
+
     return SimilarPlayersResponse(
         player_id=player_id,
         player_name=player.full_name,
@@ -555,6 +595,7 @@ def get_similar_players(
             "Similarity uses same-season role, efficiency, advanced-stat, age, position, value, and cap-hit "
             "features where available. It is deterministic and separate from the valuation model artifact."
         ),
+        comp_synthesis=comp_synthesis,
     )
 
 
@@ -693,6 +734,19 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
         "caveat": valuation.caveat,
         "computed_at": valuation.computed_at,
     }
+
+
+@router.get("/{player_id}/extension")
+def get_extension(player_id: int, db: DB = None):
+    """Return an extend/wait/decline recommendation for a player's current contract."""
+    try:
+        result = extension.decide_extension(db, player_id)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    return dataclasses.asdict(result)
 
 
 @router.get("/{player_id}/scout-ratings", response_model=PlayerScoutRatings)

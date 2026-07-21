@@ -138,7 +138,7 @@ function CardStatLine({ stats }: { stats: PlayerCardStats }) {
   );
 }
 
-function RosterCard({ player }: { player: PlayerCardResponse }) {
+function RosterCard({ player, index }: { player: PlayerCardResponse; index: number }) {
   const team = player.current_team ?? player.latest_stats_team;
   const valuation = player.valuation_status === 'ready' ? player.valuation : undefined;
   const gap = valuation?.gap_pct ?? null;
@@ -151,8 +151,8 @@ function RosterCard({ player }: { player: PlayerCardResponse }) {
   return (
     <Link
       href={`/players/${player.player_id}`}
-      className="siq-case-card"
-      style={{ '--case-accent': accent } as React.CSSProperties}
+      className="siq-case-card siq-row-enter"
+      style={{ '--case-accent': accent, '--row-i': Math.min(index, 8) } as React.CSSProperties}
     >
         <div className="siq-case-card__head">
           <Avatar name={player.full_name} size="lg" position={player.position} playerId={player.player_id} />
@@ -415,7 +415,7 @@ function PlayersContent() {
           </div>
 
           <div className="siq-pressure-board">
-            {players.map((p) => <RosterCard key={p.player_id} player={p} />)}
+            {players.map((p, i) => <RosterCard key={p.player_id} player={p} index={i} />)}
           </div>
 
           <div className="siq-players-pagination-row">

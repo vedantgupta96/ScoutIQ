@@ -16,15 +16,18 @@ import {
   Target,
   DollarSign,
   GitCompare,
+  Lock,
 } from 'lucide-react';
 import {
   getPlayerContract,
+  getPlayerExtension,
   getPlayerRationale,
   getPlayerScoutRatings,
   getSimilarPlayers,
   getValuation,
   PlayerContractResponse,
   PlayerContractYear,
+  PlayerExtensionResponse,
   PlayerRationaleResponse,
   PlayerScoutRatingsResponse,
   PlayerScoutTraitRating,
@@ -41,6 +44,7 @@ import { Button, ButtonLink } from '@/components/ui/Button';
 import { Tabs } from '@/components/ui/Tabs';
 import { StatTile } from '@/components/ui/StatTile';
 import { VerdictPill } from '@/components/ui/VerdictPill';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { AssumptionFlag } from '@/components/ui/AssumptionFlag';
 import { Avatar } from '@/components/ui/Avatar';
 import { TeamLogo } from '@/components/ui/TeamLogo';
@@ -330,6 +334,88 @@ function ContractCard({
   );
 }
 
+function ExtensionCard({
+  extension,
+  error,
+  currentSeasonGap,
+}: {
+  extension: PlayerExtensionResponse | null;
+  error: string | null;
+  currentSeasonGap: number | null;
+}) {
+  if (error) {
+    return null;
+  }
+
+  // The hero "Value gap" measures model value against this season's pay; the extension
+  // gap measures it against the escalated final guaranteed year. When they disagree in
+  // sign, bridge the two so the opposite readings don't look contradictory.
+  const bridge =
+    extension?.eligible &&
+    extension.gap_pct != null &&
+    currentSeasonGap != null &&
+    Math.sign(extension.gap_pct) !== Math.sign(currentSeasonGap) &&
+    Math.abs(extension.gap_pct) >= 1 &&
+    Math.abs(currentSeasonGap) >= 1
+      ? currentSeasonGap > 0
+        ? 'Underpaid on this season’s cap hit, but the deal escalates past the model value by its final guaranteed year — which is what an extension would build on.'
+        : 'Overpaid on this season’s cap hit, yet the final guaranteed year lands below the model value — the anchor an extension would build on.'
+      : null;
+
+  return (
+    <Panel variant="board" teamAccent eyebrow="Extension decision" icon={<Lock size={15} />}>
+      {extension == null ? (
+        <p className="siq-profile-state">Loading extension read…</p>
+      ) : !extension.eligible ? (
+        <EmptyState title={extension.ineligible_reason ?? 'Not extension-eligible.'} />
+      ) : (
+        <>
+          <div className="siq-decision-actions">
+            <span
+              className="siq-verdict-beat"
+              style={{
+                color: extension.tone === 'positive' ? 'var(--positive)'
+                  : extension.tone === 'negative' ? 'var(--negative)'
+                  : 'var(--border-strong)',
+              }}
+            >
+              <VerdictPill gapPct={extension.gap_pct} label={extension.verdict} tone={extension.tone as 'positive' | 'negative' | 'neutral'} size="lg" />
+            </span>
+          </div>
+          <p className="ds-note ds-m0">{extension.rationale}</p>
+          {bridge && <p className="ds-note ds-m0">{bridge}</p>}
+          <div className="siq-contract-summary-strip">
+            <StatTile
+              label="Model value"
+              value={extension.value_pct != null ? fmtPct(extension.value_pct) : '—'}
+              sub={extension.value_pct != null ? `80% range ${fmtPct(extension.value_lo_pct ?? extension.value_pct)} to ${fmtPct(extension.value_hi_pct ?? extension.value_pct)}` : `${extension.value_season} — no loaded stats`}
+              size="sm"
+            />
+            <StatTile
+              label="Current pay"
+              value={extension.current_pay_pct != null ? fmtPct(extension.current_pay_pct) : '—'}
+              sub="Final guaranteed year, % of cap"
+              size="sm"
+            />
+            <StatTile
+              label="Projected market"
+              value={extension.projected_aav_usd != null ? fmtM(extension.projected_aav_usd) : '—'}
+              sub={extension.entering_season
+                ? `${extension.entering_season}${extension.projected_aav_lo_usd != null && extension.projected_aav_hi_usd != null ? ` · ${fmtM(extension.projected_aav_lo_usd)}–${fmtM(extension.projected_aav_hi_usd)}` : ''}`
+                : 'Entering season unavailable'}
+              size="sm"
+            />
+          </div>
+          {extension.trajectory_note && (
+            <p className="ds-note ds-m0">{extension.trajectory_note}</p>
+          )}
+          <p className="ds-note ds-m0 siq-profile-contract-caveat">{extension.caveat}</p>
+        </>
+      )}
+    </Panel>
+  );
+}
+
 const SIMILAR_MODE_LABELS: Record<SimilarPlayersMode, string> = {
   twins: 'Twins',
   contract_comps: 'Contract comps',
@@ -443,6 +529,33 @@ function SimilarPlayersCard({
         </p>
       ) : (
         <>
+          {mode === 'contract_comps' && market.comp_synthesis && (
+            <>
+              <div className="siq-contract-summary-strip">
+                <StatTile
+                  label="Model value"
+                  value={market.comp_synthesis.model_value_pct != null ? fmtPct(market.comp_synthesis.model_value_pct) : '—'}
+                  sub="production-implied"
+                  size="sm"
+                />
+                <StatTile
+                  label="Comp market"
+                  value={`${fmtPct(market.comp_synthesis.market_low_pct)}–${fmtPct(market.comp_synthesis.market_high_pct)}`}
+                  sub={`${market.comp_synthesis.market_median_usd != null ? `${fmtM(market.comp_synthesis.market_median_usd)} ` : ''}median · n=${market.comp_synthesis.n_comps}`}
+                  size="sm"
+                />
+                <StatTile
+                  label="Suggested"
+                  value={market.comp_synthesis.suggested_usd != null
+                    ? fmtM(market.comp_synthesis.suggested_usd)
+                    : market.comp_synthesis.suggested_pct != null ? fmtPct(market.comp_synthesis.suggested_pct) : '—'}
+                  sub="value bounded by market"
+                  size="sm"
+                />
+              </div>
+              <p className="ds-note ds-m0">{market.comp_synthesis.basis_note}</p>
+            </>
+          )}
           <div className="siq-compact-tags siq-profile-similar-basis">
             {market.basis.slice(0, 5).map((basis) => (
               <Badge key={basis} tone="neutral" variant="outline" size="sm">{basis}</Badge>
@@ -460,12 +573,13 @@ function SimilarPlayersCard({
   );
 }
 
-type WorkspaceTab = 'brief' | 'market' | 'contract' | 'scout' | 'model';
+type WorkspaceTab = 'brief' | 'market' | 'contract' | 'extension' | 'scout' | 'model';
 
 const WORKSPACE_TABS: { key: WorkspaceTab; label: string; icon: ReactNode }[] = [
   { key: 'brief', label: 'Front-office read', icon: <Target size={14} /> },
   { key: 'market', label: 'Similar market', icon: <Users size={14} /> },
   { key: 'contract', label: 'Contract', icon: <FileText size={14} /> },
+  { key: 'extension', label: 'Extension', icon: <Lock size={14} /> },
   { key: 'scout', label: 'Scout', icon: <ClipboardCheck size={14} /> },
   { key: 'model', label: 'Model', icon: <BarChart3 size={14} /> },
 ];
@@ -1127,6 +1241,8 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
 
   const [contract, setContract] = useState<PlayerContractResponse | null>(null);
   const [contractError, setContractError] = useState<string | null>(null);
+  const [extension, setExtension] = useState<PlayerExtensionResponse | null>(null);
+  const [extensionError, setExtensionError] = useState<string | null>(null);
   const [similarMode, setSimilarMode] = useState<SimilarPlayersMode>('twins');
   const [similarMarket, setSimilarMarket] = useState<SimilarPlayersResponse | null>(null);
   const [similarError, setSimilarError] = useState<string | null>(null);
@@ -1152,6 +1268,12 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
     getPlayerScoutRatings(playerId)
       .then(setScoutRatings)
       .catch((e: unknown) => setScoutError(e instanceof Error ? e.message : 'Failed to load scout ratings.'));
+
+    setExtension(null);
+    setExtensionError(null);
+    getPlayerExtension(playerId)
+      .then(setExtension)
+      .catch((e: unknown) => setExtensionError(e instanceof Error ? e.message : 'Failed to load extension read.'));
   }, [playerId]);
 
   useEffect(() => {
@@ -1227,49 +1349,55 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
             role="tabpanel"
             aria-labelledby={`player-tab-${activeTab}`}
           >
-            {activeTab === 'brief' && (
-              <FrontOfficeRead
-                val={val}
-                valueUsd={valueUsd}
-                actualUsd={actualUsd}
-                contract={contract}
-                similarMarket={similarMarket}
-                scoutRatings={scoutRatings}
-              />
-            )}
+            <div className="siq-panel-anim" key={activeTab}>
+              {activeTab === 'brief' && (
+                <FrontOfficeRead
+                  val={val}
+                  valueUsd={valueUsd}
+                  actualUsd={actualUsd}
+                  contract={contract}
+                  similarMarket={similarMarket}
+                  scoutRatings={scoutRatings}
+                />
+              )}
 
-            {activeTab === 'market' && (
-              <SimilarPlayersCard
-                market={similarMarket}
-                error={similarError}
-                mode={similarMode}
-                onModeChange={setSimilarMode}
-              />
-            )}
+              {activeTab === 'market' && (
+                <SimilarPlayersCard
+                  market={similarMarket}
+                  error={similarError}
+                  mode={similarMode}
+                  onModeChange={setSimilarMode}
+                />
+              )}
 
-            {activeTab === 'contract' && (
-              <ContractCard
-                contract={contract}
-                error={contractError}
-                onSimulateExtension={() => router.push(extensionHref)}
-              />
-            )}
+              {activeTab === 'contract' && (
+                <ContractCard
+                  contract={contract}
+                  error={contractError}
+                  onSimulateExtension={() => router.push(extensionHref)}
+                />
+              )}
 
-            {activeTab === 'scout' && (
-              <div className="siq-read-grid">
-                <ScoutRatingsCard ratings={scoutRatings} error={scoutError} />
-                <Panel variant="card" eyebrow="How to read this" icon={<Info size={15} />}>
-                  <p className="ds-m0 siq-profile-how-to-read">
-                    Scout ratings are fixture-backed qualitative context for the portfolio demo. Treat them as
-                    a separate lens from the deterministic model and cap math.
-                  </p>
-                </Panel>
-              </div>
-            )}
+              {activeTab === 'extension' && (
+                <ExtensionCard extension={extension} error={extensionError} currentSeasonGap={val.gap_pct} />
+              )}
 
-            {activeTab === 'model' && (
-              <ModelInputs val={val} valueUsd={valueUsd} actualUsd={actualUsd} />
-            )}
+              {activeTab === 'scout' && (
+                <div className="siq-read-grid">
+                  <ScoutRatingsCard ratings={scoutRatings} error={scoutError} />
+                  <Panel variant="card" eyebrow="How to read this" icon={<Info size={15} />}>
+                    <p className="ds-m0 siq-profile-how-to-read">
+                      Scout ratings are fixture-backed qualitative context for the portfolio demo. Treat them as
+                      a separate lens from the deterministic model and cap math.
+                    </p>
+                  </Panel>
+                </div>
+              )}
+
+              {activeTab === 'model' && (
+                <ModelInputs val={val} valueUsd={valueUsd} actualUsd={actualUsd} />
+              )}
+            </div>
           </div>
         </section>
 

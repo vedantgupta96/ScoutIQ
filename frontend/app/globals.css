@@ -886,6 +886,7 @@ textarea::placeholder {
 }
 
 .siq-workspace-tabs {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -897,7 +898,22 @@ textarea::placeholder {
   overflow-x: auto;
 }
 
+.siq-workspace-tabs .siq-tabs__indicator {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  box-shadow: var(--shadow-accent-glow);
+  pointer-events: none;
+  z-index: 0;
+  transition: transform var(--duration-base) var(--ease-out), width var(--duration-base) var(--ease-out);
+}
+
 .siq-workspace-tabs button {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -915,15 +931,19 @@ textarea::placeholder {
   cursor: pointer;
 }
 
-.siq-workspace-tabs button:hover {
+/* Only non-active tabs get a hover background — otherwise it paints over the
+   sliding indicator and leaves on-accent text unreadable on the active tab. */
+.siq-workspace-tabs button:not(.is-active):hover {
   color: var(--text-primary);
   background: var(--bg-hover);
 }
 
 .siq-workspace-tabs button.is-active {
   color: var(--text-on-accent);
-  background: var(--accent);
-  box-shadow: var(--shadow-accent-glow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .siq-workspace-tabs .siq-tabs__indicator { transition: none; }
 }
 
 .siq-workspace-panel {
@@ -2185,6 +2205,7 @@ textarea::placeholder {
 
 /* ---- Segmented control: boxed mutually-exclusive filters ---- */
 .siq-segmented {
+  position: relative;
   display: inline-flex;
   align-items: stretch;
   gap: 2px;
@@ -2194,7 +2215,23 @@ textarea::placeholder {
   background: var(--bg-panel);
 }
 
+/* Single pill that slides under the active option. Positioned/sized inline from a
+   measurement of the active button, so it tracks variable-width segments. */
+.siq-segmented__indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  border-radius: calc(var(--radius-md) - 3px);
+  background: var(--accent-soft);
+  pointer-events: none;
+  z-index: 0;
+  transition: transform var(--duration-base) var(--ease-out), width var(--duration-base) var(--ease-out);
+}
+
 .siq-segmented__option {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2208,14 +2245,18 @@ textarea::placeholder {
   font-weight: 650;
   cursor: pointer;
   white-space: nowrap;
-  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+  transition: color var(--duration-fast) var(--ease-out);
 }
 
-.siq-segmented__option:hover { color: var(--text-primary); }
+.siq-segmented__option:not(.siq-segmented__option--active):hover { color: var(--text-primary); }
 
+/* The sliding indicator provides the active background; the option only recolors. */
 .siq-segmented__option--active {
-  background: var(--accent-soft);
   color: var(--accent-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .siq-segmented__indicator { transition: none; }
 }
 
 /* ---- Field: eyebrow label above a control ---- */
@@ -3161,6 +3202,33 @@ textarea::placeholder {
   padding: 0 4px;
   margin: 0 -4px;
   animation: siq-reprice 640ms var(--ease-out);
+}
+
+@keyframes siq-panel-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.siq-panel-anim {
+  animation: siq-panel-in var(--duration-base) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .siq-panel-anim { animation: none; }
+}
+
+@keyframes siq-row-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.siq-row-enter {
+  animation: siq-row-in var(--duration-base) var(--ease-out) backwards;
+  animation-delay: calc(var(--row-i, 0) * 20ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .siq-row-enter { animation: none; }
 }
 
 /* Skeleton cards use a restrained opacity pulse; reduced motion clamps it. */
@@ -4756,6 +4824,12 @@ textarea::placeholder {
   border-radius: var(--radius-pill);
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .siq-cap-bar-fill {
+    transition: width var(--duration-base) var(--ease-out);
+  }
+}
+
 .siq-cap-bar-threshold {
   position: absolute;
   width: 2px;
@@ -4922,6 +4996,16 @@ textarea::placeholder {
   box-shadow: var(--glow-confidence);
   cursor: help;
   z-index: 3;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .siq-value-gauge-connector,
+  .siq-value-gauge-band,
+  .siq-value-gauge-pay-line,
+  .siq-value-gauge-dot,
+  .siq-gauge-bound {
+    transition: left var(--duration-base) var(--ease-out), width var(--duration-base) var(--ease-out), transform var(--duration-base) var(--ease-out);
+  }
 }
 
 .siq-value-gauge-tick {
@@ -5719,4 +5803,53 @@ textarea::placeholder {
   .siq-similar-dossier-row:active,
   .siq-roster-ledger-row:active,
   .siq-trade-picker-row:active { transform: none; }
+}
+
+/* League: cap landscape */
+.siq-league-table-wrap {
+  overflow-x: auto;
+}
+
+.siq-league-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.siq-league-table th,
+.siq-league-table td {
+  padding: 8px 10px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Numeric columns (Payroll onward) right-align so figures scan and adjacent
+   columns stay visually separated. */
+.siq-league-table th:nth-child(n + 3),
+.siq-league-table td:nth-child(n + 3) {
+  text-align: right;
+}
+
+.siq-league-table th {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.siq-league-sort-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.siq-league-sort-btn:hover,
+.siq-league-sort-btn:focus-visible {
+  color: var(--text-primary);
 }

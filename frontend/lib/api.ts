@@ -188,6 +188,29 @@ export interface PlayerContractResponse {
   caveat: string;
 }
 
+export interface PlayerExtensionResponse {
+  player_id: number;
+  eligible: boolean;
+  ineligible_reason: string | null;
+  value_season: string;
+  value_pct: number | null;
+  value_lo_pct: number | null;
+  value_hi_pct: number | null;
+  current_pay_pct: number | null;
+  final_contract_season: string | null;
+  entering_season: string | null;
+  projected_aav_usd: number | null;
+  projected_aav_lo_usd: number | null;
+  projected_aav_hi_usd: number | null;
+  projected_cap_usd: number | null;
+  gap_pct: number | null;
+  verdict: string;
+  tone: string;
+  rationale: string;
+  trajectory_note: string | null;
+  caveat: string;
+}
+
 export type SimilarPlayersMode = 'twins' | 'contract_comps' | 'replacements';
 
 export interface SimilarPlayerResult {
@@ -202,6 +225,20 @@ export interface SimilarPlayerResult {
   deltas: Record<string, number>;
 }
 
+export interface CompSynthesis {
+  n_comps: number;
+  model_value_pct: number | null;
+  market_low_pct: number;
+  market_median_pct: number;
+  market_high_pct: number;
+  suggested_pct: number | null;
+  market_low_usd: number | null;
+  market_median_usd: number | null;
+  market_high_usd: number | null;
+  suggested_usd: number | null;
+  basis_note: string;
+}
+
 export interface SimilarPlayersResponse {
   player_id: number;
   player_name: string;
@@ -210,6 +247,7 @@ export interface SimilarPlayersResponse {
   basis: string[];
   results: SimilarPlayerResult[];
   caveat: string;
+  comp_synthesis: CompSynthesis | null;
 }
 
 export type WatchlistBucket = 'all' | 'underpaid' | 'overpaid';
@@ -678,6 +716,23 @@ export interface TeamFaTargetsResponse {
   caveat: string;
 }
 
+export interface ExtensionCandidateItem {
+  player: PlayerSummary;
+  value_pct: number;
+  current_pay_pct: number;
+  gap_pct: number;
+  verdict: string;
+  tone: 'positive' | 'negative' | 'neutral';
+  final_contract_season: string | null;
+}
+
+export interface ExtensionsBoardResponse {
+  season: string;
+  total: number;
+  items: ExtensionCandidateItem[];
+  caveat: string;
+}
+
 // ---- Offseason planning --------------------------------------
 
 export interface ProposedOffseasonContract {
@@ -777,6 +832,42 @@ export interface OffseasonPlanResponse {
   caveat: string;
 }
 
+export interface LeagueTeamRow {
+  team: TeamSummary;
+  tier: CapTier;
+  total_payroll_usd: number;
+  payroll_pct: number | null;
+  room_to_cap_usd: number | null;
+  room_to_tax_usd: number | null;
+  room_to_first_apron_usd: number | null;
+  room_to_second_apron_usd: number | null;
+  total_value_usd: number;
+  surplus_usd: number;
+  surplus_pct: number | null;
+  expiring_usd: number;
+  expiring_pct: number | null;
+  roster_size: number;
+  payroll_player_count: number;
+}
+
+export interface LeagueCapContext {
+  season: string;
+  salary_cap: number | null;
+  tax_line: number | null;
+  first_apron: number | null;
+  second_apron: number | null;
+}
+
+export interface LeagueCapResponse {
+  context: LeagueCapContext;
+  tier_counts: Record<CapTier, number>;
+  teams_with_cap_room: number;
+  league_expiring_usd: number;
+  team_count: number;
+  teams: LeagueTeamRow[];
+  caveat: string;
+}
+
 // ---- API functions -------------------------------------------
 
 export function getTeams(signal?: AbortSignal): Promise<TeamListItem[]> {
@@ -785,6 +876,10 @@ export function getTeams(signal?: AbortSignal): Promise<TeamListItem[]> {
 
 export function getTeamCapSheet(teamId: number, season?: string, signal?: AbortSignal): Promise<TeamCapSheetResponse> {
   return apiFetch<TeamCapSheetResponse>(`/teams/${teamId}/cap-sheet${queryString({ season })}`, { signal });
+}
+
+export function getLeagueCapLandscape(season?: string, signal?: AbortSignal): Promise<LeagueCapResponse> {
+  return apiFetch<LeagueCapResponse>(`/league/cap-landscape${queryString({ season })}`, { signal });
 }
 
 export function getTeamNeeds(teamId: number, season?: string, signal?: AbortSignal): Promise<TeamNeedsResponse> {
@@ -818,6 +913,10 @@ export function getFreeAgencyOptions(
     limit: params.limit ?? 25,
     offset: params.offset ?? 0,
   })}`, { signal });
+}
+
+export function getExtensionsBoard(limit: number = 30, signal?: AbortSignal): Promise<ExtensionsBoardResponse> {
+  return apiFetch<ExtensionsBoardResponse>(`/free-agency/extensions${queryString({ limit })}`, { signal });
 }
 
 export function getTeamFaTargets(
@@ -892,6 +991,10 @@ export function getValuation(id: number, season?: string, signal?: AbortSignal):
 
 export function getPlayerContract(id: number, signal?: AbortSignal): Promise<PlayerContractResponse> {
   return apiFetch<PlayerContractResponse>(`/players/${id}/contract`, { signal });
+}
+
+export function getPlayerExtension(id: number, signal?: AbortSignal): Promise<PlayerExtensionResponse> {
+  return apiFetch<PlayerExtensionResponse>(`/players/${id}/extension`, { signal });
 }
 
 export function getSimilarPlayers(

@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useRef, type KeyboardEvent } from 'react';
+import { ReactNode, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 
 interface TabsProps<T extends string> {
   tabs: ReadonlyArray<{ key: T; label: string; icon?: ReactNode }>;
@@ -17,6 +17,22 @@ interface TabsProps<T extends string> {
 /** Roving-tabindex tablist: ArrowLeft/ArrowRight/Home/End move selection and focus. */
 export function Tabs<T extends string>({ tabs, active, onChange, ariaLabel, idPrefix, panelId, className }: TabsProps<T>) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const groupRef = useRef<HTMLDivElement>(null);
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const group = groupRef.current;
+    if (!group) return;
+    const measure = () => {
+      const el = group.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!el) return;
+      setIndicator({ left: el.offsetLeft, width: el.offsetWidth });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(group);
+    return () => observer.disconnect();
+  }, [active, tabs]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     let nextIndex = index;
@@ -32,7 +48,14 @@ export function Tabs<T extends string>({ tabs, active, onChange, ariaLabel, idPr
   };
 
   return (
-    <div className={className} role="tablist" aria-label={ariaLabel}>
+    <div className={className} role="tablist" aria-label={ariaLabel} ref={groupRef}>
+      {indicator && (
+        <span
+          className="siq-tabs__indicator"
+          aria-hidden="true"
+          style={{ transform: `translateX(${indicator.left}px)`, width: indicator.width }}
+        />
+      )}
       {tabs.map((tab, index) => (
         <button
           key={tab.key}
