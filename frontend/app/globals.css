@@ -2148,6 +2148,7 @@ textarea::placeholder {
 
 /* ---- Segmented control: boxed mutually-exclusive filters ---- */
 .siq-segmented {
+  position: relative;
   display: inline-flex;
   align-items: stretch;
   gap: 2px;
@@ -2157,7 +2158,23 @@ textarea::placeholder {
   background: var(--bg-panel);
 }
 
+/* Single pill that slides under the active option. Positioned/sized inline from a
+   measurement of the active button, so it tracks variable-width segments. */
+.siq-segmented__indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  border-radius: calc(var(--radius-md) - 3px);
+  background: var(--accent-soft);
+  pointer-events: none;
+  z-index: 0;
+  transition: transform var(--duration-base) var(--ease-out), width var(--duration-base) var(--ease-out);
+}
+
 .siq-segmented__option {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2171,14 +2188,18 @@ textarea::placeholder {
   font-weight: 650;
   cursor: pointer;
   white-space: nowrap;
-  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+  transition: color var(--duration-fast) var(--ease-out);
 }
 
 .siq-segmented__option:hover { color: var(--text-primary); }
 
+/* The sliding indicator provides the active background; the option only recolors. */
 .siq-segmented__option--active {
-  background: var(--accent-soft);
   color: var(--accent-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .siq-segmented__indicator { transition: none; }
 }
 
 /* ---- Field: eyebrow label above a control ---- */
