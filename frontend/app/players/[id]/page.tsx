@@ -1331,53 +1331,55 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
             role="tabpanel"
             aria-labelledby={`player-tab-${activeTab}`}
           >
-            {activeTab === 'brief' && (
-              <FrontOfficeRead
-                val={val}
-                valueUsd={valueUsd}
-                actualUsd={actualUsd}
-                contract={contract}
-                similarMarket={similarMarket}
-                scoutRatings={scoutRatings}
-              />
-            )}
+            <div className="siq-panel-anim" key={activeTab}>
+              {activeTab === 'brief' && (
+                <FrontOfficeRead
+                  val={val}
+                  valueUsd={valueUsd}
+                  actualUsd={actualUsd}
+                  contract={contract}
+                  similarMarket={similarMarket}
+                  scoutRatings={scoutRatings}
+                />
+              )}
 
-            {activeTab === 'market' && (
-              <SimilarPlayersCard
-                market={similarMarket}
-                error={similarError}
-                mode={similarMode}
-                onModeChange={setSimilarMode}
-              />
-            )}
+              {activeTab === 'market' && (
+                <SimilarPlayersCard
+                  market={similarMarket}
+                  error={similarError}
+                  mode={similarMode}
+                  onModeChange={setSimilarMode}
+                />
+              )}
 
-            {activeTab === 'contract' && (
-              <ContractCard
-                contract={contract}
-                error={contractError}
-                onSimulateExtension={() => router.push(extensionHref)}
-              />
-            )}
+              {activeTab === 'contract' && (
+                <ContractCard
+                  contract={contract}
+                  error={contractError}
+                  onSimulateExtension={() => router.push(extensionHref)}
+                />
+              )}
 
-            {activeTab === 'extension' && (
-              <ExtensionCard extension={extension} error={extensionError} />
-            )}
+              {activeTab === 'extension' && (
+                <ExtensionCard extension={extension} error={extensionError} />
+              )}
 
-            {activeTab === 'scout' && (
-              <div className="siq-read-grid">
-                <ScoutRatingsCard ratings={scoutRatings} error={scoutError} />
-                <Panel variant="card" eyebrow="How to read this" icon={<Info size={15} />}>
-                  <p className="ds-m0 siq-profile-how-to-read">
-                    Scout ratings are fixture-backed qualitative context for the portfolio demo. Treat them as
-                    a separate lens from the deterministic model and cap math.
-                  </p>
-                </Panel>
-              </div>
-            )}
+              {activeTab === 'scout' && (
+                <div className="siq-read-grid">
+                  <ScoutRatingsCard ratings={scoutRatings} error={scoutError} />
+                  <Panel variant="card" eyebrow="How to read this" icon={<Info size={15} />}>
+                    <p className="ds-m0 siq-profile-how-to-read">
+                      Scout ratings are fixture-backed qualitative context for the portfolio demo. Treat them as
+                      a separate lens from the deterministic model and cap math.
+                    </p>
+                  </Panel>
+                </div>
+              )}
 
-            {activeTab === 'model' && (
-              <ModelInputs val={val} valueUsd={valueUsd} actualUsd={actualUsd} />
-            )}
+              {activeTab === 'model' && (
+                <ModelInputs val={val} valueUsd={valueUsd} actualUsd={actualUsd} />
+              )}
+            </div>
           </div>
         </section>
 

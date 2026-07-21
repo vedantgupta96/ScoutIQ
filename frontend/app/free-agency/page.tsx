@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, Suspense, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, Suspense, type ReactNode, type CSSProperties } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Handshake, Users, Scale, TriangleAlert, ChevronLeft, ChevronRight, Radar } from 'lucide-react';
@@ -162,8 +162,12 @@ function BoardTab({ season }: { season: string }) {
           <EmptyState title={`No free agents match this filter for ${data.entering_season}.`} />
         )}
 
-        {data?.items.map((entry) => (
-          <div key={entry.player_id} className="siq-roster-ledger-row">
+        {data?.items.map((entry, i) => (
+          <div
+            key={entry.player_id}
+            className="siq-roster-ledger-row siq-row-enter"
+            style={{ ['--row-i' as string]: Math.min(i, 8) } as CSSProperties}
+          >
             <PlayerCell entry={entry} />
             <div className="ds-right">
               <div className="ds-tnum siq-fa-value-primary">
@@ -227,10 +231,14 @@ function OptionsTab({ season }: { season: string }) {
         )}
 
         <div className="siq-fa-option-list">
-          {data?.items.map((entry) => {
+          {data?.items.map((entry, i) => {
             const o = entry.option;
             return (
-              <div key={entry.player_id} className="siq-fa-option-row">
+              <div
+                key={entry.player_id}
+                className="siq-fa-option-row siq-row-enter"
+                style={{ ['--row-i' as string]: Math.min(i, 8) } as CSSProperties}
+              >
                 <PlayerCell
                   entry={entry}
                   extra={<Badge tone={entry.fa_type === 'player-option' ? 'warning' : 'confidence'} size="sm">
@@ -508,9 +516,11 @@ function FreeAgencyContent() {
         </Field>
       </div>
 
-      {tab === 'board' && <BoardTab season={season} />}
-      {tab === 'options' && <OptionsTab season={season} />}
-      {tab === 'targets' && <TargetsTab season={season} teams={teams} />}
+      <div className="siq-panel-anim" key={tab}>
+        {tab === 'board' && <BoardTab season={season} />}
+        {tab === 'options' && <OptionsTab season={season} />}
+        {tab === 'targets' && <TargetsTab season={season} teams={teams} />}
+      </div>
     </div>
   );
 }
