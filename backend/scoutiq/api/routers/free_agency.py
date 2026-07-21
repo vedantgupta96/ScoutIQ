@@ -21,6 +21,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 
+from scoutiq.api import extension
 from scoutiq.api import free_agency as fa
 from scoutiq.api.cap import SeasonCapData, cap_for, classify_tier, load_season_caps, room_to_lines
 from scoutiq.api.offseason import incomplete_roster_charge
@@ -54,6 +55,11 @@ TARGETS_CAVEAT = (
     "exceptions, trades, and tax owed. 'Fits room' compares a target's model value (not a "
     "market price) to projected cap space. Roster fit is deterministic latest-season deficit "
     "reduction against a median-team benchmark, with recent minutes as a role proxy."
+)
+EXTENSIONS_CAVEAT = (
+    "Ranks rostered, extension-eligible players (a guaranteed season remaining after the latest "
+    "season) by the gap between model value and the final guaranteed year's cap hit. Latest-season "
+    "value; not a forward projection. Impending free agents appear on the Market tab, not here."
 )
 
 
@@ -134,6 +140,23 @@ class ProjectedCapContext(BaseModel):
 class TeamFaTarget(FreeAgentEntry):
     fits_room: bool | None             # model value ≤ projected cap space
     fit: CandidateFitResponse
+
+
+class ExtensionCandidateItem(BaseModel):
+    player: PlayerSummary
+    value_pct: float
+    current_pay_pct: float
+    gap_pct: float
+    verdict: str
+    tone: str
+    final_contract_season: str | None
+
+
+class ExtensionsBoardResponse(BaseModel):
+    season: str
+    total: int
+    items: list[ExtensionCandidateItem]
+    caveat: str
 
 
 class TeamFaTargetsResponse(BaseModel):
@@ -495,6 +518,46 @@ def get_free_agency_options(
         limit=limit,
         offset=offset,
         caveat=BOARD_CAVEAT,
+    )
+
+
+@router.get("/extensions", response_model=ExtensionsBoardResponse)
+def get_extensions_board(
+    limit: int = Query(30, ge=1, le=100),
+    db: DB = None,
+):
+    """League-wide extension-eligible rostered players ranked by extend-now value gap."""
+    candidates = extension.rank_extension_candidates(db, limit=limit)
+    players = {
+        p.player_id: p
+        for p in db.scalars(
+            select(Player).where(Player.player_id.in_([c.player_id for c in candidates]))
+        ).all()
+    }
+    summaries = rosters.batched_summaries(list(players.values()), db)
+
+    items: list[ExtensionCandidateItem] = []
+    for candidate in candidates:
+        summary = summaries.get(candidate.player_id)
+        if summary is None:
+            continue
+        items.append(
+            ExtensionCandidateItem(
+                player=summary,
+                value_pct=candidate.value_pct,
+                current_pay_pct=candidate.current_pay_pct,
+                gap_pct=candidate.gap_pct,
+                verdict=candidate.verdict,
+                tone=candidate.tone,
+                final_contract_season=candidate.final_contract_season,
+            )
+        )
+
+    return ExtensionsBoardResponse(
+        season=LATEST_SEASON,
+        total=len(items),
+        items=items,
+        caveat=EXTENSIONS_CAVEAT,
     )
 
 

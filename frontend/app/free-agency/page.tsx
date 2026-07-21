@@ -1,18 +1,21 @@
 'use client';
 
-import { useEffect, useMemo, useState, Suspense, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, Suspense, type ReactNode, type CSSProperties } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Handshake, Users, Scale, TriangleAlert, ChevronLeft, ChevronRight, Radar } from 'lucide-react';
+import { Handshake, Users, Scale, TriangleAlert, ChevronLeft, ChevronRight, Radar, FileSignature } from 'lucide-react';
 import {
   getFreeAgencyBoard,
   getFreeAgencyOptions,
   getTeamFaTargets,
+  getExtensionsBoard,
   getTeams,
   FreeAgentEntry,
   FreeAgencyBoardResponse,
   FreeAgencyOptionsResponse,
   TeamFaTargetsResponse,
+  ExtensionsBoardResponse,
+  ExtensionCandidateItem,
   TeamListItem,
   FaType,
 } from '@/lib/api';
@@ -35,11 +38,12 @@ import { RosterNeeds } from '@/components/teams/RosterNeeds';
 import { fmtM, fmtPct, roundedDomainMax } from '@/lib/utils';
 import { useApi } from '@/lib/useApi';
 
-type TabId = 'board' | 'options' | 'targets';
+type TabId = 'board' | 'options' | 'targets' | 'extensions';
 const TABS: Array<{ id: TabId; label: string; Icon: typeof Handshake }> = [
   { id: 'board', label: 'Board', Icon: Handshake },
   { id: 'options', label: 'Options', Icon: Scale },
   { id: 'targets', label: 'Team targets', Icon: Users },
+  { id: 'extensions', label: 'Extensions', Icon: FileSignature },
 ];
 
 const SEASONS = ['2026-27', '2027-28', '2028-29', '2029-30'];
@@ -162,8 +166,12 @@ function BoardTab({ season }: { season: string }) {
           <EmptyState title={`No free agents match this filter for ${data.entering_season}.`} />
         )}
 
-        {data?.items.map((entry) => (
-          <div key={entry.player_id} className="siq-roster-ledger-row">
+        {data?.items.map((entry, i) => (
+          <div
+            key={entry.player_id}
+            className="siq-roster-ledger-row siq-row-enter"
+            style={{ ['--row-i' as string]: Math.min(i, 8) } as CSSProperties}
+          >
             <PlayerCell entry={entry} />
             <div className="ds-right">
               <div className="ds-tnum siq-fa-value-primary">
@@ -227,10 +235,14 @@ function OptionsTab({ season }: { season: string }) {
         )}
 
         <div className="siq-fa-option-list">
-          {data?.items.map((entry) => {
+          {data?.items.map((entry, i) => {
             const o = entry.option;
             return (
-              <div key={entry.player_id} className="siq-fa-option-row">
+              <div
+                key={entry.player_id}
+                className="siq-fa-option-row siq-row-enter"
+                style={{ ['--row-i' as string]: Math.min(i, 8) } as CSSProperties}
+              >
                 <PlayerCell
                   entry={entry}
                   extra={<Badge tone={entry.fa_type === 'player-option' ? 'warning' : 'confidence'} size="sm">
@@ -453,6 +465,92 @@ function TargetsTab({ season, teams }: { season: string; teams: TeamListItem[] }
   );
 }
 
+// ---- Extensions tab -------------------------------------------------------------
+function ExtensionPlayerCell({ item }: { item: ExtensionCandidateItem }) {
+  const player = item.player;
+  const team = player.current_team ?? player.latest_stats_team;
+  return (
+    <Link href={`/players/${player.player_id}`} className="siq-plain-link siq-min0">
+      <div className="siq-row siq-row--10 siq-min0">
+        <Avatar name={player.full_name} size="md" position={player.position} playerId={player.player_id} />
+        <div className="siq-min0">
+          <div className="siq-fa-player-name">
+            {player.full_name}
+          </div>
+          <div className="siq-fa-player-meta-row">
+            <span className="ds-note">
+              {player.position ?? '—'}{team?.abbreviation ? ` · ${team.abbreviation}` : ''}
+            </span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function extensionVerdictTone(tone: string): 'positive' | 'negative' | 'neutral' {
+  if (tone === 'positive') return 'positive';
+  if (tone === 'negative') return 'negative';
+  return 'neutral';
+}
+
+function ExtensionsTab({ season }: { season: string }) {
+  const { data, loading, error } = useApi<ExtensionsBoardResponse>(
+    (signal) => getExtensionsBoard(30, signal),
+    [],
+    { fallback: 'Failed to load the extensions board.' },
+  );
+
+  return (
+    <div className="siq-stack">
+      {error && <ErrorNote message={error} />}
+
+      <Panel variant="card"
+        className="siq-roster-ledger"
+        eyebrow={data ? `${data.total} extension-eligible players · latest season ${data.season}` : 'Extensions'}
+        icon={<FileSignature size={15} />}
+      >
+        <div className="siq-roster-ledger-head">
+          <span className="ds-eyebrow">Player</span>
+          <span className="ds-eyebrow ds-right">Current pay</span>
+          <span className="ds-eyebrow">Verdict</span>
+          <span className="ds-eyebrow ds-right">Model value</span>
+        </div>
+
+        {loading && !data && <LoadingNote>Loading extension candidates…</LoadingNote>}
+        {data && data.items.length === 0 && (
+          <EmptyState title="No extension-eligible rostered players found." />
+        )}
+
+        {data?.items.map((item) => (
+          <div key={item.player.player_id} className="siq-roster-ledger-row">
+            <ExtensionPlayerCell item={item} />
+            <div className="ds-right">
+              <div className="ds-tnum siq-fa-value-primary">
+                {fmtPct(item.current_pay_pct)}
+              </div>
+              <div className="ds-tnum ds-note">
+                {item.final_contract_season ? `through ${item.final_contract_season}` : ''}
+              </div>
+            </div>
+            <div>
+              <Badge tone={extensionVerdictTone(item.tone)} size="sm">{item.verdict}</Badge>
+              <div className="ds-note siq-fa-mt6">{fmtPct(item.gap_pct)} gap</div>
+            </div>
+            <div className="ds-right">
+              <div className="ds-tnum siq-fa-value-strong">
+                {fmtPct(item.value_pct)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </Panel>
+
+      {data && <AssumptionFlag tone="warning" title="Extensions board ranking" icon={<TriangleAlert size={16} />}>{data.caveat}</AssumptionFlag>}
+    </div>
+  );
+}
+
 function Pager({ offset, total, onPrev, onNext }: { offset: number; total: number; onPrev: () => void; onNext: () => void }) {
   const from = offset + 1;
   const to = Math.min(offset + PAGE_SIZE, total);
@@ -508,9 +606,12 @@ function FreeAgencyContent() {
         </Field>
       </div>
 
-      {tab === 'board' && <BoardTab season={season} />}
-      {tab === 'options' && <OptionsTab season={season} />}
-      {tab === 'targets' && <TargetsTab season={season} teams={teams} />}
+      <div className="siq-panel-anim" key={tab}>
+        {tab === 'board' && <BoardTab season={season} />}
+        {tab === 'options' && <OptionsTab season={season} />}
+        {tab === 'targets' && <TargetsTab season={season} teams={teams} />}
+        {tab === 'extensions' && <ExtensionsTab season={season} />}
+      </div>
     </div>
   );
 }
