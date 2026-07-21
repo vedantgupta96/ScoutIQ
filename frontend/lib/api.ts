@@ -225,6 +225,20 @@ export interface SimilarPlayerResult {
   deltas: Record<string, number>;
 }
 
+export interface CompSynthesis {
+  n_comps: number;
+  model_value_pct: number | null;
+  market_low_pct: number;
+  market_median_pct: number;
+  market_high_pct: number;
+  suggested_pct: number | null;
+  market_low_usd: number | null;
+  market_median_usd: number | null;
+  market_high_usd: number | null;
+  suggested_usd: number | null;
+  basis_note: string;
+}
+
 export interface SimilarPlayersResponse {
   player_id: number;
   player_name: string;
@@ -233,6 +247,7 @@ export interface SimilarPlayersResponse {
   basis: string[];
   results: SimilarPlayerResult[];
   caveat: string;
+  comp_synthesis: CompSynthesis | null;
 }
 
 export type WatchlistBucket = 'all' | 'underpaid' | 'overpaid';

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import statistics
 from dataclasses import dataclass
 from typing import Literal
 
@@ -358,3 +359,62 @@ def rank_similar_players(
             deltas=deltas,
         ))
     return sorted(scored, key=lambda item: item.score, reverse=True)[:limit]
+
+
+@dataclass
+class CompSynthesis:
+    n_comps: int
+    model_value_pct: float | None
+    market_low_pct: float
+    market_median_pct: float
+    market_high_pct: float
+    suggested_pct: float | None
+    basis_note: str
+
+
+def _percentile(sorted_vals: list[float], q: float) -> float:
+    if len(sorted_vals) == 1:
+        return sorted_vals[0]
+    idx = q * (len(sorted_vals) - 1)
+    lo = math.floor(idx)
+    hi = math.ceil(idx)
+    if lo == hi:
+        return sorted_vals[int(idx)]
+    frac = idx - lo
+    return sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * frac
+
+
+def synthesize_comps(comp_salary_pcts: list[float], model_value_pct: float | None) -> CompSynthesis | None:
+    """Build a market band + suggested target from paid comp salaries."""
+    vals = sorted(v for v in comp_salary_pcts if v is not None and v >= 0)
+    if len(vals) < 3:
+        return None
+
+    median = statistics.median(vals)
+    if len(vals) >= 4:
+        low = _percentile(vals, 0.25)
+        high = _percentile(vals, 0.75)
+    else:
+        low = vals[0]
+        high = vals[-1]
+
+    if model_value_pct is not None:
+        suggested = max(low, min(high, model_value_pct))
+    else:
+        suggested = median
+
+    basis_note = (
+        "Market band is the 25th–75th percentile of what comparable players are actually "
+        "paid (min–max when fewer than four). Suggested target is the model value bounded "
+        "by that band."
+    )
+
+    return CompSynthesis(
+        n_comps=len(vals),
+        model_value_pct=round(model_value_pct, 2) if model_value_pct is not None else None,
+        market_low_pct=round(low, 2),
+        market_median_pct=round(median, 2),
+        market_high_pct=round(high, 2),
+        suggested_pct=round(suggested, 2) if suggested is not None else None,
+        basis_note=basis_note,
+    )
