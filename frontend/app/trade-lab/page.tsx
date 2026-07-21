@@ -31,6 +31,7 @@ import {
   type TradeTeamWorkspace,
   type TradeWorkspacePlayer,
 } from '@/lib/api';
+import { BalanceMeter, GradeChip } from '@/components/trade/BalanceMeter';
 import { CapBar } from '@/components/cap/CapBar';
 import { Alert } from '@/components/ui/Alert';
 import { Avatar } from '@/components/ui/Avatar';
@@ -351,18 +352,128 @@ function TeamPackage({
   );
 }
 
+type FlagTone = 'positive' | 'negative' | 'warning' | 'neutral';
+
+function FlagChip({ label, value, tone, title }: { label: string; value: string; tone: FlagTone; title?: string }) {
+  return (
+    <span className={`siq-flag-chip siq-flag-chip--${tone}`} title={title}>
+      <span className="siq-flag-chip__k ds-eyebrow">{label}</span>
+      <span className="siq-flag-chip__v">{value}</span>
+    </span>
+  );
+}
+
+// One side's outgoing package (players + picks) with salary and modeled asset value,
+// from the sending team's own team-state lens. Half of the fused Exchange.
+function ExchangeSide({ analysis, toAbbr }: { analysis: TradeTeamAnalysis; toAbbr: string }) {
+  const abbr = analysis.team.abbreviation ?? analysis.team.name;
+  const players = analysis.selected_outgoing;
+  const picks = analysis.picks_outgoing;
+  const detail = analysis.assets.players_detail;
+  const salaryOut = players.reduce((total, p) => total + (p.cap_hit_usd ?? 0), 0);
+  const assetOut = analysis.assets.player_surplus_sent_usd + analysis.assets.picks_sent_usd;
+
+  return (
+    <div className="siq-exchange-side">
+      <header className="siq-exchange-side__head">
+        <TeamLogo teamId={analysis.team.team_id} abbreviation={analysis.team.abbreviation} name={analysis.team.name} size="sm" />
+        <span className="siq-exchange-side__title">
+          <strong>{abbr} sends</strong>
+          <small>to {toAbbr}</small>
+        </span>
+      </header>
+      <ul className="siq-exchange-list">
+        {players.map((p) => {
+          const s = detail[String(p.player_id)];
+          return (
+            <li className="siq-exchange-row" key={p.player_id}>
+              <Avatar name={p.full_name} playerId={p.player_id} position={p.position} size="sm" />
+              <span className="siq-trade-player-id">
+                <strong>{p.full_name}</strong>
+                <small>{p.position ?? '—'}</small>
+              </span>
+              <span className="siq-exchange-row__num ds-tnum">
+                <strong>{fmtM(p.cap_hit_usd ?? 0)}</strong>
+                <small title="Modeled remaining-contract surplus (value − salary), this team's lens.">
+                  {s ? `${fmtSignedM(s.total_surplus_usd)} value` : 'value n/a'}
+                </small>
+              </span>
+            </li>
+          );
+        })}
+        {picks.map((pick) => (
+          <li className="siq-exchange-row siq-exchange-row--pick" key={`pick-${pick.pick_id}`}>
+            <span className="siq-exchange-pick" aria-hidden="true">◆</span>
+            <span className="siq-trade-player-id">
+              <strong>{pick.label}</strong>
+              <small>exp. #{pick.expected_pick}</small>
+            </span>
+            <span className="siq-exchange-row__num ds-tnum">
+              <strong>{pick.value_usd != null ? fmtM(pick.value_usd) : '—'}</strong>
+              <small>pick value</small>
+            </span>
+          </li>
+        ))}
+        {players.length === 0 && picks.length === 0 ? (
+          <li className="siq-exchange-empty">Nothing outgoing on this side.</li>
+        ) : null}
+      </ul>
+      <footer className="siq-exchange-side__foot ds-tnum">
+        <span>{players.length} {players.length === 1 ? 'player' : 'players'}{picks.length ? ` · ${picks.length} ${picks.length === 1 ? 'pick' : 'picks'}` : ''}</span>
+        <span>
+          {fmtM(salaryOut)} out
+          <strong className={assetOut >= 0 ? 'is-positive' : 'is-negative'} title="Total modeled asset value leaving this side (player surplus + pick value).">
+            {' · '}{fmtSignedM(assetOut)} value
+          </strong>
+        </span>
+      </footer>
+    </div>
+  );
+}
+
+// The fused deal: both outgoing packages in one read, replacing the two mirror
+// value/pick grids that used to force a side-by-side diff.
+function TradeExchange({ result }: { result: TradeResponse }) {
+  const a = result.team_a.team.abbreviation ?? 'A';
+  const b = result.team_b.team.abbreviation ?? 'B';
+  return (
+    <section className="siq-exchange">
+      <header className="siq-exchange__head">
+        <span className="ds-eyebrow">The exchange</span>
+        <small>What each side gives up — salary and modeled asset value</small>
+      </header>
+      <div className="siq-exchange__grid">
+        <ExchangeSide analysis={result.team_a} toAbbr={b} />
+        <div className="siq-exchange__swap" aria-hidden="true"><ArrowLeftRight size={18} /></div>
+        <ExchangeSide analysis={result.team_b} toAbbr={a} />
+      </div>
+    </section>
+  );
+}
+
+// Per-team consequences only — cap trajectory, quick legality flags, fit shift —
+// with the CBA math tucked into an on-demand drawer. The value/pick inventory
+// lives in the Exchange above; this panel answers "what does it do to this team".
 function Impact({ analysis }: { analysis: TradeTeamAnalysis }) {
-  const tone = analysis.salary_match.status === 'pass'
-    ? 'positive'
-    : analysis.salary_match.status === 'fail' ? 'negative' : 'warning';
-  const hasValue = analysis.value.sent_coverage + analysis.value.received_coverage > 0;
   const cap = analysis.cap_context;
+  const sm = analysis.salary_match;
+  const pl = analysis.pick_legality;
+  const rl = analysis.roster_legality;
+  const abbr = analysis.team.abbreviation ?? analysis.team.name;
+  const hasPicks = analysis.picks_outgoing.length > 0 || analysis.picks_incoming.length > 0;
+  const coverage = analysis.value.sent_coverage + analysis.value.received_coverage;
+  const selected = analysis.value.sent_selected + analysis.value.received_selected;
+
+  const salaryTone: FlagTone = sm.status === 'pass' ? 'positive' : sm.status === 'fail' ? 'negative' : 'warning';
+  const stepienTone: FlagTone = !pl ? 'neutral'
+    : pl.status === 'pass' || pl.status === 'not-applicable' ? 'positive'
+    : pl.status === 'fail' ? 'negative' : 'warning';
 
   return (
     <section className={`siq-trade-impact siq-trade-impact--${analysis.tier_after}`}>
       <header className="siq-trade-impact-head">
         <div>
-          <span className="ds-eyebrow">{analysis.team.abbreviation} cap pressure</span>
+          <span className="ds-eyebrow">{abbr} cap trajectory</span>
           <h3>{capTransition(analysis.tier_before, analysis.tier_after)}</h3>
         </div>
         <Badge tone={tierTone(analysis.tier_after)} icon={tierIcon(analysis.tier_after)}>
@@ -382,60 +493,110 @@ function Impact({ analysis }: { analysis: TradeTeamAnalysis }) {
         showLabels
         valueLabel="After"
       />
-      <div className="siq-trade-match">
-        <div className="siq-trade-match-head">
-          <span className="ds-eyebrow">Salary matching</span>
-          <Badge tone={tone}>{analysis.salary_match.rule_label}</Badge>
-        </div>
-        <div className="siq-trade-match-grid ds-tnum">
-          <span>Outgoing<strong>{fmtM(analysis.outgoing_salary_usd)}</strong></span>
-          <span>Incoming<strong>{fmtM(analysis.incoming_salary_usd)}</strong></span>
-          <span>Allowed incoming<strong>{fmtM(analysis.salary_match.allowed_incoming)}</strong></span>
-          <span>Rule margin<strong className={analysis.salary_match.margin >= 0 ? 'is-positive' : 'is-negative'}>{fmtSignedM(analysis.salary_match.margin)}</strong></span>
-        </div>
-        {analysis.salary_match.reasons.map((reason) => <p className="ds-note" key={reason}>{reason}</p>)}
+      <div className="siq-trade-flags">
+        <FlagChip
+          label="Salary match"
+          value={sm.status === 'pass' ? 'Works' : sm.status === 'fail' ? 'Over limit' : sm.status === 'incomplete' ? '—' : 'Review'}
+          tone={salaryTone}
+          title="CBA salary matching: the incoming salary must fit an allowed band set by the outgoing salary and this team's cap tier."
+        />
+        {hasPicks && pl ? (
+          <FlagChip
+            label="Stepien"
+            value={pl.status === 'not-applicable' ? 'n/a' : pl.status === 'pass' ? 'OK' : pl.status === 'fail' ? 'Fails' : 'Review'}
+            tone={stepienTone}
+            title="Stepien rule: a team can't trade away first-round picks in consecutive future drafts."
+          />
+        ) : null}
+        <FlagChip
+          label="Roster"
+          value={rl.status === 'pass' ? `~${rl.standard_after} standard` : 'Review'}
+          tone={rl.status === 'pass' ? 'neutral' : 'warning'}
+          title="Standard-contract count after the trade (two-way players excluded). Max 15, min 14; counts are approximate."
+        />
       </div>
-      {(analysis.picks_outgoing.length > 0 || analysis.picks_incoming.length > 0) ? (
-        <div className="siq-trade-match">
-          <div className="siq-trade-match-head">
-            <span className="ds-eyebrow">Draft picks · {TEAM_STATE_LABEL[analysis.team_state]} lens</span>
-            {analysis.pick_legality ? (
-              <Badge tone={
-                analysis.pick_legality.status === 'pass' || analysis.pick_legality.status === 'not-applicable'
-                  ? 'positive'
-                  : analysis.pick_legality.status === 'fail' ? 'negative' : 'warning'
-              }>
-                {analysis.pick_legality.status === 'not-applicable' ? 'Stepien n/a' : `Stepien ${analysis.pick_legality.status}`}
-              </Badge>
-            ) : null}
-          </div>
-          <div className="siq-trade-match-grid ds-tnum">
-            <span>Picks out<strong>{analysis.picks_outgoing.length ? `${analysis.picks_outgoing.length} · ${fmtM(analysis.assets.picks_sent_usd)}` : '—'}</strong></span>
-            <span>Picks in<strong>{analysis.picks_incoming.length ? `${analysis.picks_incoming.length} · ${fmtM(analysis.assets.picks_received_usd)}` : '—'}</strong></span>
-            <span>Net assets<strong className={analysis.assets.net_usd >= 0 ? 'is-positive' : 'is-negative'}>{fmtSignedM(analysis.assets.net_usd)}</strong></span>
-            <span>Player surplus<strong>{fmtSignedM(analysis.assets.player_surplus_received_usd - analysis.assets.player_surplus_sent_usd)}</strong></span>
-          </div>
-          {[...analysis.picks_outgoing.map((pick) => `Out: ${pick.label}`),
-            ...analysis.picks_incoming.map((pick) => `In: ${pick.label}`)].map((line) => (
-            <p className="ds-note" key={line}>{line}</p>
+      {analysis.fit_changes.length ? (
+        <div className="siq-trade-fit">
+          <span className="ds-eyebrow">Roster fit shift</span>
+          {analysis.fit_changes.slice(0, 2).map((change) => (
+            <p className="ds-note ds-tnum" key={change.key}>
+              {change.label}: <strong className={change.delta_pct >= 0 ? 'is-positive' : 'is-negative'}>{signed(change.delta_pct)} pts</strong>
+              <small> ({change.before_pct.toFixed(0)}% → {change.after_pct.toFixed(0)}%)</small>
+            </p>
           ))}
-          {analysis.pick_legality?.reasons.map((reason) => <p className="ds-note" key={reason}>{reason}</p>)}
         </div>
       ) : null}
       <details className="siq-trade-details">
-        <summary>Model value and roster fit</summary>
+        <summary>The math · salary, picks, roster</summary>
         <div className="siq-trade-secondary-grid ds-tnum">
-          <span>Modeled value<strong>{hasValue ? `${fmtM(analysis.value.sent_usd)} sent / ${fmtM(analysis.value.received_usd)} received` : 'Unavailable'}</strong><small>{analysis.value.sent_coverage}/{analysis.value.sent_selected} sent · {analysis.value.received_coverage}/{analysis.value.received_selected} received valued</small></span>
-          <span>Value change<strong>{hasValue ? fmtSignedM(analysis.value.delta_usd) : '—'}</strong></span>
-          <span>Roster count<strong>{analysis.roster_count_before} → {analysis.roster_count_after}</strong></span>
-          <span>Fit confidence<strong>{analysis.fit_after.confidence}</strong></span>
+          <span title="Total salary this team sends out.">Outgoing<strong>{fmtM(analysis.outgoing_salary_usd)}</strong></span>
+          <span title="Total salary this team takes back.">Incoming<strong>{fmtM(analysis.incoming_salary_usd)}</strong></span>
+          <span title="The most salary this team may take back under the matched rule.">Allowed back<strong>{fmtM(sm.allowed_incoming)}</strong></span>
+          <span title="Headroom under the allowed incoming; negative means over by that much.">Margin<strong className={sm.margin >= 0 ? 'is-positive' : 'is-negative'}>{fmtSignedM(sm.margin)}</strong></span>
         </div>
-        {analysis.fit_changes.map((change) => (
-          <p className="ds-note ds-tnum" key={change.key}>
-            {change.label}: {change.before_pct.toFixed(1)}% → {change.after_pct.toFixed(1)}% ({signed(change.delta_pct)} pts)
-          </p>
-        ))}
+        {sm.reasons.map((reason) => <p className="ds-note" key={reason}>{reason}</p>)}
+        {pl?.reasons.map((reason) => <p className="ds-note" key={reason}>{reason}</p>)}
+        {rl.reasons.map((reason) => <p className="ds-note" key={reason}>{reason}</p>)}
+        <div className="siq-trade-secondary-grid ds-tnum">
+          <span title="Standard contracts before → after; two-way players excluded from the count.">
+            Standard roster<strong>{rl.standard_before} → ~{rl.standard_after}</strong><small>{rl.two_way_count} two-way excluded</small>
+          </span>
+          <span title="How many of the players involved on this side the model could value.">
+            Model coverage<strong>{coverage}/{selected || 0}</strong><small>players valued · fit {analysis.fit_after.confidence}</small>
+          </span>
+        </div>
       </details>
+    </section>
+  );
+}
+
+const LEGALITY_WORD: Record<string, string> = {
+  'modeled-compliant': 'Works',
+  'modeled-noncompliant': 'Blocked',
+  'needs-review': 'Needs review',
+  'incomplete': 'Incomplete',
+};
+
+function TradeVerdictBar({ result, stale }: { result: TradeResponse; stale: boolean }) {
+  const { balance } = result;
+  const status = result.overall_status;
+  const tone = status === 'modeled-compliant' ? 'positive'
+    : status === 'modeled-noncompliant' ? 'negative' : 'warning';
+  const a = result.team_a.team.abbreviation ?? 'A';
+  const b = result.team_b.team.abbreviation ?? 'B';
+  const label = balance.fairness_label.replace('Team A', a).replace('Team B', b);
+
+  return (
+    <section className={`siq-trade-verdict-bar siq-trade-verdict-bar--${status}`}>
+      <div className="siq-trade-verdict-legality" data-tone={tone}>
+        <div className="siq-trade-verdict-stamp">
+          <span className="ds-eyebrow">Trade verdict</span>
+          <div className="siq-trade-verdict-stamp-row">
+            <Badge tone={tone} icon={tone === 'positive' ? <Check size={14} /> : <TriangleAlert size={14} />}>
+              {LEGALITY_WORD[status] ?? 'Review'}
+            </Badge>
+            {stale ? <Badge tone="warning" icon={<TriangleAlert size={13} />}>Prior result</Badge> : null}
+          </div>
+        </div>
+        <h2>{result.overall_label}</h2>
+        <p>{result.summary}</p>
+      </div>
+      <div className="siq-trade-verdict-balance">
+        <span className="ds-eyebrow">Value balance</span>
+        <BalanceMeter
+          fairnessPct={balance.fairness_pct}
+          tier={balance.fairness_tier}
+          label={label}
+          netUsd={balance.net_usd}
+          leftAbbr={a}
+          rightAbbr={b}
+          lowConfidence={balance.low_confidence}
+        />
+        <div className="siq-trade-grades">
+          <GradeChip grade={balance.team_a_grade} teamAbbr={a} lowConfidence={balance.low_confidence} />
+          <GradeChip grade={balance.team_b_grade} teamAbbr={b} lowConfidence={balance.low_confidence} />
+        </div>
+      </div>
     </section>
   );
 }
@@ -636,19 +797,8 @@ export default function TradeLabPage() {
 
       {result ? (
         <section className={`siq-trade-results${stale ? ' is-stale' : ''}`} aria-busy={analyzing}>
-          <header className={`siq-trade-verdict siq-trade-verdict--${result.overall_status}`}>
-            <div>
-              <span className="ds-eyebrow">Modeled salary verdict</span>
-              <h2>{result.overall_label}</h2>
-              <p>{result.summary}</p>
-            </div>
-            <Badge
-              tone={result.overall_status === 'modeled-compliant' ? 'positive' : result.overall_status === 'modeled-noncompliant' ? 'negative' : 'warning'}
-              icon={result.overall_status === 'modeled-compliant' ? <Check size={14} /> : <TriangleAlert size={14} />}
-            >
-              {stale ? 'Prior result' : 'Current result'}
-            </Badge>
-          </header>
+          <TradeVerdictBar result={result} stale={stale} />
+          <TradeExchange result={result} />
           <div className="siq-trade-impacts">
             <Impact analysis={result.team_a} />
             <Impact analysis={result.team_b} />

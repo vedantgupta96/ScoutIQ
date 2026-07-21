@@ -194,6 +194,10 @@ def scrape_team(team_slug: str) -> list[dict]:
         if not spotrac_id or not years:
             continue
 
+        # Spotrac tags contract type in a designation cell (e.g. "Free Agent Two-Way");
+        # two-way players do not count against the 15-man standard roster limit.
+        is_two_way = "two-way" in row.get_text(" ", strip=True).lower()
+
         players.append({
             "full_name": full_name,
             "spotrac_id": spotrac_id,
@@ -203,6 +207,7 @@ def scrape_team(team_slug: str) -> list[dict]:
             "aav": aav,
             "start": start_txt,   # calendar year, e.g. '2023'
             "end": end_txt,
+            "is_two_way": is_two_way,
         })
 
     return players

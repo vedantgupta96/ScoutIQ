@@ -1098,6 +1098,11 @@ export interface TradeTeamPicksResponse {
   picks: TradePickAsset[]; caveat: string;
 }
 export interface TradePickLegality { status: 'pass' | 'fail' | 'needs-review' | 'not-applicable'; reasons: string[] }
+export interface TradeRosterLegality {
+  status: 'pass' | 'needs-review';
+  standard_before: number; standard_after: number;
+  net_change: number; two_way_count: number; reasons: string[];
+}
 export interface TradeAssetLedger {
   player_surplus_sent_usd: number; player_surplus_received_usd: number;
   player_surplus_coverage_sent: number; player_surplus_coverage_received: number;
@@ -1116,7 +1121,8 @@ export interface TradeTeamAnalysis {
   selected_outgoing_ids: number[]; selected_incoming_ids: number[];
   payroll_before_usd: number; payroll_after_usd: number;
   tier_before: CapTier; tier_after: CapTier;
-  roster_count_before: number; roster_count_after: number; outgoing_salary_usd: number; incoming_salary_usd: number; salary_delta_usd: number;
+  roster_count_before: number; roster_count_after: number; roster_legality: TradeRosterLegality;
+  outgoing_salary_usd: number; incoming_salary_usd: number; salary_delta_usd: number;
   salary_match: { status: 'pass'|'fail'|'needs-review'|'incomplete'; method: string|null; rule_label: string; incoming: number; outgoing: number; allowed_incoming: number; margin: number; reasons: string[] };
   value: { sent_usd: number; received_usd: number; delta_usd: number; sent_coverage: number; received_coverage: number; sent_selected: number; received_selected: number };
   fit_before: TeamNeedsResponse; fit_after: TeamNeedsResponse;
@@ -1126,7 +1132,20 @@ export interface TradeTeamAnalysis {
   pick_legality: TradePickLegality | null;
   assets: TradeAssetLedger;
 }
-export interface TradeResponse { season: string; role_season: string; is_projected_cap: boolean; overall_status: string; overall_label: string; summary: string; team_a: TradeTeamAnalysis; team_b: TradeTeamAnalysis; assumptions: string[]; not_modeled: string[] }
+export type TradeFairnessTier = 'even' | 'favors-a' | 'favors-b' | 'lopsided-a' | 'lopsided-b';
+export interface TradeBalance {
+  net_usd: number;            // A-relative: + favors Team A, − favors Team B
+  fairness_pct: number;       // needle 0..100 (50 = even)
+  fairness_tier: TradeFairnessTier;
+  fairness_label: string;
+  team_a_grade: string; team_b_grade: string;
+  team_a_value_in_usd: number; team_a_value_out_usd: number;
+  team_b_value_in_usd: number; team_b_value_out_usd: number;
+  low_confidence: boolean;
+  coverage: { a_valued: number; a_selected: number; b_valued: number; b_selected: number };
+  reasons: string[];
+}
+export interface TradeResponse { season: string; role_season: string; is_projected_cap: boolean; overall_status: string; overall_label: string; summary: string; balance: TradeBalance; team_a: TradeTeamAnalysis; team_b: TradeTeamAnalysis; assumptions: string[]; not_modeled: string[] }
 export function getTradeWorkspace(teamId: number, season: string, signal?: AbortSignal): Promise<TradeTeamWorkspace> {
   return apiFetch<TradeTeamWorkspace>(`/trades/teams/${teamId}/workspace${queryString({ season })}`, { signal });
 }

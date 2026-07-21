@@ -92,7 +92,9 @@ def _workspace(team_id: int, salary: int) -> TradeTeamWorkspace:
         cap_context=cap,
         payroll_before_usd=170_000_000,
         tier_before="below-tax",
-        roster_count=1,
+        roster_count=15,
+        # Primary (traded) player first, then filler standard players so the roster is
+        # count-valid (15 standard) and the roster-count check doesn't fire on a stub.
         players=[TradeWorkspacePlayer(
             player_id=team_id * 10,
             full_name=f"Player {team_id * 10}",
@@ -100,7 +102,14 @@ def _workspace(team_id: int, salary: int) -> TradeTeamWorkspace:
             cap_hit_usd=salary,
             salary_pct=round(salary / cap.salary_cap * 100, 2) if salary else None,
             pay_source="contract",
-        )],
+        )] + [TradeWorkspacePlayer(
+            player_id=team_id * 1000 + i,
+            full_name=f"Filler {team_id}-{i}",
+            position="G",
+            cap_hit_usd=2_000_000,
+            salary_pct=1.25,
+            pay_source="contract",
+        ) for i in range(14)],
         caveat="Test roster caveat.",
     )
 
@@ -129,6 +138,7 @@ def test_trade_workspace_route_is_lightweight_and_cacheable(monkeypatch):
         "cap_hit_usd": 10_000_000,
         "salary_pct": 6.25,
         "pay_source": "contract",
+        "is_two_way": False,
     }
 
 

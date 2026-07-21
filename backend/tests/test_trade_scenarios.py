@@ -71,6 +71,13 @@ TEAMS = [Team(team_id=1, abbreviation="AAA", name="Team A"),
 WINDOW = list(range(2027, 2034))
 
 
+def _roster_workspace(team_id, traded_pid):
+    """15-standard-player workspace (roster-valid) whose first player is the traded id."""
+    ws = _full_workspace(team_id, standard_count=15, cap_hit=10_000_000)
+    ws.players[0].player_id = traded_pid
+    return ws
+
+
 def _analyze(monkeypatch, db, a_picks=None, b_picks=None):
     cap = SeasonCapData("2026-27", 160_000_000, 190_000_000, 200_000_000, 210_000_000,
                         is_projected=True)
@@ -78,7 +85,7 @@ def _analyze(monkeypatch, db, a_picks=None, b_picks=None):
     monkeypatch.setattr(trades_router, "cap_for", lambda season, caps: cap)
     monkeypatch.setattr(
         trades_router, "_load_trade_workspaces",
-        lambda db_, ids, season, **kw: {1: _workspace(1, 10_000_000), 2: _workspace(2, 10_000_000)},
+        lambda db_, ids, season, **kw: {1: _roster_workspace(1, 10), 2: _roster_workspace(2, 20)},
     )
     monkeypatch.setattr(trades_router, "_selected_values", lambda db_, ids: {})
     monkeypatch.setattr(trades_router, "load_fit_context", lambda db_, season: build_fit_context([]))
@@ -150,3 +157,62 @@ def test_asset_ledger_is_internally_consistent_and_mirrored(monkeypatch):
     assert [p["pick_id"] for p in body["team_a"]["picks_outgoing"]] == \
            [p["pick_id"] for p in body["team_b"]["picks_incoming"]]
     assert body["team_a"]["assets"]["picks_sent_usd"] == body["team_b"]["assets"]["picks_received_usd"]
+
+
+def _full_workspace(team_id, standard_count, two_way_count=0, cap_hit=10_000_000):
+    """Workspace with N standard players + M two-way players, all with positive cap hits."""
+    from scoutiq.api.routers.trades import TradeCapContext, TradeTeamWorkspace, TradeWorkspacePlayer
+    from scoutiq.api.rosters import TeamSummary
+    players = []
+    pid = team_id * 100
+    for _ in range(standard_count):
+        players.append(TradeWorkspacePlayer(player_id=pid, full_name=f"P{pid}", position="G",
+                                            cap_hit_usd=cap_hit, salary_pct=1.0, pay_source="contract",
+                                            is_two_way=False))
+        pid += 1
+    for _ in range(two_way_count):
+        players.append(TradeWorkspacePlayer(player_id=pid, full_name=f"TW{pid}", position="G",
+                                            cap_hit_usd=100_000, salary_pct=0.1, pay_source="contract",
+                                            is_two_way=True))
+        pid += 1
+    cap = TradeCapContext(salary_cap=160_000_000, tax_line=190_000_000,
+                          first_apron=200_000_000, second_apron=210_000_000)
+    return TradeTeamWorkspace(
+        team=TeamSummary(team_id=team_id, abbreviation=f"T{team_id}", name=f"Team {team_id}"),
+        season="2026-27", is_projected_cap=True, cap_context=cap,
+        payroll_before_usd=standard_count * cap_hit, tier_before="below-tax",
+        roster_count=len(players), players=players, caveat="test",
+    )
+
+
+def test_roster_count_warning_escalates_salary_compliant_trade(monkeypatch):
+    """A 1-for-2 that salary-matches but pushes a 15-man roster to 16 → needs-review."""
+    from scoutiq.api.cap_simulator import SeasonCapData
+    cap = SeasonCapData("2026-27", 160_000_000, 190_000_000, 200_000_000, 210_000_000, is_projected=True)
+    ws_a = _full_workspace(1, standard_count=15, two_way_count=1, cap_hit=20_000_000)
+    ws_b = _full_workspace(2, standard_count=15, cap_hit=10_000_000)
+    monkeypatch.setattr(trades_router, "load_season_caps", lambda db_: {cap.season: cap})
+    monkeypatch.setattr(trades_router, "cap_for", lambda season, caps: cap)
+    monkeypatch.setattr(trades_router, "_load_trade_workspaces",
+                        lambda db_, ids, season, **kw: {1: ws_a, 2: ws_b})
+    monkeypatch.setattr(trades_router, "_selected_values", lambda db_, ids: {})
+    monkeypatch.setattr(trades_router, "load_fit_context", lambda db_, season: build_fit_context([]))
+    app.dependency_overrides[get_db] = lambda: FakePicksDB([], TEAMS)
+
+    a_send = [ws_a.players[0].player_id]            # 1 player, $20M
+    b_send = [p.player_id for p in ws_b.players[:2]]  # 2 players, $20M total → salary matches
+    try:
+        body = TestClient(app).post("/trades/analyze", json={
+            "season": "2026-27", "team_a_id": 1, "team_b_id": 2,
+            "team_a_sends": a_send, "team_b_sends": b_send,
+        }).json()
+    finally:
+        app.dependency_overrides.clear()
+
+    a = body["team_a"]
+    assert a["salary_match"]["status"] == "pass"          # salary is fine
+    rl = a["roster_legality"]
+    assert rl["status"] == "needs-review"                 # 15 → 16 standard
+    assert rl["standard_before"] == 15 and rl["standard_after"] == 16 and rl["net_change"] == 1
+    assert rl["two_way_count"] == 1                        # two-way excluded from the count
+    assert body["overall_status"] == "needs-review"       # roster escalates the whole trade

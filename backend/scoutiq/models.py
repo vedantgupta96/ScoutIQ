@@ -42,6 +42,9 @@ class Player(Base):
     current_team_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("teams.team_id"), index=True)
     current_team_source: Mapped[str | None] = mapped_column(String(64))
     current_team_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Two-way contracts don't count against the 15-man standard roster limit; sourced
+    # from Spotrac by etl/load_two_way_status. Roster-count legality counts standard only.
+    is_two_way: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     xref: Mapped["PlayerXref | None"] = relationship(back_populates="player", uselist=False)
 

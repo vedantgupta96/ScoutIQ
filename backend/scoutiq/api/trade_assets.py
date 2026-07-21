@@ -215,6 +215,64 @@ def evaluate_pick_legality(
     )
 
 
+# ---- Roster-count legality (Phase D2) --------------------------------------
+
+# CBA standard-roster bounds. Two-way players (up to 3) don't count against these.
+ROSTER_STANDARD_MAX = 15
+ROSTER_STANDARD_MIN = 14
+
+ROSTER_COUNT_CAVEAT = (
+    "Roster counts standard contracts only (two-way players excluded). The absolute count "
+    "is approximate — waived-player dead money can inflate it and incomplete contract data "
+    "can deflate it — so limits surface as review flags, not hard failures. The net change "
+    "in players is exact."
+)
+
+
+@dataclass(frozen=True)
+class RosterLegality:
+    status: str                 # pass | needs-review
+    standard_before: int
+    standard_after: int
+    net_change: int             # incoming − outgoing standard players (exact)
+    two_way_count: int
+    reasons: list[str]
+
+
+def roster_count_legality(
+    *,
+    standard_before: int,
+    standard_outgoing: int,
+    standard_incoming: int,
+    two_way_count: int,
+) -> RosterLegality:
+    """Warn (never hard-block) when a trade pushes the standard roster out of [14, 15].
+
+    Absolute counts are approximate (see ROSTER_COUNT_CAVEAT), so over/under conditions
+    are `needs-review` with the fix stated; the net player change is always exact.
+    """
+    net = standard_incoming - standard_outgoing
+    after = standard_before + net
+    reasons: list[str] = []
+    status = "pass"
+    if after > ROSTER_STANDARD_MAX:
+        status = "needs-review"
+        reasons.append(
+            f"Roster would hold ~{after} standard-salaried players (+{net}), above the "
+            f"{ROSTER_STANDARD_MAX}-man limit — a waiver or additional outgoing player is required. "
+            "Count is approximate."
+        )
+    elif after < ROSTER_STANDARD_MIN:
+        status = "needs-review"
+        reasons.append(
+            f"Roster would hold ~{after} standard-salaried players ({net:+d}), below the "
+            f"{ROSTER_STANDARD_MIN}-man minimum — a signing would be required. Count is approximate."
+        )
+    else:
+        reasons.append(f"Roster stays within limits at ~{after} standard players ({net:+d}).")
+    return RosterLegality(status, standard_before, after, net, two_way_count, reasons)
+
+
 # ---- Remaining-contract surplus (Phase B) ----------------------------------
 
 SURPLUS_CAVEAT = (
@@ -312,3 +370,137 @@ def remaining_contract_surplus(
                 expiring=guaranteed_remaining <= 1,
             )
     return results
+
+
+# ---- Trade balance: fairness meter + per-side grade (Phase 08.1) ------------
+#
+# A structured, analytical read of "who wins" — NOT a recommendation. It aggregates
+# the same asset-ledger numbers the response already carries (player remaining-contract
+# surplus + discounted pick value, each in that team's own team-state lens) into one
+# A-relative differential, a needle position, a fairness tier, and a per-side letter
+# grade. All thresholds are documented, cap-relative constants so they scale with the
+# league's economics and stay tunable.
+
+BALANCE_CAVEAT = (
+    "Balance weighs modeled remaining-contract surplus and discounted draft-pick value "
+    "from each team's own team-state lens. It is a value read, not a recommendation, and "
+    "is approximate where player values are missing (see confidence)."
+)
+
+# Fairness bands as a percentage of one season's salary cap. Below EVEN the deal reads
+# as balanced; beyond LOPSIDED it reads as a blowout. The needle maps linearly to LOPSIDED.
+FAIRNESS_EVEN_PCT_OF_CAP = 2.0
+FAIRNESS_LOPSIDED_PCT_OF_CAP = 8.0
+# When model coverage of the involved players is thin, widen the "even" band so a
+# half-valued package can't masquerade as a confident blowout, and flag low confidence.
+LOW_COVERAGE_EVEN_MULTIPLIER = 2.0
+LOW_COVERAGE_RATIO = 0.6
+# Per-side letter grade from that team's own net asset value as a % of the cap.
+GRADE_CUTOFFS_PCT = (("A", 6.0), ("B", 2.0), ("C", -2.0), ("D", -6.0))
+
+_FAIRNESS_LABEL = {
+    "even": "Even value exchange",
+    "favors-a": "Favors Team A",
+    "favors-b": "Favors Team B",
+    "lopsided-a": "Lopsided toward Team A",
+    "lopsided-b": "Lopsided toward Team B",
+}
+
+
+@dataclass(frozen=True)
+class TradeBalance:
+    net_usd: int                # A-relative: + favors Team A, − favors Team B
+    fairness_pct: float         # needle 0..100 (50 = even)
+    fairness_tier: str          # even | favors-a | favors-b | lopsided-a | lopsided-b
+    fairness_label: str
+    team_a_grade: str           # A..F from Team A's own net asset value
+    team_b_grade: str
+    team_a_value_in_usd: int
+    team_a_value_out_usd: int
+    team_b_value_in_usd: int
+    team_b_value_out_usd: int
+    low_confidence: bool        # thin model coverage of the involved players
+    coverage: dict              # a_valued, a_selected, b_valued, b_selected
+    reasons: list[str]
+
+
+def _letter_grade(net_pct: float) -> str:
+    for letter, cutoff in GRADE_CUTOFFS_PCT:
+        if net_pct >= cutoff:
+            return letter
+    return "F"
+
+
+def trade_balance(
+    *,
+    a_value_in_usd: int,
+    a_value_out_usd: int,
+    b_value_in_usd: int,
+    b_value_out_usd: int,
+    salary_cap: int | None,
+    a_valued: int,
+    a_selected: int,
+    b_valued: int,
+    b_selected: int,
+) -> TradeBalance:
+    """Fairness meter + per-side grade from each team's own-lens net asset value.
+
+    ``*_value_in/out`` are that team's incoming/outgoing modeled asset value
+    (player surplus + pick value) from its asset ledger. The headline ``net_usd``
+    is Team A's own-lens net (positive favours A); grades are each side's own net.
+    """
+    a_net = a_value_in_usd - a_value_out_usd
+    b_net = b_value_in_usd - b_value_out_usd
+    cap = salary_cap or 0
+    net_pct = (a_net / cap * 100) if cap else 0.0
+
+    total_selected = a_selected + b_selected
+    total_valued = a_valued + b_valued
+    coverage_ratio = (total_valued / total_selected) if total_selected else 0.0
+    low_confidence = total_selected == 0 or coverage_ratio < LOW_COVERAGE_RATIO
+
+    even = FAIRNESS_EVEN_PCT_OF_CAP * (LOW_COVERAGE_EVEN_MULTIPLIER if low_confidence else 1.0)
+    lopsided = FAIRNESS_LOPSIDED_PCT_OF_CAP
+
+    if abs(net_pct) <= even:
+        tier = "even"
+    elif net_pct > 0:
+        tier = "lopsided-a" if net_pct > lopsided else "favors-a"
+    else:
+        tier = "lopsided-b" if net_pct < -lopsided else "favors-b"
+
+    # Needle on a left→right axis where left = Team A, right = Team B, center = even.
+    # It leans toward the winner: A gaining value (net_pct > 0) pushes it left (→ 0),
+    # B gaining pushes it right (→ 100). Frontend uses this directly as the CSS left%.
+    fairness_pct = round(max(0.0, min(100.0, 50.0 - (net_pct / lopsided) * 50.0)), 1)
+
+    reasons: list[str] = []
+    if tier == "even":
+        reasons.append("Neither side gains a decisive value edge under the model.")
+    else:
+        favored = "Team A" if net_pct > 0 else "Team B"
+        reasons.append(f"{favored} nets the greater modeled asset value in this exchange.")
+    if low_confidence:
+        reasons.append(
+            "Model valued only part of the players involved, so the balance is shown with "
+            "low confidence and a widened even band."
+        )
+
+    return TradeBalance(
+        net_usd=a_net,
+        fairness_pct=fairness_pct,
+        fairness_tier=tier,
+        fairness_label=_FAIRNESS_LABEL[tier],
+        team_a_grade=_letter_grade((a_net / cap * 100) if cap else 0.0),
+        team_b_grade=_letter_grade((b_net / cap * 100) if cap else 0.0),
+        team_a_value_in_usd=a_value_in_usd,
+        team_a_value_out_usd=a_value_out_usd,
+        team_b_value_in_usd=b_value_in_usd,
+        team_b_value_out_usd=b_value_out_usd,
+        low_confidence=low_confidence,
+        coverage={
+            "a_valued": a_valued, "a_selected": a_selected,
+            "b_valued": b_valued, "b_selected": b_selected,
+        },
+        reasons=reasons,
+    )
