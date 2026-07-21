@@ -1156,6 +1156,67 @@ export function analyzeTrade(request: TradeRequest, signal?: AbortSignal): Promi
   return apiFetch<TradeResponse>('/trades/analyze', { method: 'POST', body: JSON.stringify(request), signal });
 }
 
+// ---- Strategy Lab / backtesting (docs/10) ----
+export type StrategySignal = 'gap' | 'value' | 'bpm' | 'ws' | 'vorp';
+export interface StrategyRequest {
+  min_mpg?: number; min_gp?: number;
+  min_age?: number | null; max_age?: number | null;
+  positions?: string[] | null;
+  min_bpm?: number | null;
+  require_undervalued?: boolean;
+  min_value_pct?: number | null;
+  signal?: StrategySignal;
+  portfolio_size?: number;
+  horizon?: number;
+  start_season?: string | null; end_season?: string | null;
+}
+export interface StrategyPreset { id: string; name: string; description: string; spec: StrategyRequest }
+export interface StrategyBenchmark { n_picks: number; total_surplus_pct: number; surplus_per_slot_pct: number; hit_rate: number }
+export interface BacktestPick {
+  player_id: number; full_name: string; decision_season: string;
+  signal_value: number; value_pct: number | null; actual_pct: number | null;
+  realized_surplus_pct: number; seasons_realized: number; hit: boolean;
+}
+export interface BacktestEquityPoint { season: string; cohort_surplus_pct: number; cumulative_surplus_pct: number }
+export interface CurrentTarget {
+  player_id: number; full_name: string; position: string | null;
+  age: number | null; mpg: number;
+  value_pct: number | null; actual_pct: number | null; gap_pct: number | null; signal_value: number | null;
+}
+export interface BacktestResult {
+  spec: Record<string, unknown>;
+  decision_seasons: string[];
+  equity_curve: BacktestEquityPoint[];
+  n_picks: number;
+  total_surplus_pct: number;
+  surplus_per_slot_pct: number;
+  hit_rate: number;
+  surplus_std_pct: number;
+  sharpe: number;
+  max_drawdown_pct: number;
+  benchmarks: Record<string, StrategyBenchmark>;
+  alpha_per_slot_pct: number;
+  alpha_lo_pct: number;
+  alpha_hi_pct: number;
+  edge_conclusive: boolean;
+  current_season: string | null;
+  current_targets: CurrentTarget[];
+  picks: BacktestPick[];
+  caveat: string;
+  reference_cap_usd: number | null;
+  reference_season: string;
+}
+export interface StrategyMeta { seasons: string[]; decision_seasons: string[]; signals: StrategySignal[]; n_player_seasons: number }
+export function getStrategyPresets(signal?: AbortSignal): Promise<{ presets: StrategyPreset[]; signals: StrategySignal[] }> {
+  return apiFetch('/strategy/presets', { signal });
+}
+export function getStrategyMeta(signal?: AbortSignal): Promise<StrategyMeta> {
+  return apiFetch('/strategy/meta', { signal });
+}
+export function runBacktest(request: StrategyRequest, signal?: AbortSignal): Promise<BacktestResult> {
+  return apiFetch('/strategy/backtest', { method: 'POST', body: JSON.stringify(request), signal });
+}
+
 // Player headshot served via our backend proxy/cache instead of the NBA CDN directly.
 export function headshotUrl(playerId: number): string {
   return `${BASE}/players/${playerId}/headshot`;

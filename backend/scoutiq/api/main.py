@@ -16,6 +16,7 @@ from scoutiq.api.routers import (
     offseason,
     players,
     simulator,
+    strategy,
     teams,
     trades,
 )
@@ -65,4 +66,5 @@ app.include_router(offseason.router)
 app.include_router(trades.router)
 app.include_router(simulator.router)
 app.include_router(backtest.router)
+app.include_router(strategy.router)
 app.include_router(llm_eval.router)
