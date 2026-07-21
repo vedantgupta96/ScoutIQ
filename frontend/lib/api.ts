@@ -716,6 +716,23 @@ export interface TeamFaTargetsResponse {
   caveat: string;
 }
 
+export interface ExtensionCandidateItem {
+  player: PlayerSummary;
+  value_pct: number;
+  current_pay_pct: number;
+  gap_pct: number;
+  verdict: string;
+  tone: 'positive' | 'negative' | 'neutral';
+  final_contract_season: string | null;
+}
+
+export interface ExtensionsBoardResponse {
+  season: string;
+  total: number;
+  items: ExtensionCandidateItem[];
+  caveat: string;
+}
+
 // ---- Offseason planning --------------------------------------
 
 export interface ProposedOffseasonContract {
@@ -856,6 +873,10 @@ export function getFreeAgencyOptions(
     limit: params.limit ?? 25,
     offset: params.offset ?? 0,
   })}`, { signal });
+}
+
+export function getExtensionsBoard(limit: number = 30, signal?: AbortSignal): Promise<ExtensionsBoardResponse> {
+  return apiFetch<ExtensionsBoardResponse>(`/free-agency/extensions${queryString({ limit })}`, { signal });
 }
 
 export function getTeamFaTargets(
