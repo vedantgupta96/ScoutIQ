@@ -31,6 +31,10 @@ export function PlayerSlotSearch({ slotLabel, excludePlayerId, onPick }: PlayerS
       setSearched(false);
       return;
     }
+    // Drop results from the previous query immediately. Keeping them through the
+    // debounce window left stale players selectable under a query they no longer
+    // match (e.g. picking "Aaron Gordon" while the box reads a non-matching term).
+    setResults([]);
     setSearched(false);
     const controller = new AbortController();
     const t = setTimeout(() => {

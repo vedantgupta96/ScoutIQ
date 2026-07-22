@@ -6,18 +6,21 @@ import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import { fmtM, fmtPct, signed } from '@/lib/utils';
 
-const DASH = '—';
+/** Missing values are labelled in place rather than shown as a bare dash, so an
+ *  absent field is never mistaken for a rendered value. */
+const NA_TEXT = 'Not available';
+const NA = <span className="ds-note siq-compare-na">{NA_TEXT}</span>;
 
-function pct(value: number | null | undefined, decimals = 1): string {
-  return value != null ? fmtPct(value, decimals) : DASH;
+function pct(value: number | null | undefined, decimals = 1): ReactNode {
+  return value != null ? fmtPct(value, decimals) : NA;
 }
 
-function usd(value: number | null | undefined): string {
-  return value != null ? fmtM(value) : DASH;
+function usd(value: number | null | undefined): ReactNode {
+  return value != null ? fmtM(value) : undefined;
 }
 
-function signedPct(value: number | null | undefined, decimals = 1): string {
-  return value != null ? `${signed(value, decimals)}%` : DASH;
+function signedPct(value: number | null | undefined, decimals = 1): ReactNode {
+  return value != null ? `${signed(value, decimals)}%` : NA;
 }
 
 function Cell({ primary, secondary }: { primary: ReactNode; secondary?: ReactNode }) {
@@ -42,14 +45,26 @@ interface Row {
   b: ReactNode;
 }
 
+// Identity falls back to the standalone player summary so team/position/season
+// survive a valuation failure — the contract and roster facts stay useful when
+// the model is unavailable (ADR-0001). Age only exists in model features, so it
+// is the one identity field that legitimately degrades.
 function playerIdentityCells(data: PlayerComparisonData) {
   const val = data.valuation;
+  const sum = data.summary;
   const age = val?.features?.age;
+  const team =
+    val?.current_team?.name ??
+    sum?.current_team?.name ??
+    sum?.latest_stats_team?.name ??
+    val?.current_team?.abbreviation ??
+    sum?.current_team?.abbreviation ??
+    null;
   return {
-    team: val?.current_team?.name ?? val?.current_team?.abbreviation ?? DASH,
-    position: val?.position ?? DASH,
-    age: age != null ? age.toFixed(0) : DASH,
-    season: val?.season ?? DASH,
+    team: team ?? NA,
+    position: val?.position ?? sum?.position ?? NA,
+    age: age != null ? age.toFixed(0) : NA,
+    season: val?.season ?? sum?.latest_season ?? NA,
   };
 }
 
@@ -76,13 +91,13 @@ function valuationCell(data: PlayerComparisonData): ReactNode {
 
 function verdictCell(data: PlayerComparisonData): ReactNode {
   const val = data.valuation;
-  if (!val) return DASH;
+  if (!val) return NA;
   return <VerdictPill gapPct={val.gap_pct} label={val.verdict_label} tone={val.verdict_tone} size="sm" />;
 }
 
 function cautionFlagsCell(data: PlayerComparisonData): ReactNode {
   const val = data.valuation;
-  if (!val) return DASH;
+  if (!val) return NA;
   if (val.caution_flags.length === 0) return 'None';
   return (
     <div className="siq-compact-tags">
@@ -103,7 +118,7 @@ function valuationSection(a: PlayerComparisonData, b: PlayerComparisonData): Row
     { label: 'Verdict', a: verdictCell(a), b: verdictCell(b) },
     { label: 'Value gap', a: <span className="ds-tnum">{signedPct(a.valuation?.gap_pct)}</span>, b: <span className="ds-tnum">{signedPct(b.valuation?.gap_pct)}</span> },
     { label: 'Caution flags', a: cautionFlagsCell(a), b: cautionFlagsCell(b) },
-    { label: 'Caveat', a: <span className="ds-note">{a.valuation?.caveat ?? DASH}</span>, b: <span className="ds-note">{b.valuation?.caveat ?? DASH}</span> },
+    { label: 'Caveat', a: <span className="ds-note">{a.valuation?.caveat ?? NA_TEXT}</span>, b: <span className="ds-note">{b.valuation?.caveat ?? NA_TEXT}</span> },
   ];
 }
 
@@ -115,7 +130,7 @@ function valuationSection(a: PlayerComparisonData, b: PlayerComparisonData): Row
 function futureYearsCell(data: PlayerComparisonData, currentSeason: string | null): ReactNode {
   const all = data.contract?.years_detail ?? [];
   const years = currentSeason ? all.filter((y) => y.season >= currentSeason) : all;
-  if (years.length === 0) return DASH;
+  if (years.length === 0) return NA;
   return (
     <div className="siq-compare-years">
       {years.map((year) => {
@@ -136,6 +151,21 @@ function futureYearsCell(data: PlayerComparisonData, currentSeason: string | nul
   );
 }
 
+// Pay is a contract fact, not a model output: when the valuation is unavailable
+// fall back to the current season's contract year so the cap hit still renders.
+function currentCapHitCell(data: PlayerComparisonData, currentSeason: string | null): ReactNode {
+  const val = data.valuation;
+  if (val?.actual_pct != null || val?.actual_usd != null) {
+    return <Cell primary={pct(val.actual_pct)} secondary={usd(val.actual_usd)} />;
+  }
+  const season = currentSeason ?? data.summary?.latest_season ?? null;
+  const year = data.contract?.years_detail?.find((y) => y.season === season);
+  if (year && (year.cap_hit_pct != null || year.cap_hit_usd != null)) {
+    return <Cell primary={pct(year.cap_hit_pct)} secondary={usd(year.cap_hit_usd)} />;
+  }
+  return NA;
+}
+
 function paySection(a: PlayerComparisonData, b: PlayerComparisonData): Row[] {
   const missingA = !a.contract && a.contractError;
   const missingB = !b.contract && b.contractError;
@@ -145,8 +175,8 @@ function paySection(a: PlayerComparisonData, b: PlayerComparisonData): Row[] {
   return [
     {
       label: 'Current cap hit',
-      a: <Cell primary={pct(a.valuation?.actual_pct)} secondary={usd(a.valuation?.actual_usd)} />,
-      b: <Cell primary={pct(b.valuation?.actual_pct)} secondary={usd(b.valuation?.actual_usd)} />,
+      a: currentCapHitCell(a, currentSeason),
+      b: currentCapHitCell(b, currentSeason),
     },
     {
       label: 'Future contract years',
@@ -158,8 +188,15 @@ function paySection(a: PlayerComparisonData, b: PlayerComparisonData): Row[] {
 
 function marketBandCell(data: PlayerComparisonData): ReactNode {
   const comp = data.compSynthesis;
-  if (!comp) return <span className="ds-note">{data.marketError ? `Not available — ${data.marketError}` : 'No comp synthesis available.'}</span>;
-  return <span className="ds-tnum">{pct(comp.market_low_pct)}–{pct(comp.market_high_pct)}</span>;
+  if (!comp) return <span className="ds-note">{data.marketError ? `${NA_TEXT} — ${data.marketError}` : 'No comp synthesis available.'}</span>;
+  // Percent of cap leads; the dollar range is the secondary display value.
+  const usdRange =
+    comp.market_low_usd != null && comp.market_high_usd != null
+      ? `${fmtM(comp.market_low_usd)}–${fmtM(comp.market_high_usd)}`
+      : undefined;
+  return (
+    <Cell primary={<>{pct(comp.market_low_pct)}–{pct(comp.market_high_pct)}</>} secondary={usdRange} />
+  );
 }
 
 function marketSection(a: PlayerComparisonData, b: PlayerComparisonData): Row[] {
@@ -167,13 +204,13 @@ function marketSection(a: PlayerComparisonData, b: PlayerComparisonData): Row[] 
     { label: 'Comp market band', a: marketBandCell(a), b: marketBandCell(b) },
     {
       label: 'Suggested target',
-      a: a.compSynthesis ? <Cell primary={pct(a.compSynthesis.suggested_pct)} secondary={usd(a.compSynthesis.suggested_usd)} /> : DASH,
-      b: b.compSynthesis ? <Cell primary={pct(b.compSynthesis.suggested_pct)} secondary={usd(b.compSynthesis.suggested_usd)} /> : DASH,
+      a: a.compSynthesis ? <Cell primary={pct(a.compSynthesis.suggested_pct)} secondary={usd(a.compSynthesis.suggested_usd)} /> : NA,
+      b: b.compSynthesis ? <Cell primary={pct(b.compSynthesis.suggested_pct)} secondary={usd(b.compSynthesis.suggested_usd)} /> : NA,
     },
     {
       label: 'Comps used',
-      a: <span className="ds-tnum">{a.compSynthesis ? a.compSynthesis.n_comps : DASH}</span>,
-      b: <span className="ds-tnum">{b.compSynthesis ? b.compSynthesis.n_comps : DASH}</span>,
+      a: <span className="ds-tnum">{a.compSynthesis ? a.compSynthesis.n_comps : NA}</span>,
+      b: <span className="ds-tnum">{b.compSynthesis ? b.compSynthesis.n_comps : NA}</span>,
     },
   ];
 }
@@ -192,7 +229,7 @@ const PRODUCTION_METRICS: Array<{ label: string; compute: (f: Record<string, num
 function productionCell(data: PlayerComparisonData, compute: (f: Record<string, number>) => number | null, fmt: (v: number) => string): ReactNode {
   const features = data.valuation?.features;
   const value = features ? compute(features) : null;
-  return <span className="ds-tnum">{value != null ? fmt(value) : DASH}</span>;
+  return <span className="ds-tnum">{value != null ? fmt(value) : NA}</span>;
 }
 
 function productionSection(a: PlayerComparisonData, b: PlayerComparisonData): Row[] {

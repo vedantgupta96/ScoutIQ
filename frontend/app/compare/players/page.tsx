@@ -122,11 +122,14 @@ function ComparePlayersContent() {
   const slotA = useComparisonSlot(idA);
   const slotB = useComparisonSlot(idB);
 
+  // Picking, clearing and swapping are user actions, so each pushes a history
+  // entry — Back walks through previous comparison states instead of jumping
+  // straight out of the workspace.
   const writeSlots = useCallback((nextA: number | null, nextB: number | null) => {
     const next = new URLSearchParams(searchParams.toString());
     if (nextA != null) next.set('a', String(nextA)); else next.delete('a');
     if (nextB != null) next.set('b', String(nextB)); else next.delete('b');
-    router.replace(`/compare/players${next.toString() ? `?${next.toString()}` : ''}`);
+    router.push(`/compare/players${next.toString() ? `?${next.toString()}` : ''}`);
   }, [router, searchParams]);
 
   const pickA = (p: PlayerSummary) => writeSlots(p.player_id, idB);

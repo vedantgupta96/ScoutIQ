@@ -6016,6 +6016,12 @@ textarea::placeholder {
 .siq-compare-search-input {
   border: none; background: none; outline: none; flex: 1; font-size: 13px; color: var(--text-primary);
 }
+/* The input clears its own outline, so the visible keyboard focus lives on the
+   wrapper — same pattern as .siq-search-field in the shell. */
+.siq-compare-search-field:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border-strong));
+  box-shadow: var(--shadow-focus);
+}
 .siq-compare-search-menu {
   position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0;
   border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-panel);
