@@ -42,9 +42,11 @@ function slotName(slot: SlotState): string {
   return 'Player';
 }
 
-/** Every source for this player failed — there is nothing factual to show, so the
- *  page surfaces an error instead of a table of "Not available" rows. */
-function slotFullyUnavailable(slot: SlotState): boolean {
+/** Every *core* source (identity, valuation, contract) failed, leaving nothing
+ *  factual to show — so an error is surfaced instead of a table of "Not
+ *  available" rows. Comp synthesis is deliberately excluded: it is legitimately
+ *  null for players with too few paid comps, so its absence is not a failure. */
+function slotCoreUnavailable(slot: SlotState): boolean {
   const d = slot.data;
   if (!d) return false;
   return !d.summary && !d.valuation && !d.contract;
@@ -130,6 +132,11 @@ function SlotPanel({
         </div>
       )}
       {slot.error && <Alert tone="negative">{slot.error}</Alert>}
+      {/* Surfaced per slot so a single bad player still reports its error, even
+          while the other slot is empty and the main area shows the neutral prompt. */}
+      {!slot.error && slotCoreUnavailable(slot) && (
+        <Alert tone="negative">{slotErrorMessage(slot)}</Alert>
+      )}
     </Panel>
   );
 }
@@ -190,16 +197,19 @@ function ComparePlayersContent() {
         </Panel>
       ) : slotA.loading || slotB.loading ? (
         <LoadingNote>Loading comparison…</LoadingNote>
-      ) : slotA.error || slotB.error || slotFullyUnavailable(slotA) || slotFullyUnavailable(slotB) ? (
-        // loadPlayerComparison settles rather than throwing, so slot.error alone
-        // never fires for a bad id; a slot with no usable source is an error too.
-        <Alert tone="negative">
-          {slotA.error
-            ?? slotB.error
-            ?? (slotFullyUnavailable(slotA)
-              ? `${slotName(slotA)}: ${slotErrorMessage(slotA)}`
-              : `${slotName(slotB)}: ${slotErrorMessage(slotB)}`)}
-        </Alert>
+      ) : slotA.error || slotB.error ? (
+        <Alert tone="negative">{slotA.error ?? slotB.error}</Alert>
+      ) : slotCoreUnavailable(slotA) || slotCoreUnavailable(slotB) ? (
+        // loadPlayerComparison settles rather than throwing, so slot.error never
+        // fires for a bad id. Each failing slot already reports its own reason in
+        // its panel, so this only explains the absent table without repeating it.
+        <Panel variant="plain">
+          <EmptyState
+            title="Comparison unavailable."
+            description="One or both players could not be loaded. See the error on the affected slot above."
+            icon={<GitCompare size={22} />}
+          />
+        </Panel>
       ) : slotA.data && slotB.data ? (
         <ComparisonTable a={slotA.data} b={slotB.data} nameA={slotName(slotA)} nameB={slotName(slotB)} />
       ) : null}
