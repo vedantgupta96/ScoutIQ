@@ -5991,3 +5991,74 @@ textarea::placeholder {
 .siq-league-sort-btn:focus-visible {
   color: var(--text-primary);
 }
+
+/* Player comparison */
+.siq-compare-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.siq-compare-title {
+  display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 650; margin: 0;
+}
+
+.siq-compare-slots {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+}
+
+.siq-compare-slot-filled {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.siq-compare-slot-name { font-size: 14px; font-weight: 600; }
+
+.siq-compare-search { position: relative; }
+.siq-compare-search-field {
+  border: 1px solid var(--border-default); border-radius: 8px; padding: 8px 10px; background: var(--bg-panel);
+}
+.siq-compare-search-input {
+  border: none; background: none; outline: none; flex: 1; font-size: 13px; color: var(--text-primary);
+}
+.siq-compare-search-menu {
+  position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0;
+  border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-panel);
+  box-shadow: var(--shadow-panel, 0 4px 16px rgba(16,24,40,0.12)); overflow: hidden; max-height: 320px; overflow-y: auto;
+}
+.siq-compare-search-status { padding: 10px 12px; }
+.siq-compare-search-status--error { color: var(--negative-text); }
+.siq-compare-search-result {
+  width: 100%; padding: 8px 12px; border-top: 1px solid var(--border-subtle); text-align: left; background: none;
+}
+.siq-compare-search-result:first-child { border-top: none; }
+.siq-compare-search-result:hover { background: var(--bg-hover); }
+.siq-compare-search-result:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.siq-compare-search-result-name { font-size: 13px; font-weight: 600; }
+
+.siq-compare-table-wrap { display: flex; flex-direction: column; gap: 12px; }
+.siq-compare-scroll { overflow-x: auto; }
+
+.siq-compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.siq-compare-table th, .siq-compare-table td {
+  padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border-subtle); vertical-align: top;
+}
+.siq-compare-table thead th {
+  font-size: 13px; font-weight: 650; color: var(--text-primary); border-bottom: 1px solid var(--border-default);
+}
+.siq-compare-rowlabel {
+  font-size: 12px; font-weight: 600; color: var(--text-muted); white-space: nowrap; width: 160px;
+}
+.siq-compare-section td, .siq-compare-section th { border-bottom: none; }
+.siq-compare-section__label {
+  padding: 12px 12px 4px; background: var(--bg-inset);
+}
+
+.siq-compare-cell { display: grid; gap: 1px; }
+.siq-compare-cell__primary { font-size: 13px; font-weight: 600; }
+.siq-compare-cell__secondary { font-size: 12px; }
+
+.siq-compare-years { display: flex; flex-direction: column; gap: 6px; }
+.siq-compare-year-row { display: flex; align-items: center; gap: 8px; }
+.siq-compare-year-season { font-size: 12px; color: var(--text-muted); min-width: 48px; }
+
+@media (max-width: 640px) {
+  .siq-compare-slots { grid-template-columns: 1fr; }
+  .siq-compare-rowlabel { width: 100px; }
+  .siq-compare-table { font-size: 12px; }
+}

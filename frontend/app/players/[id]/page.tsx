@@ -1109,6 +1109,9 @@ function ActionRail({
           <Button icon={<BarChart3 size={15} />} onClick={() => onTab('model')}>
             Inspect model inputs
           </Button>
+          <ButtonLink href={`/compare/players?a=${val.player_id}`} icon={<GitCompare size={15} />}>
+            Compare
+          </ButtonLink>
         </div>
       </Panel>
 
