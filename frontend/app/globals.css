@@ -2709,15 +2709,21 @@ textarea::placeholder {
 
   .siq-mobile-nav__link[aria-haspopup] {
     border: 0;
-    background: transparent;
     font-family: inherit;
     cursor: pointer;
+  }
+
+  /* Reset the button background only when it is NOT the active destination —
+     this selector outranks .siq-mobile-nav__link--active, so an unscoped
+     `background: transparent` here would blank the More button's active state. */
+  .siq-mobile-nav__link[aria-haspopup]:not(.siq-mobile-nav__link--active) {
+    background: transparent;
   }
 
   .siq-mobile-more-sheet {
     display: grid;
     gap: 2px;
-    padding-bottom: 14px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
   }
 
   .siq-mobile-more-sheet__link {

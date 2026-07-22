@@ -83,6 +83,18 @@ function MobileNav({ active }: { active: string }) {
     setMoreOpen(false);
   }, [pathname]);
 
+  // Lock page scroll while the sheet is open. A native modal <dialog> blocks
+  // background interaction but does not stop the page behind it from scrolling.
+  // Scoped here rather than in the shared Dialog so other dialogs are unaffected.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [moreOpen]);
+
   const moreItems = NAV.filter((n) => MOBILE_MORE_IDS.includes(n.id));
   const isMoreActive = MOBILE_MORE_IDS.includes(active);
   const isHomeActive = pathname === '/';
