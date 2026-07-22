@@ -33,10 +33,27 @@ function parseSlotId(value: string | null): number | null {
 }
 
 function slotName(slot: SlotState): string {
+  // Summary is the model-independent identity source, so it is consulted before
+  // falling back to a bare id — a valuation failure must not blank the header.
+  if (slot.data?.summary?.full_name) return slot.data.summary.full_name;
   if (slot.data?.valuation?.player_name) return slot.data.valuation.player_name;
   if (slot.data?.contract?.player_name) return slot.data.contract.player_name;
   if (slot.playerId != null) return `Player #${slot.playerId}`;
   return 'Player';
+}
+
+/** Every source for this player failed — there is nothing factual to show, so the
+ *  page surfaces an error instead of a table of "Not available" rows. */
+function slotFullyUnavailable(slot: SlotState): boolean {
+  const d = slot.data;
+  if (!d) return false;
+  return !d.summary && !d.valuation && !d.contract;
+}
+
+function slotErrorMessage(slot: SlotState): string | null {
+  const d = slot.data;
+  if (!d) return null;
+  return d.summaryError ?? d.valuationError ?? d.contractError ?? 'Player data is unavailable.';
 }
 
 function useComparisonSlot(playerId: number | null): SlotState {
@@ -92,13 +109,18 @@ function SlotPanel({
             <Avatar
               name={slotName(slot)}
               size="md"
-              position={slot.data?.valuation?.position}
+              position={slot.data?.valuation?.position ?? slot.data?.summary?.position}
               playerId={slot.playerId}
             />
             <div className="siq-min0">
               <div className="siq-compare-slot-name">{slotName(slot)}</div>
               <div className="ds-note">
-                {slot.loading ? 'Loading…' : slot.data?.valuation?.current_team?.abbreviation ?? '—'}
+                {slot.loading
+                  ? 'Loading…'
+                  : slot.data?.valuation?.current_team?.abbreviation
+                    ?? slot.data?.summary?.current_team?.abbreviation
+                    ?? slot.data?.summary?.latest_stats_team?.abbreviation
+                    ?? 'Not available'}
               </div>
             </div>
           </div>
@@ -168,9 +190,15 @@ function ComparePlayersContent() {
         </Panel>
       ) : slotA.loading || slotB.loading ? (
         <LoadingNote>Loading comparison…</LoadingNote>
-      ) : slotA.error || slotB.error ? (
+      ) : slotA.error || slotB.error || slotFullyUnavailable(slotA) || slotFullyUnavailable(slotB) ? (
+        // loadPlayerComparison settles rather than throwing, so slot.error alone
+        // never fires for a bad id; a slot with no usable source is an error too.
         <Alert tone="negative">
-          {slotA.error ?? slotB.error}
+          {slotA.error
+            ?? slotB.error
+            ?? (slotFullyUnavailable(slotA)
+              ? `${slotName(slotA)}: ${slotErrorMessage(slotA)}`
+              : `${slotName(slotB)}: ${slotErrorMessage(slotB)}`)}
         </Alert>
       ) : slotA.data && slotB.data ? (
         <ComparisonTable a={slotA.data} b={slotB.data} nameA={slotName(slotA)} nameB={slotName(slotB)} />

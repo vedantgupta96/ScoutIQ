@@ -151,14 +151,21 @@ function futureYearsCell(data: PlayerComparisonData, currentSeason: string | nul
   );
 }
 
+/** The season a player's own rows are anchored to. Never borrow the other slot's
+ *  season — the two can differ, and using one for both mislabels the other's
+ *  contract ledger and cap hit. */
+function effectiveSeason(data: PlayerComparisonData): string | null {
+  return data.valuation?.season ?? data.summary?.latest_season ?? null;
+}
+
 // Pay is a contract fact, not a model output: when the valuation is unavailable
 // fall back to the current season's contract year so the cap hit still renders.
-function currentCapHitCell(data: PlayerComparisonData, currentSeason: string | null): ReactNode {
+function currentCapHitCell(data: PlayerComparisonData): ReactNode {
   const val = data.valuation;
   if (val?.actual_pct != null || val?.actual_usd != null) {
     return <Cell primary={pct(val.actual_pct)} secondary={usd(val.actual_usd)} />;
   }
-  const season = currentSeason ?? data.summary?.latest_season ?? null;
+  const season = effectiveSeason(data);
   const year = data.contract?.years_detail?.find((y) => y.season === season);
   if (year && (year.cap_hit_pct != null || year.cap_hit_usd != null)) {
     return <Cell primary={pct(year.cap_hit_pct)} secondary={usd(year.cap_hit_usd)} />;
@@ -169,19 +176,17 @@ function currentCapHitCell(data: PlayerComparisonData, currentSeason: string | n
 function paySection(a: PlayerComparisonData, b: PlayerComparisonData): Row[] {
   const missingA = !a.contract && a.contractError;
   const missingB = !b.contract && b.contractError;
-  // Either slot's valuation season identifies "now"; they are the same season
-  // unless the mismatch notice is showing, and null only if both valuations failed.
-  const currentSeason = a.valuation?.season ?? b.valuation?.season ?? null;
+  // Each player is anchored to their own season — see effectiveSeason.
   return [
     {
       label: 'Current cap hit',
-      a: currentCapHitCell(a, currentSeason),
-      b: currentCapHitCell(b, currentSeason),
+      a: currentCapHitCell(a),
+      b: currentCapHitCell(b),
     },
     {
       label: 'Future contract years',
-      a: missingA ? <span className="ds-note">Not available — {a.contractError}</span> : futureYearsCell(a, currentSeason),
-      b: missingB ? <span className="ds-note">Not available — {b.contractError}</span> : futureYearsCell(b, currentSeason),
+      a: missingA ? <span className="ds-note">Not available — {a.contractError}</span> : futureYearsCell(a, effectiveSeason(a)),
+      b: missingB ? <span className="ds-note">Not available — {b.contractError}</span> : futureYearsCell(b, effectiveSeason(b)),
     },
   ];
 }
@@ -248,8 +253,11 @@ interface ComparisonTableProps {
 }
 
 export function ComparisonTable({ a, b, nameA, nameB }: ComparisonTableProps) {
-  const seasonA = a.valuation?.season ?? null;
-  const seasonB = b.valuation?.season ?? null;
+  // Compare the seasons each player's rows are actually anchored to, not just
+  // valuation seasons — a slot falling back to its summary season can still be
+  // misaligned with the other, and that must be surfaced.
+  const seasonA = effectiveSeason(a);
+  const seasonB = effectiveSeason(b);
   const seasonMismatch = seasonA != null && seasonB != null && seasonA !== seasonB;
 
   const sections: Array<{ title: string; rows: Row[] }> = [
@@ -264,7 +272,7 @@ export function ComparisonTable({ a, b, nameA, nameB }: ComparisonTableProps) {
     <div className="siq-compare-table-wrap">
       {seasonMismatch && (
         <Alert tone="warning">
-          {nameA}&apos;s valuation is for {seasonA}, while {nameB}&apos;s is for {seasonB}. These rows are not season-aligned — compare with caution.
+          {nameA}&apos;s rows are anchored to {seasonA}, while {nameB}&apos;s are anchored to {seasonB}. These rows are not season-aligned — compare with caution.
         </Alert>
       )}
       <div className="siq-compare-scroll">
