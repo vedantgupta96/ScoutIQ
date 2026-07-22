@@ -3,8 +3,9 @@
 import { ReactNode, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Users, SlidersHorizontal, Target, Shield, Handshake, CalendarRange, ArrowLeftRight, FlaskConical, Globe, Moon, Sun, Search, Menu, X } from 'lucide-react';
+import { Users, SlidersHorizontal, Target, Shield, Handshake, CalendarRange, ArrowLeftRight, FlaskConical, Globe, Moon, Sun, Search, Menu, X, Home, MoreHorizontal } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
+import { Dialog } from '@/components/ui/Dialog';
 import { getHealth } from '@/lib/api';
 
 const NAV = [
@@ -18,6 +19,8 @@ const NAV = [
   { id: 'strategy', href: '/strategy', label: 'Backtesting', mobileLabel: 'Backtest', Icon: FlaskConical },
   { id: 'model', href: '/model', label: 'Model trust', mobileLabel: 'Trust', Icon: Target },
 ];
+
+const MOBILE_MORE_IDS = ['league', 'free-agency', 'offseason', 'trade-lab', 'simulator', 'strategy', 'model'];
 
 const TITLES: Record<string, string> = {
   '/':          'Front office',
@@ -73,24 +76,88 @@ function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) 
 }
 
 function MobileNav({ active }: { active: string }) {
+  const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [pathname]);
+
+  // Lock page scroll while the sheet is open. A native modal <dialog> blocks
+  // background interaction but does not stop the page behind it from scrolling.
+  // Scoped here rather than in the shared Dialog so other dialogs are unaffected.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [moreOpen]);
+
+  const moreItems = NAV.filter((n) => MOBILE_MORE_IDS.includes(n.id));
+  const isMoreActive = MOBILE_MORE_IDS.includes(active);
+  const isHomeActive = pathname === '/';
+
   return (
-    <nav className="siq-mobile-nav" aria-label="Primary navigation">
-      {NAV.map(({ id, href, label, mobileLabel, Icon }) => {
-        const isActive = active === id;
-        return (
-          <Link
-            key={id}
-            href={href}
-            className={`siq-mobile-nav__link${isActive ? ' siq-mobile-nav__link--active' : ''}`}
-            aria-label={label}
-            aria-current={isActive ? 'page' : undefined}
-          >
-            <Icon size={17} />
-            <span>{mobileLabel}</span>
-          </Link>
-        );
-      })}
-    </nav>
+    <>
+      <nav className="siq-mobile-nav" aria-label="Primary navigation">
+        <Link
+          href="/"
+          className={`siq-mobile-nav__link${isHomeActive ? ' siq-mobile-nav__link--active' : ''}`}
+          aria-label="Home"
+          aria-current={isHomeActive ? 'page' : undefined}
+        >
+          <Home size={17} />
+          <span>Home</span>
+        </Link>
+        {NAV.filter((n) => n.id === 'players' || n.id === 'teams').map(({ id, href, label, mobileLabel, Icon }) => {
+          const isActive = active === id;
+          return (
+            <Link
+              key={id}
+              href={href}
+              className={`siq-mobile-nav__link${isActive ? ' siq-mobile-nav__link--active' : ''}`}
+              aria-label={label}
+              aria-current={isActive ? 'page' : undefined}
+            >
+              <Icon size={17} />
+              <span>{mobileLabel}</span>
+            </Link>
+          );
+        })}
+        <button
+          type="button"
+          className={`siq-mobile-nav__link${isMoreActive ? ' siq-mobile-nav__link--active' : ''}`}
+          aria-label="More"
+          aria-haspopup="dialog"
+          aria-expanded={moreOpen}
+          onClick={() => setMoreOpen(true)}
+        >
+          <MoreHorizontal size={17} />
+          <span>More</span>
+        </button>
+      </nav>
+
+      <Dialog open={moreOpen} title="More" onClose={() => setMoreOpen(false)}>
+        <div className="siq-mobile-more-sheet">
+          {moreItems.map(({ id, href, label, Icon }) => {
+            const isActive = active === id;
+            return (
+              <Link
+                key={id}
+                href={href}
+                className={`siq-mobile-more-sheet__link${isActive ? ' siq-mobile-more-sheet__link--active' : ''}`}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                <Icon size={17} />
+                <span>{label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </Dialog>
+    </>
   );
 }
 
