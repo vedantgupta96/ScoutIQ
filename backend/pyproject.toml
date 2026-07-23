@@ -13,6 +13,7 @@ dependencies = [
     "lxml>=5.0",
     "html5lib>=1.1",       # pandas read_html fallback parser for malformed BBRef pages
     "beautifulsoup4>=4.12",  # required alongside html5lib for the fallback flavor
+    "pypdf>=5.0",           # parse official injury-report PDFs (availability spike)
     "requests>=2.31",
     "nba_api>=1.4.1",
     "scikit-learn>=1.4",   # gradient-boosted valuation model + metrics
