@@ -28,7 +28,7 @@ import { LoadingNote } from '@/components/ui/LoadingNote';
 import { fmtM, fmtPct, signed } from '@/lib/utils';
 import { useApi } from '@/lib/useApi';
 
-const TEAM_STORAGE_KEY = 'siq-home-team-id';
+const TEAM_STORAGE_KEY = 'siq-home-team-id:v1';
 
 function gapText(gap: number): string {
   return `${signed(gap)}%`;
@@ -104,14 +104,20 @@ function QueueItemRow({ item }: { item: QueueItem }) {
 }
 
 function DecisionQueuePanel({ teamId }: { teamId: number }) {
+  const [queueRetry, setQueueRetry] = useState(0);
   const { data, loading, error } = useApi<DecisionQueueResponse>(
     (signal) => getDecisionQueue(teamId, undefined, signal),
-    [teamId],
+    [teamId, queueRetry],
     { fallback: 'Failed to load the decision queue.' },
   );
 
   if (error) {
-    return <Alert tone="negative">{error} — is the FastAPI server running?</Alert>;
+    return (
+      <Alert tone="negative">
+        {error} — is the FastAPI server running?{' '}
+        <Button size="sm" variant="secondary" onClick={() => setQueueRetry((value) => value + 1)}>Retry</Button>
+      </Alert>
+    );
   }
   if (loading || data == null || data.team_id !== teamId) {
     return <LoadingNote>Loading the decision queue…</LoadingNote>;
@@ -172,6 +178,7 @@ function HomeContent() {
     { fallback: 'Failed to load teams.' },
   );
   const teams = teamsData ?? [];
+  const validTeamId = teams.length > 0 && teams.some((t) => t.team_id === selectedId) ? selectedId : null;
 
   const [cautions, setCautions] = useState<PlayerValuationCautionsResponse | null>(null);
   const [backtest, setBacktest] = useState<BacktestResponse | null>(null);
@@ -236,8 +243,8 @@ function HomeContent() {
           <LoadingNote>Loading teams…</LoadingNote>
         ) : teams.length === 0 ? (
           <EmptyState title="No teams available." description="The teams endpoint returned no rosters to choose from." />
-        ) : selectedId != null ? (
-          <DecisionQueuePanel teamId={selectedId} />
+        ) : validTeamId != null ? (
+          <DecisionQueuePanel teamId={validTeamId} />
         ) : (
           <LoadingNote>Loading the decision queue…</LoadingNote>
         )}

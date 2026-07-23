@@ -15,6 +15,13 @@ Free Agency options pool (reusing free_agency._assemble_pool / _resolve_entering
 `/free-agency?tab=options` destination always contains the player — a final contract year
 several seasons out with an option flag is not "pending" yet and produces no item at all.
 
+Extension items come from one batched `batch_extension_summaries` call for the whole roster
+(one contracts query, one contract-years query, one valuation batch) rather than a per-player
+decide_extension fan-out, so an N-player roster doesn't pay N separate contract/valuation
+round trips. `team_cap_hits` is likewise computed once and shared by the cap_tier and expiring
+builders. The shared batched state is threaded through the per-player item builders as one
+`_QueueContext` rather than as separate positional args.
+
 Ordering (deterministic, covered by tests):
   1. Priority band: high > medium > low.
   2. Within a band, item type rank — option < extension < expiring < cap_tier < roster_need —
@@ -28,8 +35,10 @@ its own `priority_reason`, and every item links to an existing non-trade ScoutIQ
 Trade Lab is out of scope for this module and is never imported here.
 
 Per ADR-0001, a missing model value degrades an item's verdict, not the item's existence:
-option and cap_tier facts are contractual and always appear; only extension's priority band
-(which is genuinely model-driven) is pulled out of the high band when value_pct is None.
+option and cap_tier facts are contractual and always appear; an eligible extension without a
+model value appears as a low-priority contract fact rather than dropping, and
+`DecisionQueue.model_unavailable` flags the run when the valuation model artifact itself was
+unavailable for the whole batch.
 """
 from __future__ import annotations
 
@@ -49,7 +58,7 @@ from scoutiq.api.cap import (
     load_season_caps,
     room_to_lines,
 )
-from scoutiq.api.extension import decide_extension
+from scoutiq.api.extension import ExtensionSummary, batch_extension_summaries, extension_verdict
 from scoutiq.api.roster_fit import load_fit_context
 from scoutiq.api.rosters import team_cap_hits
 from scoutiq.api.routers import free_agency as fa_router
@@ -82,6 +91,13 @@ QUEUE_CAVEAT = (
     "not implemented."
 )
 
+MODEL_UNAVAILABLE_CAVEAT = (
+    " The valuation model artifact is unavailable this run; extension items for eligible "
+    "players are shown as contract facts only, without a model-driven priority."
+)
+
+NO_MODEL_VALUE_CAUTION = "Model value unavailable — shown as a contract fact only."
+
 
 @dataclass
 class QueueItem:
@@ -112,6 +128,7 @@ class DecisionQueue:
     generated_from: str
     items: list[QueueItem]
     caveat: str
+    model_unavailable: bool = False
 
 
 def _gap_key(gap_pct: float | None) -> tuple[int, float]:
@@ -134,6 +151,25 @@ def _sort_key(item: QueueItem):
         _player_key(item.player_id),
         item.id,
     )
+
+
+# --------------------------------------------------------------------------- queue context
+@dataclass
+class _QueueContext:
+    """Shared batched state for one build_decision_queue call, threaded through the
+    per-player item builders instead of a long positional-argument list."""
+    season: str
+    caps: dict[str, SeasonCapData]
+    salary_cap: int | None
+    tax_line: int | None
+    first_apron: int | None
+    second_apron: int | None
+    contracts_by_player: dict[int, Contract]
+    years_by_contract: dict[int, list[ContractYear]]
+    value_pct_by_player: dict[int, float]
+    option_pool_entering_by_player: dict[int, str]
+    cap_hits: dict[int, int]
+    extension_summaries: dict[int, ExtensionSummary]
 
 
 # --------------------------------------------------------------------------- contract lookups
@@ -175,26 +211,30 @@ def _year_cap_pct(year: ContractYear, caps: dict[str, SeasonCapData]) -> float |
     return None
 
 
-def _current_option_pool_ids(db) -> set[int]:
-    """Player ids in the Free Agency options pool for the season entering next — the same
-    pool assembly `/free-agency?tab=options` renders, reused so a queue option item never
-    links to a board that doesn't list the player."""
+def _current_option_pool_entering(db) -> dict[int, str]:
+    """Player id -> entering_season for players in the Free Agency options pool for the
+    season entering next — the same pool assembly `/free-agency?tab=options` renders, reused
+    so a queue option item never links to a board that doesn't list the player."""
     entering = fa_router._resolve_entering(None)
     pool = fa_router._assemble_pool(db, entering, type_filter=None, position=None)
-    return {entry.player.player_id for entry in pool if entry.fa_type in (fa.FA_PLAYER_OPTION, fa.FA_TEAM_OPTION)}
+    return {
+        entry.player.player_id: entry.entering_season
+        for entry in pool
+        if entry.fa_type in (fa.FA_PLAYER_OPTION, fa.FA_TEAM_OPTION)
+    }
 
 
 # --------------------------------------------------------------------------- option / expiring
 def _option_item(
     player: Player,
     team_id: int,
-    season: str,
     final_year: ContractYear,
-    caps: dict[str, SeasonCapData],
+    entering_season: str,
+    ctx: _QueueContext,
     value_pct: float | None,
 ) -> QueueItem:
     fa_type = fa.free_agent_type(final_year.is_player_option, final_year.is_team_option)
-    option_cap_pct = _year_cap_pct(final_year, caps)
+    option_cap_pct = _year_cap_pct(final_year, ctx.caps)
     verdict = None
     if option_cap_pct is not None:
         verdict = fa.option_decision(value_pct, option_cap_pct, fa_type)
@@ -216,10 +256,10 @@ def _option_item(
         gap_pct = None
 
     return QueueItem(
-        id=f"option:{team_id}:{player.player_id}:{season}",
+        id=f"option:{team_id}:{player.player_id}:{ctx.season}",
         type=TYPE_OPTION,
         priority="high",
-        priority_reason=f"An option decision is pending for {season}.",
+        priority_reason=f"An option decision is pending for the {entering_season} offseason.",
         title=title,
         detail=detail,
         player_id=player.player_id,
@@ -230,8 +270,8 @@ def _option_item(
         value_usd=None,
         pay_usd=final_year.aav,
         destination="/free-agency?tab=options",
-        season=season,
-        as_of=season,
+        season=ctx.season,
+        as_of=final_year.season,
         caution=caution,
     )
 
@@ -239,16 +279,16 @@ def _option_item(
 def _expiring_item(
     player: Player,
     team_id: int,
-    season: str,
     final_year: ContractYear,
-    caps: dict[str, SeasonCapData],
-    cap_hit: int | None,
+    ctx: _QueueContext,
 ) -> QueueItem:
+    season = ctx.season
     if final_year.cap_pct is not None:
         pay_pct = round(float(final_year.cap_pct) * 100, 2)
     else:
-        season_cap = cap_for(season, caps)
+        season_cap = cap_for(season, ctx.caps)
         salary_cap = season_cap.salary_cap if season_cap else None
+        cap_hit = ctx.cap_hits.get(player.player_id)
         pay_pct = round(cap_hit / salary_cap * 100, 2) if (cap_hit and salary_cap) else None
     reason = f"Final guaranteed year is {season}; reaches free agency after it."
     return QueueItem(
@@ -272,32 +312,25 @@ def _expiring_item(
     )
 
 
-def _option_or_expiring_item(
-    player: Player,
-    team_id: int,
-    season: str,
-    caps: dict[str, SeasonCapData],
-    contracts_by_player: dict[int, Contract],
-    years_by_contract: dict[int, list[ContractYear]],
-    value_pct_by_player: dict[int, float],
-    option_pool_ids: set[int],
-    cap_hits: dict[int, int],
-) -> QueueItem | None:
-    contract = contracts_by_player.get(player.player_id)
+def _option_or_expiring_item(player: Player, team_id: int, ctx: _QueueContext) -> QueueItem | None:
+    contract = ctx.contracts_by_player.get(player.player_id)
     if contract is None:
         return None
-    years = years_by_contract.get(contract.id, [])
+    years = ctx.years_by_contract.get(contract.id, [])
     if not years:
         return None
 
     final_year = years[-1]  # ordered ascending by season -> last row is the max season
-    if final_year.season < season:
+    if final_year.season < ctx.season:
         return None
 
-    if player.player_id in option_pool_ids:
-        return _option_item(player, team_id, season, final_year, caps, value_pct_by_player.get(player.player_id))
-    if final_year.season == season:
-        return _expiring_item(player, team_id, season, final_year, caps, cap_hits.get(player.player_id))
+    entering_season = ctx.option_pool_entering_by_player.get(player.player_id)
+    if entering_season is not None:
+        return _option_item(
+            player, team_id, final_year, entering_season, ctx, ctx.value_pct_by_player.get(player.player_id)
+        )
+    if final_year.season == ctx.season:
+        return _expiring_item(player, team_id, final_year, ctx)
     return None
 
 
@@ -307,68 +340,67 @@ _EXTENSION_PRIORITY = {
     "Fair — extend at market or wait": "medium",
     "Extend at market": "medium",
     "Don't extend": "low",
-    "No model value": "low",
 }
 
 
-def _extension_item(db, player: Player, team_id: int, season: str) -> QueueItem | None:
-    # decide_extension re-fetches this player's contract, contract-years, and valuation
-    # itself (it's a shared deep module used well beyond this queue); batching it here would
-    # mean forking or extending its interface, so this one call stays a per-player DB round
-    # trip — the residual cost F4 didn't fully close out.
-    try:
-        decision = decide_extension(db, player.player_id)
-    except (LookupError, FileNotFoundError):
-        return None
-    if not decision.eligible:
+def _extension_item(player: Player, team_id: int, ctx: _QueueContext) -> QueueItem | None:
+    summary = ctx.extension_summaries.get(player.player_id)
+    if summary is None or not summary.eligible:
         return None
 
-    priority = _EXTENSION_PRIORITY.get(decision.verdict, "low")
-    caution = None
-    if decision.value_pct is None:
-        caution = "No model value available; extension eligibility is factual, the verdict is not."
+    if summary.has_model_value:
+        verdict, _tone, rationale, gap_pct = extension_verdict(summary.value_pct, summary.current_pay_pct)
+        return QueueItem(
+            id=f"extension:{team_id}:{player.player_id}:{ctx.season}",
+            type=TYPE_EXTENSION,
+            priority=_EXTENSION_PRIORITY.get(verdict, "low"),
+            priority_reason=rationale,
+            title=f"{player.full_name}: {verdict}",
+            detail=rationale,
+            player_id=player.player_id,
+            team_id=team_id,
+            value_pct=summary.value_pct,
+            pay_pct=summary.current_pay_pct,
+            gap_pct=gap_pct,
+            value_usd=None,
+            pay_usd=None,
+            destination=f"/players/{player.player_id}",
+            season=ctx.season,
+            as_of=ctx.season,
+            caution=None,
+        )
 
+    detail = (
+        f"{player.full_name} has a guaranteed contract year remaining after {LATEST_SEASON}, "
+        "but no model value is available to size an extension verdict."
+    )
     return QueueItem(
-        id=f"extension:{team_id}:{player.player_id}:{season}",
+        id=f"extension:{team_id}:{player.player_id}:{ctx.season}",
         type=TYPE_EXTENSION,
-        priority=priority,
-        priority_reason=decision.rationale,
-        title=f"{player.full_name}: {decision.verdict}",
-        detail=decision.rationale,
+        priority="low",
+        priority_reason=detail,
+        title=f"{player.full_name}: extension eligible",
+        detail=detail,
         player_id=player.player_id,
         team_id=team_id,
-        value_pct=decision.value_pct,
-        pay_pct=decision.current_pay_pct,
-        gap_pct=decision.gap_pct,
-        value_usd=decision.projected_aav_usd,
+        value_pct=None,
+        pay_pct=summary.current_pay_pct,
+        gap_pct=None,
+        value_usd=None,
         pay_usd=None,
         destination=f"/players/{player.player_id}",
-        season=season,
-        as_of=decision.value_season,
-        caution=caution,
+        season=ctx.season,
+        as_of=ctx.season,
+        caution=NO_MODEL_VALUE_CAUTION,
     )
 
 
-def _player_items(
-    db,
-    player: Player,
-    team_id: int,
-    season: str,
-    caps: dict[str, SeasonCapData],
-    contracts_by_player: dict[int, Contract],
-    years_by_contract: dict[int, list[ContractYear]],
-    value_pct_by_player: dict[int, float],
-    option_pool_ids: set[int],
-    cap_hits: dict[int, int],
-) -> list[QueueItem]:
+def _player_items(player: Player, team_id: int, ctx: _QueueContext) -> list[QueueItem]:
     items: list[QueueItem] = []
-    option_or_expiring = _option_or_expiring_item(
-        player, team_id, season, caps, contracts_by_player, years_by_contract,
-        value_pct_by_player, option_pool_ids, cap_hits,
-    )
+    option_or_expiring = _option_or_expiring_item(player, team_id, ctx)
     if option_or_expiring is not None:
         items.append(option_or_expiring)
-    extension_item = _extension_item(db, player, team_id, season)
+    extension_item = _extension_item(player, team_id, ctx)
     if extension_item is not None:
         items.append(extension_item)
     return items
@@ -404,19 +436,15 @@ def _nearest_room(tier: str, rooms) -> float | None:
     return rooms.room_to_tax
 
 
-def _cap_tier_item(
-    db, team: Team, team_id: int, season: str, roster: list[Player], caps: dict[str, SeasonCapData]
-) -> QueueItem:
+def _cap_tier_item(team: Team, team_id: int, roster: list[Player], ctx: _QueueContext) -> QueueItem:
     team_name = team.name or f"Team {team_id}"
-    cap_data = cap_for(season, caps)
-    salary_cap = cap_data.salary_cap if cap_data else None
-    tax_line = cap_data.tax_line if cap_data else None
-    first_apron = cap_data.first_apron if cap_data else None
-    second_apron = cap_data.second_apron if cap_data else None
+    season = ctx.season
+    salary_cap = ctx.salary_cap
+    tax_line = ctx.tax_line
+    first_apron = ctx.first_apron
+    second_apron = ctx.second_apron
 
-    roster_ids = [p.player_id for p in roster]
-    cap_hits, _pay_source = team_cap_hits(db, roster_ids, season)
-    payroll = sum(cap_hits.values())
+    payroll = sum(ctx.cap_hits.get(p.player_id, 0) for p in roster)
 
     tier = classify_tier(payroll, tax_line, first_apron, second_apron)
     rooms = room_to_lines(
@@ -529,27 +557,46 @@ def build_decision_queue(db, team_id: int, season: str | None = None) -> Decisio
     roster = db.scalars(select(Player).where(Player.current_team_id == team_id)).all()
     roster_ids = [p.player_id for p in roster]
     caps = load_season_caps(db)
+    cap_data = cap_for(target_season, caps)
 
     contracts_by_player = _latest_contracts_for(db, roster_ids)
     years_by_contract = _contract_years_for(db, [c.id for c in contracts_by_player.values()])
     valuations = value_players(db, [(pid, LATEST_SEASON) for pid in roster_ids])
     value_pct_by_player = {pid: v.value_pct for (pid, _season), v in valuations.items()}
-    option_pool_ids = _current_option_pool_ids(db)
+    option_pool_entering_by_player = _current_option_pool_entering(db)
     cap_hits, _pay_source = team_cap_hits(db, roster_ids, target_season)
+    extension_summaries = batch_extension_summaries(db, roster_ids)
+
+    eligible_summaries = [s for s in extension_summaries.values() if s.eligible]
+    model_unavailable = bool(eligible_summaries) and all(not s.has_model_value for s in eligible_summaries)
+
+    ctx = _QueueContext(
+        season=target_season,
+        caps=caps,
+        salary_cap=cap_data.salary_cap if cap_data else None,
+        tax_line=cap_data.tax_line if cap_data else None,
+        first_apron=cap_data.first_apron if cap_data else None,
+        second_apron=cap_data.second_apron if cap_data else None,
+        contracts_by_player=contracts_by_player,
+        years_by_contract=years_by_contract,
+        value_pct_by_player=value_pct_by_player,
+        option_pool_entering_by_player=option_pool_entering_by_player,
+        cap_hits=cap_hits,
+        extension_summaries=extension_summaries,
+    )
 
     items: list[QueueItem] = []
     for player in roster:
-        items.extend(_player_items(
-            db, player, team_id, target_season, caps,
-            contracts_by_player, years_by_contract, value_pct_by_player, option_pool_ids, cap_hits,
-        ))
+        items.extend(_player_items(player, team_id, ctx))
 
-    items.append(_cap_tier_item(db, team, team_id, target_season, roster, caps))
+    items.append(_cap_tier_item(team, team_id, roster, ctx))
     need_item = _roster_need_item(db, team_id, roster, target_season)
     if need_item is not None:
         items.append(need_item)
 
     items.sort(key=_sort_key)
+
+    caveat = QUEUE_CAVEAT + (MODEL_UNAVAILABLE_CAVEAT if model_unavailable else "")
 
     return DecisionQueue(
         team_id=team_id,
@@ -557,5 +604,6 @@ def build_decision_queue(db, team_id: int, season: str | None = None) -> Decisio
         season=target_season,
         generated_from="latest",
         items=items,
-        caveat=QUEUE_CAVEAT,
+        caveat=caveat,
+        model_unavailable=model_unavailable,
     )

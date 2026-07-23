@@ -10,10 +10,11 @@ from fastapi.testclient import TestClient
 from fakes import FakeDB
 
 import scoutiq.api.decision_queue as dq
+import scoutiq.api.extension as ext_module
 import scoutiq.api.routers.decision_queue as dqr
 from scoutiq.api.cap import SeasonCapData
 from scoutiq.api.deps import get_db
-from scoutiq.api.extension import ExtensionDecision
+from scoutiq.api.extension import ExtensionSummary
 from scoutiq.api.main import app
 from scoutiq.model.roster_fit import RosterNeed, TeamFitProfile
 from scoutiq.models import Contract, ContractYear, Player, Team
@@ -41,6 +42,27 @@ def _item(*, priority="high", type_=dq.TYPE_OPTION, gap_pct=None, player_id=1, i
         value_usd=None, pay_usd=None, destination="/players/1", season="2025-26", as_of="2025-26",
         caution=None,
     )
+
+
+def _ctx(**overrides):
+    base_caps = overrides.pop("caps", dict(CAPS))
+    cap_row = base_caps.get("2025-26")
+    base = dict(
+        season="2025-26",
+        caps=base_caps,
+        salary_cap=cap_row.salary_cap if cap_row else None,
+        tax_line=cap_row.tax_line if cap_row else None,
+        first_apron=cap_row.first_apron if cap_row else None,
+        second_apron=cap_row.second_apron if cap_row else None,
+        contracts_by_player={},
+        years_by_contract={},
+        value_pct_by_player={},
+        option_pool_entering_by_player={},
+        cap_hits={},
+        extension_summaries={},
+    )
+    base.update(overrides)
+    return dq._QueueContext(**base)
 
 
 # --------------------------------------------------------------------------- ordering
@@ -94,13 +116,12 @@ def test_destinations_are_never_trade_routes(monkeypatch):
     # No cap_pct on the option year -> option_cap_pct is None -> no verdict is computed;
     # only .destination is under test here.
     final_year = ContractYear(contract_id=1, season="2025-26", cap_pct=None, aav=None, is_player_option=True)
-    option = dq._option_item(player, LAL_ID, "2025-26", final_year, {}, None)
+    option = dq._option_item(player, LAL_ID, final_year, "2026-27", _ctx(), None)
     expiring = dq._expiring_item(
-        player, LAL_ID, "2025-26", ContractYear(contract_id=1, season="2025-26", cap_pct=0.10), {}, None,
+        player, LAL_ID, ContractYear(contract_id=1, season="2025-26", cap_pct=0.10), _ctx(),
     )
 
-    monkeypatch.setattr(dq, "team_cap_hits", lambda db, ids, season: ({}, {}))
-    cap_tier = dq._cap_tier_item(None, _team(), LAL_ID, "2025-26", [], dict(CAPS))
+    cap_tier = dq._cap_tier_item(_team(), LAL_ID, [], _ctx())
 
     monkeypatch.setattr(dq, "load_fit_context", lambda db, season: object())
     need = RosterNeed(key="spacing", label="Spacing", coverage_pct=40.0, deficit_pct=60.0, status="need", caution=None)
@@ -123,21 +144,34 @@ def test_option_item_high_band_with_verdict():
     player = Player(player_id=1, full_name="Option Kid", position="PG", current_team_id=LAL_ID)
     final_year = ContractYear(contract_id=1, season="2025-26", cap_pct=0.10, is_player_option=True)
 
-    item = dq._option_item(player, LAL_ID, "2025-26", final_year, dict(CAPS), 25.0)
+    item = dq._option_item(player, LAL_ID, final_year, "2026-27", _ctx(), 25.0)
 
     assert item.priority == "high"
     assert item.type == dq.TYPE_OPTION
-    assert item.priority_reason == "An option decision is pending for 2025-26."
+    assert item.priority_reason == "An option decision is pending for the 2026-27 offseason."
     assert item.caution is None
     assert item.gap_pct == 15.0  # 25% value vs 10% option pay
     assert item.destination == "/free-agency?tab=options"
+
+
+def test_option_item_as_of_is_the_option_year_not_the_queue_season():
+    """B2: the option's salary belongs to the option year, which can be well past the queue's
+    current season; `as_of` must track it, while `season` stays the queue's own context."""
+    player = Player(player_id=1, full_name="Option Kid", position="PG", current_team_id=LAL_ID)
+    final_year = ContractYear(contract_id=1, season="2026-27", cap_pct=0.10, is_player_option=True)
+
+    item = dq._option_item(player, LAL_ID, final_year, "2027-28", _ctx(), 25.0)
+
+    assert item.season == "2025-26"
+    assert item.as_of == "2026-27"
+    assert item.priority_reason == "An option decision is pending for the 2027-28 offseason."
 
 
 def test_option_item_missing_value_stays_high_band_with_caution():
     player = Player(player_id=1, full_name="Option Kid", position="PG", current_team_id=LAL_ID)
     final_year = ContractYear(contract_id=1, season="2025-26", cap_pct=0.10, is_team_option=True)
 
-    item = dq._option_item(player, LAL_ID, "2025-26", final_year, dict(CAPS), None)
+    item = dq._option_item(player, LAL_ID, final_year, "2026-27", _ctx(), None)
 
     assert item.priority == "high"  # factual, not valuation-dependent
     assert item.value_pct is None
@@ -148,7 +182,7 @@ def test_option_item_missing_cap_data_omits_verdict():
     player = Player(player_id=1, full_name="Option Kid", position="PG", current_team_id=LAL_ID)
     final_year = ContractYear(contract_id=1, season="2025-26", cap_pct=None, aav=None, is_team_option=True)
 
-    item = dq._option_item(player, LAL_ID, "2025-26", final_year, {}, None)
+    item = dq._option_item(player, LAL_ID, final_year, "2026-27", _ctx(caps={}), None)
 
     assert item.priority == "high"
     assert item.gap_pct is None
@@ -162,9 +196,11 @@ def test_option_or_expiring_item_option_pool_member_produces_option_item():
     contract = Contract(id=10, player_id=1, season_start="2023-24", years=1)
     years = [ContractYear(contract_id=10, season="2025-26", cap_pct=0.12, is_team_option=True)]
 
-    item = dq._option_or_expiring_item(
-        player, LAL_ID, "2025-26", {}, {1: contract}, {10: years}, {1: 20.0}, {1}, {},
+    ctx = _ctx(
+        contracts_by_player={1: contract}, years_by_contract={10: years},
+        value_pct_by_player={1: 20.0}, option_pool_entering_by_player={1: "2026-27"},
     )
+    item = dq._option_or_expiring_item(player, LAL_ID, ctx)
 
     assert item.type == dq.TYPE_OPTION
 
@@ -174,9 +210,8 @@ def test_option_or_expiring_item_expiring_when_not_in_option_pool():
     contract = Contract(id=10, player_id=1, season_start="2023-24", years=1)
     years = [ContractYear(contract_id=10, season="2025-26", cap_pct=0.12)]
 
-    item = dq._option_or_expiring_item(
-        player, LAL_ID, "2025-26", {}, {1: contract}, {10: years}, {}, set(), {},
-    )
+    ctx = _ctx(contracts_by_player={1: contract}, years_by_contract={10: years})
+    item = dq._option_or_expiring_item(player, LAL_ID, ctx)
 
     assert item.type == dq.TYPE_EXPIRING
     assert item.priority == "medium"
@@ -190,9 +225,8 @@ def test_option_or_expiring_item_future_option_not_in_pool_produces_no_item():
     contract = Contract(id=10, player_id=1, season_start="2023-24", years=6)
     years = [ContractYear(contract_id=10, season="2028-29", cap_pct=0.15, is_player_option=True)]
 
-    item = dq._option_or_expiring_item(
-        player, LAL_ID, "2025-26", {}, {1: contract}, {10: years}, {}, set(), {},
-    )
+    ctx = _ctx(contracts_by_player={1: contract}, years_by_contract={10: years})
+    item = dq._option_or_expiring_item(player, LAL_ID, ctx)
 
     assert item is None
 
@@ -202,38 +236,40 @@ def test_option_or_expiring_item_none_when_final_year_before_season():
     contract = Contract(id=10, player_id=1, season_start="2022-23", years=2)
     years = [ContractYear(contract_id=10, season="2024-25", cap_pct=0.12)]
 
-    item = dq._option_or_expiring_item(
-        player, LAL_ID, "2025-26", {}, {1: contract}, {10: years}, {}, set(), {},
-    )
+    ctx = _ctx(contracts_by_player={1: contract}, years_by_contract={10: years})
+    item = dq._option_or_expiring_item(player, LAL_ID, ctx)
 
     assert item is None
 
 
-def test_current_option_pool_ids_filters_to_option_types(monkeypatch):
+def test_current_option_pool_entering_filters_to_option_types(monkeypatch):
     class _Entry:
-        def __init__(self, player_id, fa_type):
+        def __init__(self, player_id, fa_type, entering_season):
             self.player = Player(player_id=player_id)
             self.fa_type = fa_type
+            self.entering_season = entering_season
 
     monkeypatch.setattr(dq.fa_router, "_resolve_entering", lambda season: "2026-27")
     monkeypatch.setattr(
         dq.fa_router, "_assemble_pool",
         lambda db, entering, **kw: [
-            _Entry(1, dq.fa.FA_PLAYER_OPTION), _Entry(2, dq.fa.FA_TEAM_OPTION), _Entry(3, dq.fa.FA_EXPIRING),
+            _Entry(1, dq.fa.FA_PLAYER_OPTION, "2026-27"),
+            _Entry(2, dq.fa.FA_TEAM_OPTION, "2026-27"),
+            _Entry(3, dq.fa.FA_EXPIRING, "2026-27"),
         ],
     )
-    assert dq._current_option_pool_ids(None) == {1, 2}
+    assert dq._current_option_pool_entering(None) == {1: "2026-27", 2: "2026-27"}
 
 
 def test_option_or_expiring_item_none_without_contract():
     player = Player(player_id=1, full_name="No Contract", current_team_id=LAL_ID)
-    assert dq._option_or_expiring_item(player, LAL_ID, "2025-26", {}, {}, {}, {}, set(), {}) is None
+    assert dq._option_or_expiring_item(player, LAL_ID, _ctx()) is None
 
 
 def test_expiring_item_uses_stored_cap_pct():
     player = Player(player_id=2, full_name="Vet Expiring")
     final_year = ContractYear(contract_id=1, season="2026-27", cap_pct=0.18, aav=20_000_000)
-    item = dq._expiring_item(player, LAL_ID, "2026-27", final_year, {}, None)
+    item = dq._expiring_item(player, LAL_ID, final_year, _ctx(season="2026-27"))
     assert item.pay_pct == 18.0
     assert item.pay_usd == 20_000_000
     assert item.destination == "/free-agency"
@@ -243,80 +279,81 @@ def test_expiring_item_derives_pay_pct_from_cap_hit_when_cap_pct_missing():
     player = Player(player_id=3, full_name="No Stored Pct")
     final_year = ContractYear(contract_id=1, season="2026-27", cap_pct=None, aav=None)
     caps = {"2026-27": SeasonCapData("2026-27", 165_000_000, 200_000_000, 210_000_000, 220_000_000)}
+    ctx = _ctx(season="2026-27", caps=caps, cap_hits={3: 16_500_000})
 
-    item = dq._expiring_item(player, LAL_ID, "2026-27", final_year, caps, 16_500_000)
+    item = dq._expiring_item(player, LAL_ID, final_year, ctx)
 
     assert item.pay_pct == 10.0
 
 
 # --------------------------------------------------------------------------- extension
-def _extension_decision(**overrides):
-    base = dict(
-        player_id=1, eligible=True, ineligible_reason=None, value_season="2025-26",
-        value_pct=25.0, value_lo_pct=20.0, value_hi_pct=30.0, current_pay_pct=15.0,
-        final_contract_season="2027-28", entering_season="2028-29",
-        projected_aav_usd=30_000_000, projected_aav_lo_usd=24_000_000, projected_aav_hi_usd=36_000_000,
-        projected_cap_usd=170_000_000, gap_pct=10.0, verdict="Extend now", tone="positive",
-        rationale="Model value exceeds current pay.", trajectory_note=None, caveat="caveat",
-    )
-    base.update(overrides)
-    return ExtensionDecision(**base)
-
-
-def test_extension_item_extend_now_is_high_band(monkeypatch):
-    monkeypatch.setattr(dq, "decide_extension", lambda db, pid: _extension_decision())
+def test_extension_item_extend_now_is_high_band():
     player = Player(player_id=1, full_name="Star", current_team_id=LAL_ID)
+    summary = ExtensionSummary(
+        player_id=1, eligible=True, has_model_value=True, value_pct=25.0, current_pay_pct=15.0,
+        gap_pct=10.0, verdict="Extend now", tone="positive", final_contract_season="2027-28",
+    )
+    ctx = _ctx(extension_summaries={1: summary})
 
-    item = dq._extension_item(None, player, LAL_ID, "2025-26")
+    item = dq._extension_item(player, LAL_ID, ctx)
 
     assert item.priority == "high"
     assert item.destination == "/players/1"
-    assert item.priority_reason == "Model value exceeds current pay."
+    assert "extending now locks in below-market cost" in item.priority_reason
     assert item.caution is None
 
 
-def test_extension_item_no_model_value_forced_out_of_high_band(monkeypatch):
-    """ADR-0001: a missing valuation must not produce a high-band valuation-dependent item."""
-    monkeypatch.setattr(
-        dq, "decide_extension",
-        lambda db, pid: _extension_decision(verdict="No model value", tone="neutral", value_pct=None, gap_pct=None),
-    )
+def test_extension_item_no_model_value_is_low_band_with_caution():
+    """ADR-0001: a missing valuation must not produce a high-band valuation-dependent item;
+    it degrades to a low-priority contract fact with an explanatory caution."""
     player = Player(player_id=1, full_name="Star", current_team_id=LAL_ID)
+    summary = ExtensionSummary(
+        player_id=1, eligible=True, has_model_value=False, value_pct=None, current_pay_pct=15.0,
+        gap_pct=None, verdict=None, tone=None, final_contract_season="2027-28",
+    )
+    ctx = _ctx(extension_summaries={1: summary})
 
-    item = dq._extension_item(None, player, LAL_ID, "2025-26")
+    item = dq._extension_item(player, LAL_ID, ctx)
 
     assert item.priority == "low"
     assert item.value_pct is None
+    assert item.pay_pct == 15.0
     assert item.caution is not None
 
 
-def test_extension_item_ineligible_omitted(monkeypatch):
-    monkeypatch.setattr(dq, "decide_extension", lambda db, pid: _extension_decision(eligible=False, verdict="Not extension-eligible"))
+def test_extension_item_ineligible_omitted():
     player = Player(player_id=1, full_name="Impending FA", current_team_id=LAL_ID)
-    assert dq._extension_item(None, player, LAL_ID, "2025-26") is None
+    summary = ExtensionSummary(
+        player_id=1, eligible=False, has_model_value=False, value_pct=None, current_pay_pct=None,
+        gap_pct=None, verdict=None, tone=None, final_contract_season="2025-26",
+    )
+    ctx = _ctx(extension_summaries={1: summary})
+    assert dq._extension_item(player, LAL_ID, ctx) is None
 
 
-def test_extension_item_lookup_error_omitted(monkeypatch):
-    monkeypatch.setattr(dq, "decide_extension", lambda db, pid: (_ for _ in ()).throw(LookupError("no contract")))
+def test_extension_item_missing_summary_omitted():
+    """No contract/eligibility data at all for this player (e.g. no contract row) -> omitted,
+    same as the ineligible case."""
     player = Player(player_id=1, full_name="No Contract", current_team_id=LAL_ID)
-    assert dq._extension_item(None, player, LAL_ID, "2025-26") is None
+    assert dq._extension_item(player, LAL_ID, _ctx()) is None
 
 
-def test_extension_item_missing_model_artifact_omitted(monkeypatch):
-    """A globally missing model artifact must degrade this one item, not 500 the queue."""
-    monkeypatch.setattr(dq, "decide_extension", lambda db, pid: (_ for _ in ()).throw(FileNotFoundError("model missing")))
-    player = Player(player_id=1, full_name="No Model", current_team_id=LAL_ID)
-    assert dq._extension_item(None, player, LAL_ID, "2025-26") is None
-
-
-def test_extension_item_fair_is_medium_and_dont_extend_is_low(monkeypatch):
-    monkeypatch.setattr(dq, "decide_extension", lambda db, pid: _extension_decision(verdict="Fair — extend at market or wait", tone="neutral"))
+def test_extension_item_fair_is_medium_and_dont_extend_is_low():
     player = Player(player_id=1, full_name="Fair Player", current_team_id=LAL_ID)
-    assert dq._extension_item(None, player, LAL_ID, "2025-26").priority == "medium"
+    summary = ExtensionSummary(
+        player_id=1, eligible=True, has_model_value=True, value_pct=20.4, current_pay_pct=20.0,
+        gap_pct=0.4, verdict="Fair — extend at market or wait", tone="neutral", final_contract_season="2027-28",
+    )
+    ctx = _ctx(extension_summaries={1: summary})
+    assert dq._extension_item(player, LAL_ID, ctx).priority == "medium"
 
-    monkeypatch.setattr(dq, "decide_extension", lambda db, pid: _extension_decision(verdict="Don't extend", tone="negative"))
     player2 = Player(player_id=2, full_name="Overpaid Player", current_team_id=LAL_ID)
-    assert dq._extension_item(None, player2, LAL_ID, "2025-26").priority == "low"
+    summary2 = ExtensionSummary(
+        player_id=2, eligible=True, has_model_value=True, value_pct=10.0, current_pay_pct=20.0,
+        gap_pct=-10.0, verdict="Don't extend", tone="negative", final_contract_season="2027-28",
+    )
+    ctx2 = _ctx(extension_summaries={2: summary2})
+    assert dq._extension_item(player2, LAL_ID, ctx2).priority == "low"
 
 
 # --------------------------------------------------------------------------- cap tier
@@ -324,49 +361,42 @@ def _team():
     return Team(team_id=LAL_ID, abbreviation="LAL", name="Los Angeles Lakers")
 
 
-def test_cap_tier_band_mapping(monkeypatch):
-    caps = dict(CAPS)
+def test_cap_tier_band_mapping():
     roster = [Player(player_id=1, current_team_id=LAL_ID)]
     team = _team()
 
-    monkeypatch.setattr(dq, "team_cap_hits", lambda db, ids, season: ({1: 100_000_000}, {}))
-    below_tax = dq._cap_tier_item(None, team, LAL_ID, "2025-26", roster, caps)
+    below_tax = dq._cap_tier_item(team, LAL_ID, roster, _ctx(cap_hits={1: 100_000_000}))
     assert below_tax.priority == "low"
 
-    monkeypatch.setattr(dq, "team_cap_hits", lambda db, ids, season: ({1: 190_000_000}, {}))
-    taxpayer = dq._cap_tier_item(None, team, LAL_ID, "2025-26", roster, caps)
+    taxpayer = dq._cap_tier_item(team, LAL_ID, roster, _ctx(cap_hits={1: 190_000_000}))
     assert taxpayer.priority == "medium"
 
-    monkeypatch.setattr(dq, "team_cap_hits", lambda db, ids, season: ({1: 197_000_000}, {}))
-    first_apron = dq._cap_tier_item(None, team, LAL_ID, "2025-26", roster, caps)
+    first_apron = dq._cap_tier_item(team, LAL_ID, roster, _ctx(cap_hits={1: 197_000_000}))
     assert first_apron.priority == "medium"
 
-    monkeypatch.setattr(dq, "team_cap_hits", lambda db, ids, season: ({1: 210_000_000}, {}))
-    second_apron = dq._cap_tier_item(None, team, LAL_ID, "2025-26", roster, caps)
+    second_apron = dq._cap_tier_item(team, LAL_ID, roster, _ctx(cap_hits={1: 210_000_000}))
     assert second_apron.priority == "high"
     assert "second apron" in second_apron.priority_reason
 
 
-def test_cap_tier_item_always_appears_without_valuation(monkeypatch):
+def test_cap_tier_item_always_appears_without_valuation():
     """Factual contract/cap item: survives even though it never touches the valuation model."""
-    caps = dict(CAPS)
     roster: list[Player] = []
     team = _team()
-    monkeypatch.setattr(dq, "team_cap_hits", lambda db, ids, season: ({}, {}))
 
-    item = dq._cap_tier_item(None, team, LAL_ID, "2025-26", roster, caps)
+    item = dq._cap_tier_item(team, LAL_ID, roster, _ctx(cap_hits={}))
 
     assert item.type == dq.TYPE_CAP_TIER
     assert item.priority == "low"
     assert item.pay_usd == 0
 
 
-def test_cap_tier_item_missing_cap_constants_has_caution(monkeypatch):
+def test_cap_tier_item_missing_cap_constants_has_caution():
     roster = [Player(player_id=1, current_team_id=LAL_ID)]
     team = _team()
-    monkeypatch.setattr(dq, "team_cap_hits", lambda db, ids, season: ({1: 50_000_000}, {}))
+    ctx = _ctx(caps={}, salary_cap=None, tax_line=None, first_apron=None, second_apron=None, cap_hits={1: 50_000_000})
 
-    item = dq._cap_tier_item(None, team, LAL_ID, "2025-26", roster, {})
+    item = dq._cap_tier_item(team, LAL_ID, roster, ctx)
 
     assert item.caution is not None
     assert item.priority == "low"  # classify_tier defaults to below-tax without a tax line
@@ -429,7 +459,7 @@ def test_build_decision_queue_assembles_and_sorts(monkeypatch):
 
     monkeypatch.setattr(
         dq, "_player_items",
-        lambda db, player, team_id, season, caps, *args: (
+        lambda player, team_id, ctx: (
             [_item(priority="high", type_=dq.TYPE_OPTION, player_id=player.player_id, id_=f"option:{player.player_id}")]
             if player.player_id == 1
             else [_item(priority="low", type_=dq.TYPE_EXTENSION, player_id=player.player_id, id_=f"extension:{player.player_id}")]
@@ -437,7 +467,7 @@ def test_build_decision_queue_assembles_and_sorts(monkeypatch):
     )
     monkeypatch.setattr(
         dq, "_cap_tier_item",
-        lambda db, team, team_id, season, roster, caps: _item(priority="medium", type_=dq.TYPE_CAP_TIER, player_id=None, id_="cap_tier:team"),
+        lambda team, team_id, roster, ctx: _item(priority="medium", type_=dq.TYPE_CAP_TIER, player_id=None, id_="cap_tier:team"),
     )
     monkeypatch.setattr(dq, "_roster_need_item", lambda db, team_id, roster, season: None)
 
@@ -448,6 +478,7 @@ def test_build_decision_queue_assembles_and_sorts(monkeypatch):
     assert queue.season == dq.LATEST_SEASON
     assert queue.generated_from == "latest"
     assert [i.id for i in queue.items] == ["option:1", "cap_tier:team", "extension:2"]
+    assert queue.model_unavailable is False
 
 
 def test_build_decision_queue_accepts_explicit_current_season(monkeypatch):
@@ -456,7 +487,7 @@ def test_build_decision_queue_accepts_explicit_current_season(monkeypatch):
     monkeypatch.setattr(dq, "load_season_caps", lambda db: dict(CAPS))
     monkeypatch.setattr(
         dq, "_cap_tier_item",
-        lambda db, team, team_id, season, roster, caps: _item(priority="low", type_=dq.TYPE_CAP_TIER, player_id=None, id_="cap_tier:team"),
+        lambda team, team_id, roster, ctx: _item(priority="low", type_=dq.TYPE_CAP_TIER, player_id=None, id_="cap_tier:team"),
     )
     monkeypatch.setattr(dq, "_roster_need_item", lambda db, team_id, roster, season: None)
 
@@ -476,6 +507,43 @@ def test_build_decision_queue_rejects_non_current_season():
         assert False, "expected ValueError"
     except ValueError as e:
         assert dq.LATEST_SEASON in str(e)
+
+
+def test_build_decision_queue_degrades_extension_when_model_artifact_missing(monkeypatch):
+    """B1: a globally missing model artifact must not drop extension items — eligible
+    players still surface as low-priority contract facts with a caution, and the queue
+    exposes model_unavailable so the frontend can explain the degraded run. Factual
+    cap/contract items (cap_tier here) are unaffected."""
+    team = _team()
+    player = Player(player_id=1, full_name="Eligible Player", current_team_id=LAL_ID)
+    contract = Contract(id=1, player_id=1, season_start="2023-24", years=1)
+    contract_years = [
+        ContractYear(contract_id=1, season="2026-27", cap_pct=0.15, is_player_option=False, is_team_option=False),
+    ]
+    db = FakeDB(teams=[team], players=[player], contracts=[contract], contract_years=contract_years)
+
+    monkeypatch.setattr(dq, "load_season_caps", lambda db: dict(CAPS))
+    monkeypatch.setattr(dq, "_current_option_pool_entering", lambda db: {})
+    monkeypatch.setattr(dq, "_roster_need_item", lambda db, team_id, roster, season: None)
+    monkeypatch.setattr(
+        ext_module, "value_players",
+        lambda db, targets: (_ for _ in ()).throw(FileNotFoundError("model artifact missing")),
+    )
+
+    queue = dq.build_decision_queue(db, LAL_ID)
+
+    assert queue.model_unavailable is True
+    assert "model artifact is unavailable" in queue.caveat
+
+    extension_items = [i for i in queue.items if i.type == dq.TYPE_EXTENSION]
+    assert len(extension_items) == 1
+    assert extension_items[0].priority == "low"
+    assert extension_items[0].caution is not None
+    assert extension_items[0].player_id == 1
+
+    cap_tier_items = [i for i in queue.items if i.type == dq.TYPE_CAP_TIER]
+    assert len(cap_tier_items) == 1
+    assert cap_tier_items[0].caution is None
 
 
 # --------------------------------------------------------------------------- router
@@ -524,4 +592,5 @@ def test_router_happy_path(monkeypatch):
     assert body["team_id"] == LAL_ID
     assert body["team_name"] == "Los Angeles Lakers"
     assert body["items"][0]["id"] == "cap_tier:team"
+    assert body["model_unavailable"] is False
     assert not any(item["destination"].startswith("/trade") for item in body["items"])
