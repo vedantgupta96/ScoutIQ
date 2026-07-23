@@ -20,11 +20,11 @@
 - `http_status` (populated on every non-2xx outcome, not just 403 — a bare transport failure with no response still has `http_status=None`, but an HTTP 500 or similar carries its real status code through to the final outcome), `attempts`, `elapsed_s`, `source` (`cache` | `live`)
 - **four separate timestamps, not two, and not three:**
   - `report_effective_utc` — the **authoritative** effective time: parsed from the PDF's own header line (`Injury Report: M/D/YY HH:MM AM|PM` — the extracted text is one token per line for modern editions, space-separated for older ones; the parser's regex is tolerant of either), interpreted in America/New_York and converted to UTC. `None` if the header line is absent or unparseable — the parser never guesses a time for a row it can't read.
-  - `edition_token_utc` — what the edition's **filename token claims** to be: the filename's date + edition token (`05PM`, `05_30PM`, `11_30AM`, ...), interpreted in the league's publication timezone (US/Eastern) and converted to UTC. This is a **fallback/label**, not the authoritative effective time — see the measured divergence below. Computed the same way regardless of cache vs. live, and always available even when `report_effective_utc` is `None`.
+  - `edition_token_utc` — what the edition's **filename token claims** to be: the filename's date + edition token (`05PM`, `05_30PM`, `11_30AM`, ...), interpreted in the league's publication timezone (US/Eastern) and converted to UTC. This is a **fallback/label**, not the authoritative effective time — see the measured divergence below. On any successfully-retrieved (`ok`) edition it is populated whenever the filename token parses — independent of whether the PDF *header* parsed — so it is the fallback when `report_effective_utc` is `None`. It is itself `None` on `failed` and `absent` outcomes, where there is no retrieved edition to label.
   - `source_last_modified_utc` — the response's own `Last-Modified` header, converted to UTC. Only ever populated on a **live** fetch (a cache hit re-reads bytes with no header attached, so this is `None` on cache hits — see the caveat below).
   - `fetched_at_utc` — this run's ingestion time.
 
-`report_effective_utc` is authoritative because it is the report's own claim about itself, not an inference about it. `edition_token_utc` is kept because it's always available (even when the header is missing or unparseable) and is the identity a reprocessing job keys on — but it must never be presented as the effective time. The two diverge by 30–45 minutes in the legacy whole-hour-token era, measured directly against the real cached PDFs used by this spike's tests:
+`report_effective_utc` is authoritative because it is the report's own claim about itself, not an inference about it. `edition_token_utc` is kept because on a retrieved edition it is available even when the header is missing or unparseable, and it is the identity a reprocessing job keys on — but it must never be presented as the effective time (and it is `None` on failed/absent outcomes, which carry no edition to label). The two diverge by 30–45 minutes in the legacy whole-hour-token era, measured directly against the real cached PDFs used by this spike's tests:
 
 | Edition | Header (`report_effective_utc`) | Token (`edition_token_utc`) | Offset |
 |---|---|---|---|
@@ -41,9 +41,9 @@ The whole-hour token cannot express the minute the report actually went out; the
 
 Each edition fetch is an **immutable snapshot** — a status printed in one edition must never overwrite
 an earlier edition's row. The ledger is append-only, and is modeled as **two tables**, not one, because
-a single table conflates two different grains: "one fetch of one edition" (which `content_sha256` and
+a single table conflates two different grains: "one fetch of one edition" (which `source_sha256` and
 `revision_seq` describe) and "one player-status row inside that fetch" (which every player row in the
-same fetch shares the same `content_sha256` for). A unique constraint on the fetch-grain columns,
+same fetch shares the same `source_sha256` for). A unique constraint on the fetch-grain columns,
 applied directly to the player-row table, would allow only one player row per edition — see
 §Key/idempotency proposal for why that is wrong and how the split resolves it.
 
@@ -52,7 +52,9 @@ edition_revisions
   id                          surrogate key
   report_date                 DATE          -- the date encoded in the filename
   edition                     TEXT          -- '05PM', '08PM', '05_30PM', ...
-  content_sha256              TEXT          -- hash of the parsed row set for this fetch
+  source_sha256               TEXT          -- hash of the RAW PDF bytes = source identity (not the parse)
+  parser_version              TEXT          -- which extractor read this revision
+  parsed_rows_sha256          TEXT NULL     -- optional hash of the canonical parsed rows; recomputed on reparse
   revision_seq                 INT           -- 1, 2, ... per (report_date, edition), ordered by fetched_at_utc
   superseded_by                BIGINT NULL   -- FK to a later edition_revisions.id for the same (report_date, edition); set once a later revision lands
   report_effective_utc         TIMESTAMPTZ NULL -- the PDF header's own effective time (authoritative); NULL if the header line is absent/unparseable
@@ -60,7 +62,7 @@ edition_revisions
   source_last_modified_utc     TIMESTAMPTZ NULL -- the response's Last-Modified header, when available
   fetched_at_utc               TIMESTAMPTZ   -- ingestion time
   source_url                   TEXT
-  UNIQUE (report_date, edition, content_sha256)
+  UNIQUE (report_date, edition, source_sha256)
 ```
 
 ```sql
@@ -93,7 +95,7 @@ snapshots, not a single current-state table.
 ## Key / idempotency proposal
 
 `availability_events` holds one row per player-status line, and every player row from the same fetch
-shares the same `(report_date, edition, content_sha256)` — a unique constraint on that tuple, applied
+shares the same `(report_date, edition, source_sha256)` — a unique constraint on that tuple, applied
 to the player-row table directly, would allow only **one** player row per edition, when a real edition
 prints 40–160. That grain mismatch is a defect in an earlier draft of this section, which proposed
 exactly that constraint at the edition level *and* separately claimed a silently-corrected
@@ -103,13 +105,22 @@ block a second, differently-content edition from landing as new rows. The two-ta
 resolves it by putting each grain's uniqueness on its own table:
 
 - **`edition_revisions` is the parent, keyed on the fetch grain:** `UNIQUE (report_date, edition,
-  content_sha256)`, where `content_sha256` is a hash of the parsed row set for that fetch.
-  - A byte-identical refetch (same date, edition, and content hash — e.g. a cache-warm rerun) is a
+  source_sha256)`, where **`source_sha256` is the hash of the raw PDF bytes** — source identity must
+  be a property of the source object, not of our parse. Hashing the parsed row set would make a
+  *parser* change (a bug fix, a new column) look like a *source* revision of an unchanged PDF, and
+  conversely could mask a real republication whose parsed output happened to collapse to the same
+  rows. The revision therefore also stores `parser_version` and an **optional** `parsed_rows_sha256`
+  as separate columns: the raw hash answers "is this the same published document?", the parser
+  version answers "with which extractor did we read it?", and the parsed-row hash (recomputable on
+  reprocessing) answers "did our interpretation of it change?" — three independent questions that a
+  single hash conflated.
+  - A byte-identical refetch (same date, edition, and `source_sha256` — e.g. a cache-warm rerun) is a
     **no-op** against the ledger: the unique constraint rejects the duplicate and nothing new is
-    written.
-  - If the archive republishes `(report_date, edition)` with *different* content — a silently
+    written. Reparsing the same bytes with a newer `parser_version` updates `parsed_rows_sha256` and
+    the derived child rows for that revision without creating a new source revision.
+  - If the archive republishes `(report_date, edition)` with *different bytes* — a silently
     corrected edition — that lands as a **new `edition_revisions` row** with the same
-    `(report_date, edition)` but a different `content_sha256`, carrying `revision_seq` incremented
+    `(report_date, edition)` but a different `source_sha256`, carrying `revision_seq` incremented
     from the prior revision for that edition (ordered by `fetched_at_utc`). `superseded_by`
     (nullable, set once a later revision for the same edition is ingested) lets consumers cheaply
     find "the latest revision of this edition" while every earlier revision stays in the table,
@@ -287,8 +298,9 @@ same unknown-and-lower caveat as the parse-fidelity rate above.
 ### Caveats on these numbers
 
 - `source_last_modified_utc` is only ever populated on a **live** fetch — a cache hit re-reads bytes
-  with no HTTP headers attached, so it is `None` on every cache hit. `edition_token_utc` is always
-  available (it's derived from the filename, not the response), and `report_effective_utc` is
+  with no HTTP headers attached, so it is `None` on every cache hit. `edition_token_utc` is
+  available on any retrieved edition regardless of cache vs. live (it's derived from the filename,
+  not the response) though `None` on failed/absent outcomes, and `report_effective_utc` is
   available on a cache hit too, as long as the cached PDF's header parses (it's derived from the
   extracted text, not the HTTP response) — which is exactly why these are kept as separate fields
   rather than one falling back to the other (§Retrieval outcome semantics). A production loader must
@@ -348,7 +360,7 @@ unknown, and lower than ~99 %.
    published" from "access now denied" (§Source inventory); a sudden jump from mostly-`ok` to
    mostly-`absent` should trigger investigation, not be read as an archive fact.
 7. **Adopt the two-table, revision-aware model** — `edition_revisions` keyed on
-   `(report_date, edition, content_sha256)` with `revision_seq`, and `availability_events` keyed on
+   `(report_date, edition, source_sha256)` (raw-PDF hash) with `revision_seq`, and `availability_events` keyed on
    `(edition_revision_id, matchup, player_name_raw, status_raw)` — from §Key/idempotency proposal, not
    a single table with a bare `(report_date, edition)` unique constraint, so a silently republished
    edition lands as a new revision instead of being rejected as a duplicate, and every player row
