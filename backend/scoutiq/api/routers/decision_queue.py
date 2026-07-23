@@ -44,7 +44,7 @@ class DecisionQueueResponse(BaseModel):
     generated_from: str
     items: list[QueueItemModel]
     caveat: str
-    model_unavailable: bool
+    extension_values_unavailable: bool
 
 
 @router.get("", response_model=DecisionQueueResponse)
@@ -72,5 +72,5 @@ def get_decision_queue(
         generated_from=queue.generated_from,
         items=[QueueItemModel(**vars(item)) for item in queue.items],
         caveat=queue.caveat,
-        model_unavailable=queue.model_unavailable,
+        extension_values_unavailable=queue.extension_values_unavailable,
     )

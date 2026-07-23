@@ -37,8 +37,9 @@ Trade Lab is out of scope for this module and is never imported here.
 Per ADR-0001, a missing model value degrades an item's verdict, not the item's existence:
 option and cap_tier facts are contractual and always appear; an eligible extension without a
 model value appears as a low-priority contract fact rather than dropping, and
-`DecisionQueue.model_unavailable` flags the run when the valuation model artifact itself was
-unavailable for the whole batch.
+`DecisionQueue.extension_values_unavailable` flags the run when every eligible player has no
+model value available — a missing model artifact, missing stats, or an unpublished valuation
+can each produce this, and the queue does not distinguish between them.
 """
 from __future__ import annotations
 
@@ -91,9 +92,9 @@ QUEUE_CAVEAT = (
     "not implemented."
 )
 
-MODEL_UNAVAILABLE_CAVEAT = (
-    " The valuation model artifact is unavailable this run; extension items for eligible "
-    "players are shown as contract facts only, without a model-driven priority."
+EXTENSION_VALUES_UNAVAILABLE_CAVEAT = (
+    " Model values are unavailable for the eligible players below, so their extension "
+    "priorities are shown as contract facts only."
 )
 
 NO_MODEL_VALUE_CAUTION = "Model value unavailable — shown as a contract fact only."
@@ -128,7 +129,7 @@ class DecisionQueue:
     generated_from: str
     items: list[QueueItem]
     caveat: str
-    model_unavailable: bool = False
+    extension_values_unavailable: bool = False
 
 
 def _gap_key(gap_pct: float | None) -> tuple[int, float]:
@@ -568,7 +569,7 @@ def build_decision_queue(db, team_id: int, season: str | None = None) -> Decisio
     extension_summaries = batch_extension_summaries(db, roster_ids)
 
     eligible_summaries = [s for s in extension_summaries.values() if s.eligible]
-    model_unavailable = bool(eligible_summaries) and all(not s.has_model_value for s in eligible_summaries)
+    extension_values_unavailable = bool(eligible_summaries) and all(not s.has_model_value for s in eligible_summaries)
 
     ctx = _QueueContext(
         season=target_season,
@@ -596,7 +597,7 @@ def build_decision_queue(db, team_id: int, season: str | None = None) -> Decisio
 
     items.sort(key=_sort_key)
 
-    caveat = QUEUE_CAVEAT + (MODEL_UNAVAILABLE_CAVEAT if model_unavailable else "")
+    caveat = QUEUE_CAVEAT + (EXTENSION_VALUES_UNAVAILABLE_CAVEAT if extension_values_unavailable else "")
 
     return DecisionQueue(
         team_id=team_id,
@@ -605,5 +606,5 @@ def build_decision_queue(db, team_id: int, season: str | None = None) -> Decisio
         generated_from="latest",
         items=items,
         caveat=caveat,
-        model_unavailable=model_unavailable,
+        extension_values_unavailable=extension_values_unavailable,
     )

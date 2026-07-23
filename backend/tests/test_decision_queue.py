@@ -478,7 +478,7 @@ def test_build_decision_queue_assembles_and_sorts(monkeypatch):
     assert queue.season == dq.LATEST_SEASON
     assert queue.generated_from == "latest"
     assert [i.id for i in queue.items] == ["option:1", "cap_tier:team", "extension:2"]
-    assert queue.model_unavailable is False
+    assert queue.extension_values_unavailable is False
 
 
 def test_build_decision_queue_accepts_explicit_current_season(monkeypatch):
@@ -509,11 +509,13 @@ def test_build_decision_queue_rejects_non_current_season():
         assert dq.LATEST_SEASON in str(e)
 
 
-def test_build_decision_queue_degrades_extension_when_model_artifact_missing(monkeypatch):
-    """B1: a globally missing model artifact must not drop extension items — eligible
-    players still surface as low-priority contract facts with a caution, and the queue
-    exposes model_unavailable so the frontend can explain the degraded run. Factual
-    cap/contract items (cap_tier here) are unaffected."""
+def test_build_decision_queue_degrades_extension_when_extension_values_unavailable(monkeypatch):
+    """B1: when every eligible player has no model value available, extension items must
+    not drop — they still surface as low-priority contract facts with a caution, and the
+    queue exposes extension_values_unavailable so the frontend can explain the degraded
+    run. This test induces the condition via a value_players failure; missing stats or
+    unpublished valuations can produce the same flag. Factual cap/contract items
+    (cap_tier here) are unaffected."""
     team = _team()
     player = Player(player_id=1, full_name="Eligible Player", current_team_id=LAL_ID)
     contract = Contract(id=1, player_id=1, season_start="2023-24", years=1)
@@ -532,8 +534,8 @@ def test_build_decision_queue_degrades_extension_when_model_artifact_missing(mon
 
     queue = dq.build_decision_queue(db, LAL_ID)
 
-    assert queue.model_unavailable is True
-    assert "model artifact is unavailable" in queue.caveat
+    assert queue.extension_values_unavailable is True
+    assert "Model values are unavailable" in queue.caveat
 
     extension_items = [i for i in queue.items if i.type == dq.TYPE_EXTENSION]
     assert len(extension_items) == 1
@@ -592,5 +594,5 @@ def test_router_happy_path(monkeypatch):
     assert body["team_id"] == LAL_ID
     assert body["team_name"] == "Los Angeles Lakers"
     assert body["items"][0]["id"] == "cap_tier:team"
-    assert body["model_unavailable"] is False
+    assert body["extension_values_unavailable"] is False
     assert not any(item["destination"].startswith("/trade") for item in body["items"])

@@ -30,7 +30,7 @@ export interface DecisionQueueResponse {
   generated_from: string;
   items: QueueItem[];
   caveat: string;
-  model_unavailable: boolean;
+  extension_values_unavailable: boolean;
 }
 
 export function getDecisionQueue(teamId: number, season?: string, signal?: AbortSignal): Promise<DecisionQueueResponse> {
