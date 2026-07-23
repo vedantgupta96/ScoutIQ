@@ -6,7 +6,10 @@ no medical, severity, or risk judgment. No DB access here (the probe CLI owns th
 
 Retrieval semantics: a missing edition returns HTTP 403 with an S3 "AccessDenied" XML
 body. That is S3's response for a nonexistent object, not a block — we classify it as
-`absent`, distinct from `failed` (timeouts, connection errors, other error statuses).
+`absent`, distinct from `failed` (timeouts, connection errors, other error statuses). A
+403+AccessDenied cannot reliably distinguish "never published" from "access now denied",
+so `absent` is reported as an explicitly provisional classification, never a confirmed
+archive fact.
 """
 from __future__ import annotations
 
@@ -17,6 +20,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from zoneinfo import ZoneInfo
 
 import requests
 from pypdf import PdfReader
@@ -45,7 +49,55 @@ DEFAULT_PAUSE = 1.0
 DEFAULT_ATTEMPTS = 3
 
 _S3_ACCESS_DENIED = "<Code>AccessDenied</Code>"
+_ABSENT_CLASSIFICATION_NOTE = (
+    "S3 403 AccessDenied cannot distinguish 'this edition was never published' from "
+    "'access to this object is now restricted' — absent is provisional, not a confirmed "
+    "archive fact. A sudden jump from mostly-ok to mostly-absent should be treated as a "
+    "possible access change, not evidence the archive ended."
+)
 _last_fetch_ts = 0.0
+
+REPORT_TIMEZONE = ZoneInfo("America/New_York")
+_EDITION_TOKEN_RE = re.compile(r"^(\d{1,2})(?:_(\d{2}))?(AM|PM)$")
+
+
+def _parse_edition_token(edition: str) -> tuple[int, int] | None:
+    """Parse an edition filename token into 24-hour (hour, minute), Eastern local time.
+
+    Handles the legacy whole-hour form ('05PM') and the modern minute-precision form
+    ('05_30PM', '12_45PM', '11_30AM'). Returns None on anything that doesn't match either
+    convention — callers must never guess a time for an unparseable token.
+    """
+    m = _EDITION_TOKEN_RE.match(edition)
+    if not m:
+        return None
+    hour = int(m.group(1))
+    minute = int(m.group(2)) if m.group(2) else 0
+    if not (1 <= hour <= 12) or not (0 <= minute <= 59):
+        return None
+    meridiem = m.group(3)
+    if meridiem == "PM" and hour != 12:
+        hour += 12
+    elif meridiem == "AM" and hour == 12:
+        hour = 0
+    return hour, minute
+
+
+def edition_effective_utc(date: str, edition: str) -> str | None:
+    """What this edition claims to be, in UTC: the filename's date + edition token,
+    interpreted in the league's publication timezone (US/Eastern — the NBA publishes
+    injury reports on ET) and converted to UTC. Returns None if the token cannot be
+    parsed, rather than emitting an invalid string."""
+    parsed = _parse_edition_token(edition)
+    if parsed is None:
+        return None
+    hour, minute = parsed
+    try:
+        year, month, day = (int(p) for p in date.split("-"))
+        local = datetime(year, month, day, hour, minute, tzinfo=REPORT_TIMEZONE)
+    except ValueError:
+        return None
+    return local.astimezone(timezone.utc).isoformat()
 
 STATUS_VALUES = ("Out", "Doubtful", "Questionable", "Probable", "Available")
 
@@ -87,12 +139,6 @@ def _is_s3_absent(status_code: int, body: bytes) -> bool:
     return _S3_ACCESS_DENIED in text
 
 
-def _fallback_effective_utc(date: str, edition: str) -> str:
-    """Best-effort report-effective timestamp derived from the filename when no
-    Last-Modified header is available (e.g. served from an old cache write)."""
-    return f"{date}T{edition}"
-
-
 @dataclass(frozen=True)
 class EditionOutcome:
     date: str
@@ -100,14 +146,17 @@ class EditionOutcome:
     url: str
     status: str  # 'ok' | 'absent' | 'failed'
     http_status: int | None
+    absent_is_provisional: bool
+    classification_note: str | None
     rows: int | None
     error_type: str | None
     error_message: str | None
     attempts: int
     elapsed_s: float
     source: str  # 'cache' | 'live'
-    report_effective_utc: str | None
-    fetched_at_utc: str
+    edition_effective_utc: str | None  # what the edition claims to be (filename token, ET->UTC)
+    source_last_modified_utc: str | None  # the response's Last-Modified header, if any
+    fetched_at_utc: str  # this run's ingestion time
     raw_bytes: int | None
     raw_text: str | None = field(default=None, repr=False)
 
@@ -139,20 +188,45 @@ def fetch_edition(
 
     if use_cache and cache.exists():
         raw = cache.read_bytes()
-        text = _extract_text(raw)
+        try:
+            text = _extract_text(raw)
+        except Exception as exc:
+            return EditionOutcome(
+                date=date,
+                edition=edition,
+                url=url,
+                status="failed",
+                http_status=200,
+                absent_is_provisional=False,
+                classification_note=None,
+                rows=None,
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+                attempts=0,
+                elapsed_s=0.0,
+                source="cache",
+                edition_effective_utc=None,
+                source_last_modified_utc=None,
+                fetched_at_utc=fetched_at_utc,
+                raw_bytes=len(raw),
+                raw_text=None,
+            )
         return EditionOutcome(
             date=date,
             edition=edition,
             url=url,
             status="ok",
             http_status=200,
+            absent_is_provisional=False,
+            classification_note=None,
             rows=None,
             error_type=None,
             error_message=None,
             attempts=0,
             elapsed_s=0.0,
             source="cache",
-            report_effective_utc=_fallback_effective_utc(date, edition),
+            edition_effective_utc=edition_effective_utc(date, edition),
+            source_last_modified_utc=None,
             fetched_at_utc=fetched_at_utc,
             raw_bytes=len(raw),
             raw_text=text,
@@ -160,6 +234,7 @@ def fetch_edition(
 
     started = time.monotonic()
     last_exc: Exception | None = None
+    last_http_status: int | None = None
     for attempt in range(1, attempts + 1):
         wait = pause - (time.monotonic() - _last_fetch_ts)
         if wait > 0:
@@ -180,28 +255,54 @@ def fetch_edition(
         if resp.status_code == 200:
             cache.parent.mkdir(parents=True, exist_ok=True)
             cache.write_bytes(resp.content)
-            effective = resp.headers.get("Last-Modified")
-            report_effective_utc = (
-                parsedate_to_datetime(effective).astimezone(timezone.utc).isoformat()
-                if effective
-                else _fallback_effective_utc(date, edition)
+            last_modified = resp.headers.get("Last-Modified")
+            source_last_modified_utc = (
+                parsedate_to_datetime(last_modified).astimezone(timezone.utc).isoformat()
+                if last_modified
+                else None
             )
+            try:
+                text = _extract_text(resp.content)
+            except Exception as exc:
+                return EditionOutcome(
+                    date=date,
+                    edition=edition,
+                    url=url,
+                    status="failed",
+                    http_status=200,
+                    absent_is_provisional=False,
+                    classification_note=None,
+                    rows=None,
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                    attempts=attempt,
+                    elapsed_s=elapsed,
+                    source="live",
+                    edition_effective_utc=None,
+                    source_last_modified_utc=source_last_modified_utc,
+                    fetched_at_utc=fetched_at_utc,
+                    raw_bytes=len(resp.content),
+                    raw_text=None,
+                )
             return EditionOutcome(
                 date=date,
                 edition=edition,
                 url=url,
                 status="ok",
                 http_status=200,
+                absent_is_provisional=False,
+                classification_note=None,
                 rows=None,
                 error_type=None,
                 error_message=None,
                 attempts=attempt,
                 elapsed_s=elapsed,
                 source="live",
-                report_effective_utc=report_effective_utc,
+                edition_effective_utc=edition_effective_utc(date, edition),
+                source_last_modified_utc=source_last_modified_utc,
                 fetched_at_utc=fetched_at_utc,
                 raw_bytes=len(resp.content),
-                raw_text=_extract_text(resp.content),
+                raw_text=text,
             )
 
         if _is_s3_absent(resp.status_code, resp.content):
@@ -211,18 +312,22 @@ def fetch_edition(
                 url=url,
                 status="absent",
                 http_status=resp.status_code,
+                absent_is_provisional=True,
+                classification_note=_ABSENT_CLASSIFICATION_NOTE,
                 rows=None,
                 error_type=None,
                 error_message=None,
                 attempts=attempt,
                 elapsed_s=elapsed,
                 source="live",
-                report_effective_utc=None,
+                edition_effective_utc=None,
+                source_last_modified_utc=None,
                 fetched_at_utc=fetched_at_utc,
                 raw_bytes=len(resp.content),
                 raw_text=None,
             )
 
+        last_http_status = resp.status_code
         last_exc = RuntimeError(f"HTTP {resp.status_code}")
         if attempt < attempts:
             time.sleep(pause * attempt)
@@ -233,14 +338,17 @@ def fetch_edition(
         edition=edition,
         url=url,
         status="failed",
-        http_status=getattr(last_exc, "response", None) and last_exc.response.status_code or None,
+        http_status=last_http_status,
+        absent_is_provisional=False,
+        classification_note=None,
         rows=None,
         error_type=type(last_exc).__name__ if last_exc else None,
         error_message=str(last_exc) if last_exc else None,
         attempts=attempts,
         elapsed_s=elapsed,
         source="live",
-        report_effective_utc=None,
+        edition_effective_utc=None,
+        source_last_modified_utc=None,
         fetched_at_utc=fetched_at_utc,
         raw_bytes=None,
         raw_text=None,
@@ -265,6 +373,12 @@ _PLAYER_RE = re.compile(
     rf"\s+({_STATUS_ALT})\b"
 )
 _STATUS_WORD_RE = re.compile(rf"\b(?:{_STATUS_ALT})\b")
+# A hyphen glued to a word with no preceding space, immediately before a player-name
+# anchor, suggests a hyphenated surname whose prefix was split onto its own PDF
+# extraction line and lost (e.g. 'Caldwell-' / 'Pope,' -> row parses as 'Pope, Kentavious').
+# Heuristic only: it flags a row as SUSPECT, it does not correct the name and it will
+# miss any truncation that doesn't leave a dangling hyphen fragment next to the anchor.
+_TRUNCATION_PREFIX_RE = re.compile(r"\w-\s*$")
 
 
 @dataclass(frozen=True)
@@ -276,7 +390,7 @@ class AvailabilityRow:
     player_name: str
     status: str
     reason: str
-    report_effective_utc: str | None
+    edition_effective_utc: str | None
     source_url: str
 
 
@@ -285,12 +399,13 @@ class ParseSummary:
     pages: int
     rows_parsed: int
     unparseable_lines: int
+    suspected_truncated_names: int
 
 
 def parse_edition_text(
     text: str,
     *,
-    report_effective_utc: str | None = None,
+    edition_effective_utc: str | None = None,
     source_url: str = "",
     pages: int = 0,
     known_teams: tuple[str, ...] = NBA_TEAM_NAMES,
@@ -298,7 +413,7 @@ def parse_edition_text(
     """Extract player-status rows from PDF-extracted text.
 
     `status` and `reason` are copied verbatim from the source — never mapped to a
-    diagnosis, severity, or risk value. Rows carry provenance (report_effective_utc,
+    diagnosis, severity, or risk value. Rows carry provenance (edition_effective_utc,
     source_url) so downstream consumers can trace every row back to its snapshot.
     """
     blob = re.sub(r"\s+", " ", text).strip()
@@ -348,12 +463,20 @@ def parse_edition_text(
                     player_name=f"{last}, {first}",
                     status=status,
                     reason=reason,
-                    report_effective_utc=report_effective_utc,
+                    edition_effective_utc=edition_effective_utc,
                     source_url=source_url,
                 )
             )
 
     total_status_words = len(_STATUS_WORD_RE.findall(blob))
     unparseable = max(total_status_words - len(rows), 0)
-    summary = ParseSummary(pages=pages, rows_parsed=len(rows), unparseable_lines=unparseable)
+    suspected_truncated_names = sum(
+        1 for m in player_matches if _TRUNCATION_PREFIX_RE.search(blob[: m.start()])
+    )
+    summary = ParseSummary(
+        pages=pages,
+        rows_parsed=len(rows),
+        unparseable_lines=unparseable,
+        suspected_truncated_names=suspected_truncated_names,
+    )
     return rows, summary

@@ -38,6 +38,13 @@ DEFAULT_DATES = ("2025-12-19", "2024-03-10", "2022-01-10")
 DEFAULT_EDITIONS = ("05PM", "08PM")
 EXAMPLE_CAP = 10
 
+_ABSENT_CAVEAT = (
+    "edition(s) classified absent — this is PROVISIONAL (S3 403 AccessDenied cannot "
+    "distinguish 'never published' from 'access now restricted'). A sudden jump from "
+    "mostly-ok to mostly-absent should be treated as a possible access change, not an "
+    "archive fact."
+)
+
 
 @dataclass(frozen=True)
 class IdentityMatch:
@@ -118,7 +125,7 @@ def run(
             if outcome.status == "ok" and outcome.raw_text:
                 rows, summary = parse_edition_text(
                     outcome.raw_text,
-                    report_effective_utc=outcome.report_effective_utc,
+                    edition_effective_utc=outcome.edition_effective_utc,
                     source_url=outcome.url,
                     pages=0,
                 )
@@ -126,6 +133,7 @@ def run(
                 parse_summaries[(date, edition)] = {
                     "rows_parsed": summary.rows_parsed,
                     "unparseable_lines": summary.unparseable_lines,
+                    "suspected_truncated_names": summary.suspected_truncated_names,
                 }
 
     matches = _match_identities(all_rows, players, teams)
@@ -145,10 +153,13 @@ def run(
                 "edition": o.edition,
                 "status": o.status,
                 "http_status": o.http_status,
+                "absent_is_provisional": o.absent_is_provisional,
+                "classification_note": o.classification_note,
                 "attempts": o.attempts,
                 "elapsed_s": round(o.elapsed_s, 3),
                 "source": o.source,
-                "report_effective_utc": o.report_effective_utc,
+                "edition_effective_utc": o.edition_effective_utc,
+                "source_last_modified_utc": o.source_last_modified_utc,
                 "fetched_at_utc": o.fetched_at_utc,
             }
             for o in outcomes
@@ -164,7 +175,11 @@ def run(
                 m.row.player_name for m in matches if m.player_match == "ambiguous"
             ][:EXAMPLE_CAP],
         },
-        "archive_limitation": {"absent": absent_editions, "failed": failed_editions},
+        "archive_limitation": {
+            "absent": absent_editions,
+            "failed": failed_editions,
+            "absent_caveat": _ABSENT_CAVEAT if absent_editions else None,
+        },
     }
 
     if as_json:
@@ -175,12 +190,20 @@ def run(
             print(
                 f"  {o.date} {o.edition:6} status={o.status:6} http={o.http_status} "
                 f"attempts={o.attempts} elapsed={o.elapsed_s:.2f}s source={o.source} "
-                f"report_effective_utc={o.report_effective_utc} fetched_at_utc={o.fetched_at_utc}"
+                f"edition_effective_utc={o.edition_effective_utc} "
+                f"source_last_modified_utc={o.source_last_modified_utc} "
+                f"fetched_at_utc={o.fetched_at_utc}"
             )
+        if absent_editions:
+            print(f"\n  CAVEAT: {len(absent_editions)} {_ABSENT_CAVEAT}")
 
         print("\n=== parsed row counts ===")
         for key, v in parse_summaries.items():
-            print(f"  {key[0]} {key[1]:6} rows_parsed={v['rows_parsed']} unparseable_lines={v['unparseable_lines']}")
+            print(
+                f"  {key[0]} {key[1]:6} rows_parsed={v['rows_parsed']} "
+                f"unparseable_lines={v['unparseable_lines']} "
+                f"suspected_truncated_names={v['suspected_truncated_names']}"
+            )
 
         print("\n=== identity matching ===")
         print(f"  player: {dict(player_counts)}")
