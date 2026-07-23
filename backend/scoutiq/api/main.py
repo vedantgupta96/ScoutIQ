@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from scoutiq.api.routers import (
     backtest,
+    decision_queue,
     free_agency,
     headshots,
     health,
@@ -68,3 +69,4 @@ app.include_router(simulator.router)
 app.include_router(backtest.router)
 app.include_router(strategy.router)
 app.include_router(llm_eval.router)
+app.include_router(decision_queue.router)
