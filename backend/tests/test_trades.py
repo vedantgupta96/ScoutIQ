@@ -230,3 +230,41 @@ def test_trade_endpoint_unavailable_value_degrades(monkeypatch):
     body = response.json()
     assert body["team_a"]["value"]["sent_coverage"] == 0
     assert body["team_b"]["value"]["received_coverage"] == 0
+
+
+def test_trade_response_surfaces_cap_reference_and_default_scenario(monkeypatch):
+    body = _trade_response(monkeypatch).json()
+    assert body["surplus_scenario"] == "committed"
+    assert body["cap_reference"] == {
+        "season": "2026-27", "salary_cap_usd": 160_000_000, "is_projected": True,
+    }
+
+
+def test_compliant_trade_has_no_review_reasons(monkeypatch):
+    body = _trade_response(monkeypatch).json()
+    assert body["overall_status"] == "modeled-compliant"
+    assert body["review_reasons"] == []
+
+
+def test_noncompliant_trade_lists_the_actual_trigger(monkeypatch):
+    body = _trade_response(monkeypatch, salary_a=5_000_000, salary_b=20_000_000).json()
+    assert body["overall_status"] == "modeled-noncompliant"
+    # The exact salary reason is surfaced, team-prefixed — not a generic possibilities list.
+    assert body["review_reasons"]
+    assert any(":" in reason for reason in body["review_reasons"])
+
+
+def test_surplus_scenario_is_rejected_when_invalid(monkeypatch):
+    cap = SeasonCapData("2026-27", 160_000_000, 190_000_000, 200_000_000, 210_000_000,
+                        is_projected=True)
+    monkeypatch.setattr(trades_router, "load_season_caps", lambda db: {cap.season: cap})
+    monkeypatch.setattr(trades_router, "cap_for", lambda season, caps: cap)
+    app.dependency_overrides[get_db] = lambda: _NoContractsDB()
+    try:
+        response = TestClient(app).post("/trades/analyze", json={
+            "season": "2026-27", "team_a_id": 1, "team_b_id": 2,
+            "team_a_sends": [10], "team_b_sends": [20], "surplus_scenario": "bogus",
+        })
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422

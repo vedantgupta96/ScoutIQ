@@ -277,8 +277,36 @@ def roster_count_legality(
 
 SURPLUS_CAVEAT = (
     "Contract surplus holds the player's latest model value flat across remaining years "
-    "(aging not modeled) and prices each year against actual or projected cap constants."
+    "(aging not modeled) and prices each year against actual or projected cap constants. "
+    "The default 'committed' scenario counts only fully guaranteed years; option and "
+    "non-guaranteed years are shown separately as an upside/downside 'all years' scenario, "
+    "never silently valued as committed money."
 )
+
+SURPLUS_SCENARIOS = ("committed", "all")
+
+# Contract-year status vocabulary. Exactly one applies per year; `guaranteed` is the only
+# status counted under the committed scenario (see docs/11 for the inclusion policy).
+YEAR_STATUS_GUARANTEED = "guaranteed"
+YEAR_STATUS_PLAYER_OPTION = "player_option"
+YEAR_STATUS_TEAM_OPTION = "team_option"
+YEAR_STATUS_NON_GUARANTEED = "non_guaranteed"
+
+
+def contract_year_status(year: ContractYear) -> str:
+    """Classify one contract season into a single inclusion status.
+
+    Options are never 'committed' even when they carry guaranteed money (that money is
+    only owed if the option is exercised), so options and explicit non-guarantees are
+    checked before the guaranteed flag.
+    """
+    if year.is_player_option:
+        return YEAR_STATUS_PLAYER_OPTION
+    if year.is_team_option:
+        return YEAR_STATUS_TEAM_OPTION
+    if not year.is_guaranteed:
+        return YEAR_STATUS_NON_GUARANTEED
+    return YEAR_STATUS_GUARANTEED
 
 
 @dataclass(frozen=True)
@@ -288,15 +316,22 @@ class SurplusYear:
     cap_hit_pct: float
     value_pct: float | None
     surplus_pct: float | None
+    discount_factor: float          # team-state factor applied to this year
     discounted_surplus_usd: int | None
+    status: str                     # guaranteed | player_option | team_option | non_guaranteed
+    committed: bool                 # counts under the committed-years-only scenario
 
 
 @dataclass(frozen=True)
 class ContractSurplus:
     player_id: int
     years: list[SurplusYear]
-    total_surplus_usd: int
-    expiring: bool              # one guaranteed year or fewer remaining
+    total_surplus_usd: int              # under the selected scenario
+    total_surplus_committed_usd: int    # guaranteed years only
+    total_surplus_all_usd: int          # every listed year
+    scenario: str                       # committed | all
+    expiring: bool                      # one guaranteed year or fewer remaining
+    has_uncertain_years: bool           # any option/non-guaranteed year present
 
 
 def remaining_contract_surplus(
@@ -307,15 +342,21 @@ def remaining_contract_surplus(
     *,
     from_season: str,
     team_state: str = "neutral",
+    scenario: str = "committed",
 ) -> dict[int, ContractSurplus]:
     """Per player: Σ over remaining contract seasons of (model value − cap hit).
 
     Value is the player's latest production-implied value, held flat (stated caveat);
-    future seasons are discounted at the team-state rate. Players without a loaded
+    future seasons are discounted at the team-state rate. Two totals are always computed:
+    ``committed`` (fully guaranteed years only) and ``all`` (every listed year). The
+    reported ``total_surplus_usd`` follows ``scenario`` so callers that drive the balance
+    meter and grades stay consistent with what the UI shows. Players without a loaded
     contract are absent from the result — callers degrade like they do for valuations.
     """
     if not player_ids:
         return {}
+    if scenario not in SURPLUS_SCENARIOS:
+        scenario = "committed"
     rows = db.execute(
         select(ContractYear, Contract.player_id)
         .join(Contract, Contract.id == ContractYear.contract_id)
@@ -332,8 +373,10 @@ def remaining_contract_surplus(
     for player_id, year_rows in by_player.items():
         value_pct = value_pct_by_player.get(player_id)
         years: list[SurplusYear] = []
-        total = 0
+        committed_total = 0
+        all_total = 0
         guaranteed_remaining = 0
+        has_uncertain = False
         for offset, year_row in enumerate(year_rows):
             cap = season_caps.get(year_row.season)
             salary_cap = cap.salary_cap if cap else None
@@ -344,30 +387,45 @@ def remaining_contract_surplus(
                 hit_usd = int(round(hit_pct / 100 * salary_cap))
             else:
                 continue
-            if year_row.is_guaranteed:
+            status = contract_year_status(year_row)
+            committed = status == YEAR_STATUS_GUARANTEED
+            if committed:
                 guaranteed_remaining += 1
+            else:
+                has_uncertain = True
+            factor = discount_factor(team_state, offset)
             surplus_pct = round(value_pct - hit_pct, 2) if value_pct is not None else None
             discounted_usd = (
-                int(round(surplus_pct / 100 * salary_cap * discount_factor(team_state, offset)))
+                int(round(surplus_pct / 100 * salary_cap * factor))
                 if (surplus_pct is not None and salary_cap)
                 else None
             )
             if discounted_usd is not None:
-                total += discounted_usd
+                all_total += discounted_usd
+                if committed:
+                    committed_total += discounted_usd
             years.append(SurplusYear(
                 season=year_row.season,
                 cap_hit_usd=hit_usd,
                 cap_hit_pct=hit_pct,
                 value_pct=value_pct,
                 surplus_pct=surplus_pct,
+                discount_factor=round(factor, 4),
                 discounted_surplus_usd=discounted_usd,
+                status=status,
+                committed=committed,
             ))
         if years:
+            total = committed_total if scenario == "committed" else all_total
             results[player_id] = ContractSurplus(
                 player_id=player_id,
                 years=years,
                 total_surplus_usd=total,
+                total_surplus_committed_usd=committed_total,
+                total_surplus_all_usd=all_total,
+                scenario=scenario,
                 expiring=guaranteed_remaining <= 1,
+                has_uncertain_years=has_uncertain,
             )
     return results
 

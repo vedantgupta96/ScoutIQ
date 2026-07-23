@@ -1082,6 +1082,8 @@ export interface TradeRequest {
   team_a_sends: number[]; team_b_sends: number[];
   team_a_sends_picks?: number[]; team_b_sends_picks?: number[];
   team_a_state?: TradeTeamState; team_b_state?: TradeTeamState;
+  /** Contract-year inclusion scenario for surplus: "committed" (default) or "all". */
+  surplus_scenario?: 'committed' | 'all';
   /** Optional expected-pick-number overrides keyed by draft_picks.id. */
   expected_picks?: Record<number, number>;
 }
@@ -1103,10 +1105,31 @@ export interface TradeRosterLegality {
   standard_before: number; standard_after: number;
   net_change: number; two_way_count: number; reasons: string[];
 }
+export type ContractYearStatus = 'guaranteed' | 'player_option' | 'team_option' | 'non_guaranteed';
+export interface SurplusYearDetail {
+  season: string;
+  cap_hit_usd: number;
+  cap_hit_pct: number;
+  value_pct: number | null;
+  surplus_pct: number | null;
+  discount_factor: number;
+  discounted_surplus_usd: number | null;
+  status: ContractYearStatus;
+  committed: boolean;
+}
+export interface SurplusPlayerDetail {
+  total_surplus_usd: number;            // under the selected scenario
+  total_surplus_committed_usd: number;  // guaranteed years only
+  total_surplus_all_usd: number;        // every listed year
+  scenario: 'committed' | 'all';
+  has_uncertain_years: boolean;
+  expiring: boolean;
+  years: SurplusYearDetail[];
+}
 export interface TradeAssetLedger {
   player_surplus_sent_usd: number; player_surplus_received_usd: number;
   player_surplus_coverage_sent: number; player_surplus_coverage_received: number;
-  players_detail: Record<string, { total_surplus_usd: number; expiring: boolean; years: unknown[] }>;
+  players_detail: Record<string, SurplusPlayerDetail>;
   picks_sent_usd: number; picks_received_usd: number; net_usd: number;
 }
 export interface TradeCapContext { salary_cap: number; tax_line: number; first_apron: number; second_apron: number }
@@ -1145,7 +1168,9 @@ export interface TradeBalance {
   coverage: { a_valued: number; a_selected: number; b_valued: number; b_selected: number };
   reasons: string[];
 }
-export interface TradeResponse { season: string; role_season: string; is_projected_cap: boolean; overall_status: string; overall_label: string; summary: string; balance: TradeBalance; team_a: TradeTeamAnalysis; team_b: TradeTeamAnalysis; assumptions: string[]; not_modeled: string[] }
+export type SurplusScenario = 'committed' | 'all';
+export interface TradeCapReference { season: string; salary_cap_usd: number; is_projected: boolean }
+export interface TradeResponse { season: string; role_season: string; is_projected_cap: boolean; overall_status: string; overall_label: string; summary: string; review_reasons: string[]; surplus_scenario: SurplusScenario; cap_reference: TradeCapReference; balance: TradeBalance; team_a: TradeTeamAnalysis; team_b: TradeTeamAnalysis; assumptions: string[]; not_modeled: string[] }
 export function getTradeWorkspace(teamId: number, season: string, signal?: AbortSignal): Promise<TradeTeamWorkspace> {
   return apiFetch<TradeTeamWorkspace>(`/trades/teams/${teamId}/workspace${queryString({ season })}`, { signal });
 }

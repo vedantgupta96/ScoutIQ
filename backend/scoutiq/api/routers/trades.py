@@ -22,6 +22,7 @@ from scoutiq.api.trade_assets import (
     trade_balance,
     upcoming_draft_year,
     SURPLUS_CAVEAT,
+    SURPLUS_SCENARIOS,
     TEAM_STATES,
     evaluate_pick_legality,
     remaining_contract_surplus,
@@ -60,6 +61,9 @@ class TradeRequest(BaseModel):
     # Team-state lens: explicit time-discount posture per side.
     team_a_state: str = "neutral"
     team_b_state: str = "neutral"
+    # Contract-year inclusion scenario for surplus: "committed" (guaranteed years only,
+    # the honest default) or "all" (every listed year, options included as upside/downside).
+    surplus_scenario: str = "committed"
     # Optional expected-pick-number overrides keyed by draft_picks.id.
     expected_picks: dict[int, int] = Field(default_factory=dict)
 
@@ -82,6 +86,8 @@ class TradeRequest(BaseModel):
         for state in (self.team_a_state, self.team_b_state):
             if state not in TEAM_STATES:
                 raise ValueError(f"team state must be one of {TEAM_STATES}")
+        if self.surplus_scenario not in SURPLUS_SCENARIOS:
+            raise ValueError(f"surplus_scenario must be one of {SURPLUS_SCENARIOS}")
         for expected in self.expected_picks.values():
             if not 1 <= expected <= 60:
                 raise ValueError("expected pick numbers must be between 1 and 60")
@@ -490,6 +496,10 @@ def _asset_ledger(
         "players_detail": {
             str(pid): {
                 "total_surplus_usd": entry.total_surplus_usd,
+                "total_surplus_committed_usd": entry.total_surplus_committed_usd,
+                "total_surplus_all_usd": entry.total_surplus_all_usd,
+                "scenario": entry.scenario,
+                "has_uncertain_years": entry.has_uncertain_years,
                 "expiring": entry.expiring,
                 "years": [year.__dict__ for year in entry.years],
             }
@@ -535,6 +545,38 @@ def _escalate_status(salary_status: str, *statuses: str | None) -> str:
     return salary_status
 
 
+def _review_reasons(a: dict, b: dict, legality_a, legality_b) -> list[str]:
+    """The actual triggers behind a fail / needs-review verdict, team-prefixed.
+
+    Replaces the generic "a CBA path, a pick protection, or a roster adjustment" list with
+    the specific reason(s) that actually fired, so a user can see *why* review is needed
+    (e.g. a team left with ~17 standard contracts) rather than a menu of possibilities.
+    """
+    reasons: list[str] = []
+
+    def _abbr(side: dict) -> str:
+        team = side["team"]
+        return getattr(team, "abbreviation", None) or getattr(team, "name", "") or "Team"
+
+    def _collect(side: dict, legality) -> None:
+        abbr = _abbr(side)
+        sm = side["salary_match"]
+        if sm["status"] in ("fail", "needs-review"):
+            for reason in sm["reasons"]:
+                reasons.append(f"{abbr}: {reason}")
+        rl = side["roster_legality"]
+        if rl["status"] == "needs-review":
+            for reason in rl["reasons"]:
+                reasons.append(f"{abbr}: {reason}")
+        if legality and legality.status in ("fail", "needs-review"):
+            for reason in legality.reasons:
+                reasons.append(f"{abbr}: {reason}")
+
+    _collect(a, legality_a)
+    _collect(b, legality_b)
+    return reasons
+
+
 @router.post("/analyze")
 def analyze_trade(req: TradeRequest, db: DB = None):
     cap = cap_for(req.season, load_season_caps(db))
@@ -558,11 +600,11 @@ def analyze_trade(req: TradeRequest, db: DB = None):
     season_caps = {c.season: c for c in build_season_sequence(req.season, 6, load_season_caps(db))}
     surplus_a = remaining_contract_surplus(
         db, sorted(all_players), values, season_caps,
-        from_season=req.season, team_state=req.team_a_state,
+        from_season=req.season, team_state=req.team_a_state, scenario=req.surplus_scenario,
     )
     surplus_b = remaining_contract_surplus(
         db, sorted(all_players), values, season_caps,
-        from_season=req.season, team_state=req.team_b_state,
+        from_season=req.season, team_state=req.team_b_state, scenario=req.surplus_scenario,
     )
 
     def assets_for(picks: list[DraftPick], state: str) -> list[TradePickAsset]:
@@ -607,6 +649,7 @@ def analyze_trade(req: TradeRequest, db: DB = None):
         a["roster_legality"]["status"],
         b["roster_legality"]["status"],
     )
+    review_reasons = _review_reasons(a, b, legality_a, legality_b)
     summary = {
         "modeled-compliant": "Both teams fit at least one modeled salary-matching path.",
         "modeled-noncompliant": "At least one team fails a modeled salary or pick-legality rule.",
@@ -620,6 +663,13 @@ def analyze_trade(req: TradeRequest, db: DB = None):
         "overall_status": status,
         "overall_label": _label(status),
         "summary": summary,
+        "review_reasons": review_reasons,
+        "surplus_scenario": req.surplus_scenario,
+        "cap_reference": {
+            "season": cap.season,
+            "salary_cap_usd": cap.salary_cap,
+            "is_projected": cap.is_projected,
+        },
         "balance": balance.__dict__,
         "team_a": a,
         "team_b": b,

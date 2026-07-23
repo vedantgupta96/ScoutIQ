@@ -5486,6 +5486,71 @@ textarea::placeholder {
   border-top: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-muted);
 }
 
+/* Contract-year scenario toggle + plain-language legend for the Exchange (issue #117). */
+.siq-exchange__head { flex-wrap: wrap; }
+.siq-scenario-toggle {
+  margin-left: auto; display: inline-flex; gap: 2px; padding: 2px;
+  border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-inset);
+}
+.siq-scenario-btn {
+  appearance: none; border: none; background: transparent; cursor: pointer;
+  padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  color: var(--text-muted); transition: background 140ms ease, color 140ms ease;
+}
+.siq-scenario-btn:hover:not(:disabled) { color: var(--text-secondary); }
+.siq-scenario-btn.is-active { background: var(--bg-panel); color: var(--text-primary); box-shadow: var(--shadow-xs, 0 1px 2px rgba(0,0,0,0.08)); }
+.siq-scenario-btn:disabled { cursor: default; opacity: 0.6; }
+.siq-exchange__legend {
+  display: flex; gap: 8px; align-items: flex-start; margin: 0;
+  padding: 9px 11px; border-radius: 7px; background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+}
+.siq-exchange__legend svg { flex: none; margin-top: 2px; color: var(--text-muted); }
+
+/* Expandable per-player contract-surplus breakdown. */
+.siq-exchange-side { min-width: 0; }
+.siq-exchange-list, .siq-exchange-row { min-width: 0; }
+.siq-exchange-row .siq-surplus-toggle { grid-column: 1 / -1; min-width: 0; }
+.siq-surplus-toggle > summary {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px;
+  cursor: pointer; list-style: none; border-radius: 6px;
+}
+.siq-surplus-toggle > summary::-webkit-details-marker { display: none; }
+.siq-surplus-toggle > summary:hover .siq-surplus-chevron { color: var(--text-secondary); }
+.siq-surplus-toggle > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.siq-surplus-chevron { color: var(--text-muted); transition: transform 160ms ease, color 140ms ease; }
+.siq-surplus-toggle[open] > summary .siq-surplus-chevron { transform: rotate(180deg); }
+.siq-surplus-flag { color: var(--warning-text); font-weight: 700; margin-left: 2px; }
+.siq-surplus-breakdown { padding: 8px 0 4px; display: grid; gap: 6px; min-width: 0; }
+.siq-surplus-table-wrap { overflow-x: auto; min-width: 0; }
+.siq-surplus-table {
+  width: max-content; min-width: 100%; border-collapse: collapse; font-size: 10.5px; white-space: nowrap;
+}
+.siq-surplus-table th {
+  text-align: right; font-weight: 600; color: var(--text-muted); font-size: 9px;
+  text-transform: uppercase; letter-spacing: 0.02em; padding: 3px 5px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.siq-surplus-table th.siq-surplus-th-season, .siq-surplus-table td.siq-surplus-td-season { text-align: left; }
+.siq-surplus-table td { text-align: right; padding: 3px 5px; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); }
+.siq-surplus-table td small { display: block; color: var(--text-muted); font-size: 9px; }
+.siq-surplus-td-season { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.siq-surplus-table tr.is-uncertain td { color: var(--text-muted); }
+.siq-surplus-table tfoot td { font-weight: 700; color: var(--text-primary); border-bottom: none; padding-top: 6px; }
+.siq-surplus-table tfoot td:first-child { text-transform: uppercase; font-size: 9px; letter-spacing: 0.02em; color: var(--text-muted); font-weight: 600; }
+.siq-year-status {
+  font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+  padding: 1px 5px; border-radius: 999px; border: 1px solid var(--border-subtle);
+}
+.siq-year-status--committed { color: var(--text-muted); }
+.siq-year-status--uncertain { color: var(--warning-text); border-color: color-mix(in srgb, var(--warning) 40%, var(--border-subtle)); }
+
+/* Exact needs-review reasons + cap provenance in the verdict. */
+.siq-trade-review-reasons { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 5px; }
+.siq-trade-review-reasons li { display: flex; gap: 7px; align-items: flex-start; font-size: 12.5px; color: var(--text-secondary); }
+.siq-trade-review-reasons svg { flex: none; margin-top: 2px; color: var(--warning-text); }
+.siq-trade-cap-ref { margin: 8px 0 0; }
+
 /* Consequence flag chips + roster-fit shift inside the slim Impact panel. */
 .siq-trade-flags { display: flex; flex-wrap: wrap; gap: 8px; }
 .siq-flag-chip {
