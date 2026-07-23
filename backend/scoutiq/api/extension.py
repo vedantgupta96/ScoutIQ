@@ -90,6 +90,38 @@ def extension_verdict(value_pct: float, current_pay_pct: float | None) -> tuple[
     return verdict, tone, rationale, gap_pct
 
 
+def _extension_eligibility(
+    year_rows: list[ContractYear],
+) -> tuple[bool, str | None, float | None, str | None]:
+    """(eligible, ineligible_reason, current_pay_pct, final_contract_season) from a contract's
+    year rows. Eligible requires a guaranteed (non-option) year after LATEST_SEASON;
+    current_pay_pct is that year's cap_pct (Decimal-coerced). Shared by decide_extension and
+    batch_extension_summaries so the two rules cannot diverge."""
+    all_seasons = [row.season for row in year_rows]
+    final_contract_season = max(all_seasons) if all_seasons else None
+    remaining = [row for row in year_rows if row.season > LATEST_SEASON]
+    guaranteed_remaining = [row for row in remaining if not (row.is_player_option or row.is_team_option)]
+
+    if not remaining:
+        return False, (
+            "No contract years remain after the current season (impending free agent — "
+            "see the Free Agency board)."
+        ), None, final_contract_season
+
+    if not guaranteed_remaining:
+        return False, (
+            "Only option years remain; handled as an option decision, not an extension."
+        ), None, final_contract_season
+
+    last_guaranteed = guaranteed_remaining[-1]
+    current_pay_pct = None
+    if last_guaranteed.cap_pct is not None:
+        # cap_pct is a SQLAlchemy Numeric → Decimal on live rows; coerce so it can be
+        # arithmetic-combined with the float value_pct below (documented Decimal gotcha).
+        current_pay_pct = round(float(last_guaranteed.cap_pct) * 100, 2)
+    return True, None, current_pay_pct, final_contract_season
+
+
 def decide_extension(db, player_id: int) -> ExtensionDecision:
     """Load the player's current contract and recommend an extend/wait/decline stance."""
     player = db.get(Player, player_id)
@@ -111,11 +143,8 @@ def decide_extension(db, player_id: int) -> ExtensionDecision:
         .order_by(ContractYear.season)
     ).all()
 
-    all_seasons = [row.season for row in year_rows]
-    final_contract_season = max(all_seasons) if all_seasons else None
+    eligible, ineligible_reason, current_pay_pct, final_contract_season = _extension_eligibility(year_rows)
     entering = next_season(final_contract_season) if final_contract_season else None
-
-    remaining = [row for row in year_rows if row.season > LATEST_SEASON]
 
     try:
         valuation, features, attribution = value_player_detail(db, player_id, LATEST_SEASON)
@@ -124,51 +153,13 @@ def decide_extension(db, player_id: int) -> ExtensionDecision:
         value_pct = value_lo_pct = value_hi_pct = None
         attribution = None
 
-    current_pay_pct = None
-    guaranteed_remaining = [row for row in remaining if not (row.is_player_option or row.is_team_option)]
-    if guaranteed_remaining:
-        last_guaranteed = guaranteed_remaining[-1]
-        if last_guaranteed.cap_pct is not None:
-            # cap_pct is a SQLAlchemy Numeric → Decimal on live rows; coerce so it can be
-            # arithmetic-combined with the float value_pct below (documented Decimal gotcha).
-            current_pay_pct = round(float(last_guaranteed.cap_pct) * 100, 2)
-
     trajectory_note = _trajectory_note(attribution)
 
-    if not remaining:
+    if not eligible:
         return ExtensionDecision(
             player_id=player_id,
             eligible=False,
-            ineligible_reason=(
-                "No contract years remain after the current season (impending free agent — "
-                "see the Free Agency board)."
-            ),
-            value_season=LATEST_SEASON,
-            value_pct=value_pct,
-            value_lo_pct=value_lo_pct,
-            value_hi_pct=value_hi_pct,
-            current_pay_pct=current_pay_pct,
-            final_contract_season=final_contract_season,
-            entering_season=entering,
-            projected_aav_usd=None,
-            projected_aav_lo_usd=None,
-            projected_aav_hi_usd=None,
-            projected_cap_usd=None,
-            gap_pct=None,
-            verdict="Not extension-eligible",
-            tone="neutral",
-            rationale="Not extension-eligible.",
-            trajectory_note=trajectory_note,
-            caveat=CAVEAT,
-        )
-
-    if not guaranteed_remaining:
-        return ExtensionDecision(
-            player_id=player_id,
-            eligible=False,
-            ineligible_reason=(
-                "Only option years remain; handled as an option decision, not an extension."
-            ),
+            ineligible_reason=ineligible_reason,
             value_season=LATEST_SEASON,
             value_pct=value_pct,
             value_lo_pct=value_lo_pct,
@@ -338,3 +329,76 @@ def rank_extension_candidates(db, *, limit: int = 30) -> list[ExtensionCandidate
 
     candidates.sort(key=lambda c: c.gap_pct, reverse=True)
     return candidates[:limit]
+
+
+@dataclass
+class ExtensionSummary:
+    player_id: int
+    eligible: bool
+    has_model_value: bool
+    value_pct: float | None
+    current_pay_pct: float | None
+    gap_pct: float | None
+    verdict: str | None
+    tone: str | None
+    final_contract_season: str | None
+
+
+def batch_extension_summaries(db, player_ids: list[int]) -> dict[int, ExtensionSummary]:
+    """Batched extension eligibility + verdict for a whole roster: one contracts query, one
+    contract-years query, and one value_players call for the eligible subset — no per-player
+    round trips. Eligibility and current_pay_pct use _extension_eligibility, the same rule
+    decide_extension applies, so the two cannot diverge. A missing model artifact degrades
+    every player to has_model_value=False rather than raising (ADR-0001); eligibility and pay
+    are contract facts and stay populated regardless."""
+    if not player_ids:
+        return {}
+
+    contracts = db.scalars(
+        select(Contract)
+        .where(Contract.player_id.in_(player_ids))
+        .distinct(Contract.player_id)
+        .order_by(Contract.player_id, desc(Contract.season_start), desc(Contract.scraped_at))
+    ).all()
+    contract_by_player = {c.player_id: c for c in contracts}
+    if not contract_by_player:
+        return {}
+
+    years_by_contract: dict[int, list[ContractYear]] = {}
+    for cy in db.scalars(
+        select(ContractYear)
+        .where(ContractYear.contract_id.in_([c.id for c in contracts]))
+        .order_by(ContractYear.contract_id, ContractYear.season)
+    ).all():
+        years_by_contract.setdefault(cy.contract_id, []).append(cy)
+
+    eligibility_by_player = {
+        player_id: _extension_eligibility(years_by_contract.get(contract.id, []))
+        for player_id, contract in contract_by_player.items()
+    }
+    eligible_ids = [pid for pid, elig in eligibility_by_player.items() if elig[0]]
+
+    try:
+        valuations = value_players(db, [(pid, LATEST_SEASON) for pid in eligible_ids])
+    except FileNotFoundError:
+        valuations = {}
+
+    summaries: dict[int, ExtensionSummary] = {}
+    for player_id, (eligible, _reason, current_pay_pct, final_contract_season) in eligibility_by_player.items():
+        val = valuations.get((player_id, LATEST_SEASON))
+        has_model_value = val is not None
+        verdict = tone = gap_pct = None
+        if eligible and has_model_value:
+            verdict, tone, _rationale, gap_pct = extension_verdict(val.value_pct, current_pay_pct)
+        summaries[player_id] = ExtensionSummary(
+            player_id=player_id,
+            eligible=eligible,
+            has_model_value=has_model_value,
+            value_pct=round(val.value_pct, 2) if val is not None else None,
+            current_pay_pct=current_pay_pct,
+            gap_pct=gap_pct,
+            verdict=verdict,
+            tone=tone,
+            final_contract_season=final_contract_season,
+        )
+    return summaries

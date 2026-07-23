@@ -53,7 +53,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if ((init?.method ?? 'GET') !== 'GET') return requestJson<T>(path, init);
 
   const cached = getCache.get(path);
@@ -64,9 +64,9 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
-type QueryValue = string | number | boolean | null | undefined;
+export type QueryValue = string | number | boolean | null | undefined;
 
-function queryString(params: Record<string, QueryValue>): string {
+export function queryString(params: Record<string, QueryValue>): string {
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value == null || value === '') continue;

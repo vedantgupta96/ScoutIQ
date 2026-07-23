@@ -1,24 +1,34 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowUpRight, Target, TrendingDown, TrendingUp, TriangleAlert } from 'lucide-react';
+import { ListChecks, Target, TrendingDown, TrendingUp, TriangleAlert } from 'lucide-react';
 import {
   BacktestResponse,
   PlayerCardResponse,
   PlayerValuationCautionsResponse,
   PlayerWatchlistResponse,
+  TeamListItem,
   getBacktest,
   getPlayerValuationCautions,
   getPlayerWatchlist,
+  getTeams,
 } from '@/lib/api';
+import { DecisionQueueResponse, QueueItem, getDecisionQueue } from '@/lib/decisionQueueApi';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
-import { ButtonLink } from '@/components/ui/Button';
+import { Button } from '@/components/ui/Button';
 import { Panel } from '@/components/ui/Panel';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { fmtPct, signed } from '@/lib/utils';
+import { Select } from '@/components/ui/Select';
+import { Alert } from '@/components/ui/Alert';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingNote } from '@/components/ui/LoadingNote';
+import { fmtM, fmtPct, signed } from '@/lib/utils';
 import { useApi } from '@/lib/useApi';
+
+const TEAM_STORAGE_KEY = 'siq-home-team-id:v1';
 
 function gapText(gap: number): string {
   return `${signed(gap)}%`;
@@ -57,9 +67,132 @@ function MoverSkeletons() {
   );
 }
 
-export default function Home() {
+const PRIORITY_BADGE: Record<QueueItem['priority'], { label: string; tone: 'warning' | 'neutral'; variant: 'solid' | 'outline' }> = {
+  high: { label: 'High', tone: 'warning', variant: 'solid' },
+  medium: { label: 'Medium', tone: 'neutral', variant: 'solid' },
+  low: { label: 'Low', tone: 'neutral', variant: 'outline' },
+};
+
+function QueueItemRow({ item }: { item: QueueItem }) {
+  const badge = PRIORITY_BADGE[item.priority];
+  const hasFigures = item.value_pct != null || item.pay_pct != null || item.gap_pct != null
+    || item.value_usd != null || item.pay_usd != null;
+  return (
+    <Link href={item.destination} className="siq-queue-item">
+      <div className="siq-queue-item__head">
+        <Badge tone={badge.tone} variant={badge.variant} size="sm">{badge.label}</Badge>
+        <span className="siq-queue-item__title">{item.title}</span>
+      </div>
+      <p className="siq-queue-item__detail">{item.detail}</p>
+      {item.priority_reason !== item.detail && (
+        <p className="siq-queue-item__reason">{item.priority_reason}</p>
+      )}
+      {hasFigures && (
+        <div className="siq-queue-item__figures ds-tnum">
+          {item.value_pct != null && <span>Value {fmtPct(item.value_pct)}</span>}
+          {item.pay_pct != null && <span>Pay {fmtPct(item.pay_pct)}</span>}
+          {item.gap_pct != null && <span>Gap {gapText(item.gap_pct)}</span>}
+          {item.value_usd != null && <span className="siq-queue-item__usd">{fmtM(item.value_usd)} value</span>}
+          {item.pay_usd != null && <span className="siq-queue-item__usd">{fmtM(item.pay_usd)} pay</span>}
+        </div>
+      )}
+      {item.caution && (
+        <p className="siq-queue-item__caution"><TriangleAlert size={12} aria-hidden="true" />{item.caution}</p>
+      )}
+    </Link>
+  );
+}
+
+function DecisionQueuePanel({ teamId }: { teamId: number }) {
+  const [queueRetry, setQueueRetry] = useState(0);
+  const { data, loading, error } = useApi<DecisionQueueResponse>(
+    (signal) => getDecisionQueue(teamId, undefined, signal),
+    [teamId, queueRetry],
+    { fallback: 'Failed to load the decision queue.' },
+  );
+
+  if (error) {
+    return (
+      <Alert tone="negative">
+        {error} — is the FastAPI server running?{' '}
+        <Button size="sm" variant="secondary" onClick={() => setQueueRetry((value) => value + 1)}>Retry</Button>
+      </Alert>
+    );
+  }
+  if (loading || data == null || data.team_id !== teamId) {
+    return <LoadingNote>Loading the decision queue…</LoadingNote>;
+  }
+
+  const actionable = data.items.filter((item) => item.type !== 'cap_tier');
+
+  return (
+    <>
+      <p className="siq-queue-meta">{data.team_name ?? 'Team'} · {data.season} data</p>
+      {actionable.length === 0 && (
+        <EmptyState
+          title="No pending option, extension, or expiring-contract decisions."
+          description="The cap-tier standing below still reflects this roster."
+        />
+      )}
+      <div className="siq-queue-list">
+        {data.items.map((item) => <QueueItemRow key={item.id} item={item} />)}
+      </div>
+      <p className="siq-home-caution-note">{data.caveat}</p>
+    </>
+  );
+}
+
+function parseTeamId(raw: string | null): number | null {
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function readStoredTeamId(): number | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return parseTeamId(window.localStorage.getItem(TEAM_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredTeamId(teamId: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(TEAM_STORAGE_KEY, String(teamId));
+  } catch {
+    // Private mode / disabled storage — persistence is a nice-to-have, not required.
+  }
+}
+
+function HomeContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedId = parseTeamId(searchParams.get('team'));
+
+  const [teamsRetry, setTeamsRetry] = useState(0);
+  const { data: teamsData, loading: teamsLoading, error: teamsError } = useApi<TeamListItem[]>(
+    (signal) => getTeams(signal),
+    [teamsRetry],
+    { fallback: 'Failed to load teams.' },
+  );
+  const teams = teamsData ?? [];
+  const validTeamId = teams.length > 0 && teams.some((t) => t.team_id === selectedId) ? selectedId : null;
+
   const [cautions, setCautions] = useState<PlayerValuationCautionsResponse | null>(null);
   const [backtest, setBacktest] = useState<BacktestResponse | null>(null);
+
+  useEffect(() => {
+    if (teams.length === 0) return;
+    if (selectedId != null && teams.some((t) => t.team_id === selectedId)) {
+      writeStoredTeamId(selectedId);
+      return;
+    }
+    const stored = readStoredTeamId();
+    const fallback = stored != null && teams.some((t) => t.team_id === stored) ? stored : teams[0].team_id;
+    router.replace(`/?team=${fallback}`);
+  }, [selectedId, teams, router]);
 
   const { data: board, error } = useApi<[PlayerWatchlistResponse, PlayerWatchlistResponse]>(
     (signal) => Promise.all([
@@ -79,52 +212,43 @@ export default function Home() {
     return () => controller.abort();
   }, []);
 
-  // The sharpest mismatch on the board leads the page.
-  const hero = [...(underpaid?.slice(0, 1) ?? []), ...(overpaid?.slice(0, 1) ?? [])]
-    .filter((p) => p.valuation?.gap_pct != null)
-    .sort((a, b) => Math.abs(b.valuation!.gap_pct!) - Math.abs(a.valuation!.gap_pct!))[0];
-  const heroVal = hero?.valuation ?? null;
-  const heroTeam = hero ? (hero.current_team ?? hero.latest_stats_team) : null;
   const metrics = backtest?.metrics;
 
   return (
     <div className="siq-home">
-      <section className="siq-home-hero" aria-label="Sharpest mismatch on the board">
-        {hero && heroVal && heroVal.gap_pct != null ? (
-          <>
-            <span className="ds-eyebrow">Sharpest mismatch · {heroVal.season}</span>
-            <div className="siq-home-hero__row">
-              <Avatar name={hero.full_name} size="lg" position={hero.position} playerId={hero.player_id} />
-              <div className="siq-home-hero__id">
-                <Link href={`/players/${hero.player_id}`} className="siq-home-hero__name">{hero.full_name}</Link>
-                <span className="siq-home-hero__team">
-                  {heroTeam?.name ?? '—'} · {hero.position ?? '—'} · worth {fmtPct(heroVal.value_pct)} of cap,
-                  paid {heroVal.actual_pct != null ? fmtPct(heroVal.actual_pct) : '—'}
-                </span>
-              </div>
-            </div>
-            <div
-              className={`siq-home-hero__gap ds-tnum siq-verdict-beat siq-verdict-beat--${heroVal.gap_pct >= 0 ? 'positive' : 'negative'}`}
-            >
-              {gapText(heroVal.gap_pct)}
-            </div>
-            <div className="siq-home-hero__foot">
-              <Badge tone={heroVal.verdict_tone} size="md">{heroVal.verdict_label}</Badge>
-              <ButtonLink href={`/players/${hero.player_id}`} size="sm" icon={<ArrowUpRight size={14} />}>
-                Open the case
-              </ButtonLink>
-            </div>
-          </>
-        ) : error ? (
-          <span className="siq-home-hero__loading">{error} — is the FastAPI server running?</span>
+      <Panel
+        variant="card"
+        className="siq-home-queue"
+        eyebrow="Decision queue"
+        icon={<ListChecks size={15} />}
+        action={
+          <Select
+            selectSize="sm"
+            value={selectedId ?? ''}
+            onChange={(e) => router.replace(`/?team=${e.target.value}`)}
+            aria-label="Select team"
+            disabled={teams.length === 0}
+          >
+            {teams.length === 0 && <option value="">{teamsLoading ? 'Loading teams…' : 'No teams'}</option>}
+            {teams.map((t) => <option key={t.team_id} value={t.team_id}>{t.name ?? t.abbreviation}</option>)}
+          </Select>
+        }
+      >
+        {teamsError ? (
+          <Alert tone="negative">
+            {teamsError}{' '}
+            <Button size="sm" variant="secondary" onClick={() => setTeamsRetry((value) => value + 1)}>Retry</Button>
+          </Alert>
+        ) : teamsLoading ? (
+          <LoadingNote>Loading teams…</LoadingNote>
+        ) : teams.length === 0 ? (
+          <EmptyState title="No teams available." description="The teams endpoint returned no rosters to choose from." />
+        ) : validTeamId != null ? (
+          <DecisionQueuePanel teamId={validTeamId} />
         ) : (
-          <div role="status" aria-label="Loading the board">
-            <Skeleton height={12} width={180} />
-            <div className="siq-home-loading-spacer" />
-            <Skeleton height={44} width={220} />
-          </div>
+          <LoadingNote>Loading the decision queue…</LoadingNote>
         )}
-      </section>
+      </Panel>
 
       <Panel eyebrow="Model, on the record" icon={<Target size={15} />} className="siq-home-calibration">
         {metrics ? (
@@ -145,6 +269,7 @@ export default function Home() {
       </Panel>
 
       <Panel variant="card" eyebrow="Best value" icon={<TrendingUp size={15} />} headingLevel="h2">
+        {error && <Alert tone="negative">{error} — is the FastAPI server running?</Alert>}
         {underpaid ? underpaid.map((p, i) => <MoverRow key={p.player_id} player={p} rank={i + 1} />) : <MoverSkeletons />}
         <Link href="/players?bucket=underpaid" className="siq-home-more">Full underpaid board →</Link>
       </Panel>
@@ -176,5 +301,13 @@ export default function Home() {
         )}
       </Panel>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<LoadingNote>Loading…</LoadingNote>}>
+      <HomeContent />
+    </Suspense>
   );
 }

@@ -200,3 +200,132 @@ def test_trajectory_note_none_without_attribution(monkeypatch):
     result = ext.decide_extension(db, 1)
 
     assert result.trajectory_note is None
+
+
+# --------------------------------------------------------------------------- batch_extension_summaries
+def _patch_value_players(monkeypatch, values: dict[int, float]):
+    def fake(db, targets):
+        return {
+            (player_id, season): _valuation(values[player_id], values[player_id], values[player_id])
+            for player_id, season in targets
+            if player_id in values
+        }
+    monkeypatch.setattr(ext, "value_players", fake)
+
+
+def _multi_contract_db(*, players, contracts, contract_years):
+    return FakeDB(players=players, contracts=contracts, contract_years=contract_years)
+
+
+def test_batch_extension_summaries_eligible_with_value(monkeypatch):
+    _patch_value_players(monkeypatch, {1: 25.0})
+    db = _multi_contract_db(
+        players=[Player(player_id=1, full_name="A")],
+        contracts=[Contract(id=1, player_id=1, season_start="2023-24", years=1)],
+        contract_years=[
+            ContractYear(contract_id=1, season="2026-27", cap_pct=0.15,
+                         is_player_option=False, is_team_option=False),
+        ],
+    )
+
+    summaries = ext.batch_extension_summaries(db, [1])
+
+    assert summaries[1].eligible is True
+    assert summaries[1].has_model_value is True
+    assert summaries[1].value_pct == 25.0
+    assert summaries[1].current_pay_pct == 15.0
+    assert summaries[1].gap_pct == 10.0
+    assert summaries[1].verdict == "Extend now"
+    assert summaries[1].tone == "positive"
+    assert summaries[1].final_contract_season == "2026-27"
+
+
+def test_batch_extension_summaries_verdict_parity_with_extension_verdict(monkeypatch):
+    _patch_value_players(monkeypatch, {1: 20.4})
+    db = _multi_contract_db(
+        players=[Player(player_id=1, full_name="A")],
+        contracts=[Contract(id=1, player_id=1, season_start="2023-24", years=1)],
+        contract_years=[
+            ContractYear(contract_id=1, season="2026-27", cap_pct=0.20,
+                         is_player_option=False, is_team_option=False),
+        ],
+    )
+
+    summaries = ext.batch_extension_summaries(db, [1])
+    expected_verdict, expected_tone, _rationale, expected_gap = ext.extension_verdict(20.4, 20.0)
+
+    assert summaries[1].verdict == expected_verdict
+    assert summaries[1].tone == expected_tone
+    assert summaries[1].gap_pct == expected_gap
+
+
+def test_batch_extension_summaries_ineligible_impending_fa(monkeypatch):
+    _patch_value_players(monkeypatch, {1: 25.0})
+    db = _multi_contract_db(
+        players=[Player(player_id=1, full_name="A")],
+        contracts=[Contract(id=1, player_id=1, season_start="2023-24", years=1)],
+        contract_years=[
+            ContractYear(contract_id=1, season="2025-26", cap_pct=0.20,
+                         is_player_option=False, is_team_option=False),
+        ],
+    )
+
+    summaries = ext.batch_extension_summaries(db, [1])
+
+    assert summaries[1].eligible is False
+    assert summaries[1].has_model_value is False
+    assert summaries[1].current_pay_pct is None
+    assert summaries[1].verdict is None
+
+
+def test_batch_extension_summaries_has_model_value_false_when_unvalued(monkeypatch):
+    _patch_value_players(monkeypatch, {})
+    db = _multi_contract_db(
+        players=[Player(player_id=1, full_name="A")],
+        contracts=[Contract(id=1, player_id=1, season_start="2023-24", years=1)],
+        contract_years=[
+            ContractYear(contract_id=1, season="2026-27", cap_pct=0.15,
+                         is_player_option=False, is_team_option=False),
+        ],
+    )
+
+    summaries = ext.batch_extension_summaries(db, [1])
+
+    assert summaries[1].eligible is True
+    assert summaries[1].has_model_value is False
+    assert summaries[1].value_pct is None
+    assert summaries[1].verdict is None
+    assert summaries[1].current_pay_pct == 15.0
+
+
+def test_batch_extension_summaries_file_not_found_returns_eligibility_without_raising(monkeypatch):
+    def raise_fnf(db, targets):
+        raise FileNotFoundError("model artifact missing")
+    monkeypatch.setattr(ext, "value_players", raise_fnf)
+
+    db = _multi_contract_db(
+        players=[Player(player_id=1, full_name="A"), Player(player_id=2, full_name="B")],
+        contracts=[
+            Contract(id=1, player_id=1, season_start="2023-24", years=1),
+            Contract(id=2, player_id=2, season_start="2023-24", years=1),
+        ],
+        contract_years=[
+            ContractYear(contract_id=1, season="2026-27", cap_pct=0.15,
+                         is_player_option=False, is_team_option=False),
+            ContractYear(contract_id=2, season="2025-26", cap_pct=0.15,
+                         is_player_option=False, is_team_option=False),
+        ],
+    )
+
+    summaries = ext.batch_extension_summaries(db, [1, 2])
+
+    assert summaries[1].eligible is True
+    assert summaries[1].current_pay_pct == 15.0
+    assert summaries[1].has_model_value is False
+    assert summaries[1].verdict is None
+    assert summaries[2].eligible is False
+    assert summaries[2].has_model_value is False
+
+
+def test_batch_extension_summaries_empty_player_ids():
+    assert ext.batch_extension_summaries(None, []) == {}
