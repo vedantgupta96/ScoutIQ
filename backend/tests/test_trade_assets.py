@@ -3,6 +3,7 @@ from scoutiq.api.cap import SeasonCapData
 from scoutiq.api.trade_assets import (
     DEFAULT_EXPECTED_PICK,
     PICK_VALUE_ANCHORS,
+    contract_year_status,
     discount_factor,
     pick_surplus_pct,
     remaining_contract_surplus,
@@ -156,9 +157,11 @@ class SurplusFakeDB:
         return Result(self.rows)
 
 
-def _year(season: str, aav: int, guaranteed: bool = True) -> ContractYear:
+def _year(season: str, aav: int, guaranteed: bool = True,
+          player_option: bool = False, team_option: bool = False) -> ContractYear:
     return ContractYear(contract_id=1, season=season, aav=aav, cap_pct=None,
-                        is_guaranteed=guaranteed, is_player_option=False, is_team_option=False)
+                        is_guaranteed=guaranteed, is_player_option=player_option,
+                        is_team_option=team_option)
 
 
 def test_contract_surplus_sums_value_minus_pay():
@@ -195,6 +198,103 @@ def test_contract_surplus_flags_expiring_and_handles_missing_value():
 def test_discount_factor_orders_team_states():
     assert discount_factor("contending", 3) < discount_factor("neutral", 3) < discount_factor("rebuilding", 3)
     assert discount_factor("neutral", 0) == 1.0
+
+
+# ---- contract-year inclusion policy (issue #117) ---------------------------
+
+def test_contract_year_status_classifies_each_kind():
+    assert contract_year_status(_year("2026-27", 1, player_option=True)) == "player_option"
+    assert contract_year_status(_year("2026-27", 1, team_option=True)) == "team_option"
+    assert contract_year_status(_year("2026-27", 1, guaranteed=False)) == "non_guaranteed"
+    assert contract_year_status(_year("2026-27", 1)) == "guaranteed"
+
+
+def test_option_year_is_never_committed_even_if_guaranteed_flag_set():
+    # An option year can carry guaranteed money (owed only if exercised); it must still
+    # be classified as an option, never as committed.
+    year = _year("2026-27", 1, guaranteed=True, player_option=True)
+    assert contract_year_status(year) == "player_option"
+
+
+def test_committed_scenario_excludes_option_year():
+    caps = {"2026-27": _cap("2026-27"), "2027-28": _cap("2027-28")}
+    db = SurplusFakeDB([
+        (_year("2026-27", 15_464_700), 1),
+        (_year("2027-28", 15_464_700, player_option=True), 1),  # uncertain upside year
+    ])
+
+    result = remaining_contract_surplus(
+        db, [1], {1: 20.0}, caps, from_season="2026-27", team_state="neutral",
+        scenario="committed",
+    )
+
+    entry = result[1]
+    year_two = int(round(15_464_700 * 0.92))  # 10% surplus, offset 1, neutral discount
+    # Committed total counts only the guaranteed year; the option year is excluded.
+    assert entry.total_surplus_committed_usd == 15_464_700
+    assert entry.total_surplus_all_usd == 15_464_700 + year_two
+    assert entry.total_surplus_usd == entry.total_surplus_committed_usd
+    assert entry.scenario == "committed"
+    assert entry.has_uncertain_years is True
+    assert [y.committed for y in entry.years] == [True, False]
+    assert [y.status for y in entry.years] == ["guaranteed", "player_option"]
+
+
+def test_all_scenario_includes_option_year():
+    caps = {"2026-27": _cap("2026-27"), "2027-28": _cap("2027-28")}
+    db = SurplusFakeDB([
+        (_year("2026-27", 15_464_700), 1),
+        (_year("2027-28", 15_464_700, player_option=True), 1),
+    ])
+
+    result = remaining_contract_surplus(
+        db, [1], {1: 20.0}, caps, from_season="2026-27", team_state="neutral",
+        scenario="all",
+    )
+
+    entry = result[1]
+    assert entry.total_surplus_usd == entry.total_surplus_all_usd
+    assert entry.total_surplus_usd > entry.total_surplus_committed_usd
+
+
+def test_surplus_years_reproduce_the_committed_total():
+    # A user must be able to sum the visible year rows back to the displayed total.
+    caps = {"2026-27": _cap("2026-27"), "2027-28": _cap("2027-28"), "2028-29": _cap("2028-29")}
+    db = SurplusFakeDB([
+        (_year("2026-27", 20_000_000), 1),
+        (_year("2027-28", 20_000_000), 1),
+        (_year("2028-29", 20_000_000, player_option=True), 1),
+    ])
+
+    entry = remaining_contract_surplus(
+        db, [1], {1: 18.0}, caps, from_season="2026-27", team_state="contending",
+        scenario="committed",
+    )[1]
+
+    committed_rows = sum(
+        y.discounted_surplus_usd for y in entry.years
+        if y.committed and y.discounted_surplus_usd is not None
+    )
+    all_rows = sum(
+        y.discounted_surplus_usd for y in entry.years if y.discounted_surplus_usd is not None
+    )
+    assert committed_rows == entry.total_surplus_committed_usd
+    assert all_rows == entry.total_surplus_all_usd
+    # Discount factor is exposed per year and matches the team-state schedule.
+    assert entry.years[0].discount_factor == 1.0
+    assert entry.years[1].discount_factor == round(discount_factor("contending", 1), 4)
+
+
+def test_no_uncertain_years_flag_when_fully_guaranteed():
+    caps = {"2026-27": _cap("2026-27"), "2027-28": _cap("2027-28")}
+    db = SurplusFakeDB([(_year("2026-27", 15_464_700), 1), (_year("2027-28", 15_464_700), 1)])
+
+    entry = remaining_contract_surplus(
+        db, [1], {1: 20.0}, caps, from_season="2026-27",
+    )[1]
+
+    assert entry.has_uncertain_years is False
+    assert entry.total_surplus_committed_usd == entry.total_surplus_all_usd
 
 
 # ---- roster-count legality (Phase D2) --------------------------------------

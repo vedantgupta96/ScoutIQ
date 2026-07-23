@@ -11,6 +11,8 @@ import {
 import {
   ArrowLeftRight,
   Check,
+  ChevronDown,
+  Info,
   LoaderCircle,
   Plus,
   Search,
@@ -23,6 +25,9 @@ import {
   getTeams,
   getTradeWorkspace,
   type CapTier,
+  type ContractYearStatus,
+  type SurplusPlayerDetail,
+  type SurplusScenario,
   type TeamListItem,
   type TradePickAsset,
   type TradeResponse,
@@ -363,15 +368,92 @@ function FlagChip({ label, value, tone, title }: { label: string; value: string;
   );
 }
 
-// One side's outgoing package (players + picks) with salary and modeled asset value,
-// from the sending team's own team-state lens. Half of the fused Exchange.
+const YEAR_STATUS_LABEL: Record<ContractYearStatus, string> = {
+  guaranteed: 'Guaranteed',
+  player_option: 'Player option',
+  team_option: 'Team option',
+  non_guaranteed: 'Non-guaranteed',
+};
+
+export function pctText(value: number | null, signedValue = false): string {
+  if (value == null) return '—';
+  return `${signedValue ? signed(value, 1) : value.toFixed(1)}%`;
+}
+
+export function surplusSignClass(value: number | null | undefined): string {
+  if (value == null || value === 0) return '';
+  return value > 0 ? 'is-positive' : 'is-negative';
+}
+
+// The auditable year-by-year math behind one player's contract-surplus number: every
+// input (cap hit, modeled value %, raw surplus %, team-state discount) and the discounted
+// dollar result, so the visible rows sum to the displayed total under the chosen scenario.
+export function SurplusBreakdown({ detail }: { detail: SurplusPlayerDetail }) {
+  return (
+    <div className="siq-surplus-breakdown">
+      <div className="siq-surplus-table-wrap">
+        <table className="siq-surplus-table ds-tnum">
+          <thead>
+            <tr>
+              <th className="siq-surplus-th-season">Season</th>
+              <th>Cap hit</th>
+              <th title="Modeled value as a % of the cap, held flat across remaining years">Value</th>
+              <th title="Raw surplus %: modeled value % minus cap-hit %">Surplus</th>
+              <th title="Team-state time discount factor applied to this year">Disc</th>
+              <th>Surplus $</th>
+            </tr>
+          </thead>
+          <tbody>
+            {detail.years.map((year) => (
+              <tr key={year.season} className={year.committed ? undefined : 'is-uncertain'}>
+                <td className="siq-surplus-td-season">
+                  <span>{year.season}</span>
+                  <span className={`siq-year-status siq-year-status--${year.committed ? 'committed' : 'uncertain'}`}>
+                    {YEAR_STATUS_LABEL[year.status]}
+                  </span>
+                </td>
+                <td>
+                  {fmtM(year.cap_hit_usd)}
+                  <small>{pctText(year.cap_hit_pct)} of cap</small>
+                </td>
+                <td>{pctText(year.value_pct)}</td>
+                <td className={surplusSignClass(year.surplus_pct)}>{pctText(year.surplus_pct, true)}</td>
+                <td>{year.discount_factor.toFixed(2)}</td>
+                <td className={surplusSignClass(year.discounted_surplus_usd)}>
+                  {year.discounted_surplus_usd != null ? fmtSignedM(year.discounted_surplus_usd) : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={5}>{detail.scenario === 'committed' ? 'Committed years total' : 'All listed years total'}</td>
+              <td className={surplusSignClass(detail.total_surplus_usd)}>{fmtSignedM(detail.total_surplus_usd)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {detail.has_uncertain_years ? (
+        <p className="ds-note">
+          Committed only <strong>{fmtSignedM(detail.total_surplus_committed_usd)}</strong> · all listed years{' '}
+          <strong>{fmtSignedM(detail.total_surplus_all_usd)}</strong>. Option and non-guaranteed years are
+          excluded from the committed total, not silently counted as guaranteed.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// One side's outgoing package (players + picks) with salary and modeled contract surplus,
+// from the sending team's own team-state lens. Each player row expands to the auditable
+// year-by-year breakdown. Half of the fused Exchange.
 function ExchangeSide({ analysis, toAbbr }: { analysis: TradeTeamAnalysis; toAbbr: string }) {
   const abbr = analysis.team.abbreviation ?? analysis.team.name;
   const players = analysis.selected_outgoing;
   const picks = analysis.picks_outgoing;
   const detail = analysis.assets.players_detail;
   const salaryOut = players.reduce((total, p) => total + (p.cap_hit_usd ?? 0), 0);
-  const assetOut = analysis.assets.player_surplus_sent_usd + analysis.assets.picks_sent_usd;
+  const surplusOut = analysis.assets.player_surplus_sent_usd + analysis.assets.picks_sent_usd;
 
   return (
     <div className="siq-exchange-side">
@@ -387,17 +469,28 @@ function ExchangeSide({ analysis, toAbbr }: { analysis: TradeTeamAnalysis; toAbb
           const s = detail[String(p.player_id)];
           return (
             <li className="siq-exchange-row" key={p.player_id}>
-              <Avatar name={p.full_name} playerId={p.player_id} position={p.position} size="sm" />
-              <span className="siq-trade-player-id">
-                <strong>{p.full_name}</strong>
-                <small>{p.position ?? '—'}</small>
-              </span>
-              <span className="siq-exchange-row__num ds-tnum">
-                <strong>{fmtM(p.cap_hit_usd ?? 0)}</strong>
-                <small title="Modeled remaining-contract surplus (value − salary), this team's lens.">
-                  {s ? `${fmtSignedM(s.total_surplus_usd)} value` : 'value n/a'}
-                </small>
-              </span>
+              <details className="siq-surplus-toggle">
+                <summary className="siq-surplus-summary">
+                  <Avatar name={p.full_name} playerId={p.player_id} position={p.position} size="sm" />
+                  <span className="siq-trade-player-id">
+                    <strong>{p.full_name}</strong>
+                    <small>{p.position ?? '—'}</small>
+                  </span>
+                  <span className="siq-exchange-row__num ds-tnum">
+                    <strong>{fmtM(p.cap_hit_usd ?? 0)}</strong>
+                    <small className={surplusSignClass(s?.total_surplus_usd)}>
+                      {s ? `${fmtSignedM(s.total_surplus_usd)} surplus` : 'surplus n/a'}
+                      {s?.has_uncertain_years ? <span className="siq-surplus-flag" title="Has option / non-guaranteed years">*</span> : null}
+                    </small>
+                  </span>
+                  <ChevronDown className="siq-surplus-chevron" size={15} aria-hidden="true" />
+                </summary>
+                {s ? (
+                  <SurplusBreakdown detail={s} />
+                ) : (
+                  <p className="ds-note">No modeled contract surplus for this player (value unavailable or no loaded contract).</p>
+                )}
+              </details>
             </li>
           );
         })}
@@ -422,8 +515,8 @@ function ExchangeSide({ analysis, toAbbr }: { analysis: TradeTeamAnalysis; toAbb
         <span>{players.length} {players.length === 1 ? 'player' : 'players'}{picks.length ? ` · ${picks.length} ${picks.length === 1 ? 'pick' : 'picks'}` : ''}</span>
         <span>
           {fmtM(salaryOut)} out
-          <strong className={assetOut >= 0 ? 'is-positive' : 'is-negative'} title="Total modeled asset value leaving this side (player surplus + pick value).">
-            {' · '}{fmtSignedM(assetOut)} value
+          <strong className={surplusOut >= 0 ? 'is-positive' : 'is-negative'} title="Total modeled contract surplus + pick value leaving this side.">
+            {' · '}{fmtSignedM(surplusOut)} surplus
           </strong>
         </span>
       </footer>
@@ -431,17 +524,57 @@ function ExchangeSide({ analysis, toAbbr }: { analysis: TradeTeamAnalysis; toAbb
   );
 }
 
-// The fused deal: both outgoing packages in one read, replacing the two mirror
-// value/pick grids that used to force a side-by-side diff.
-function TradeExchange({ result }: { result: TradeResponse }) {
+const SCENARIO_LABEL: Record<SurplusScenario, string> = {
+  committed: 'Committed years',
+  all: 'All listed years',
+};
+
+// The fused deal: both outgoing packages in one read. The scenario toggle governs which
+// contract years feed every surplus number below (and the balance meter above).
+function TradeExchange({
+  result,
+  scenario,
+  onScenario,
+  busy,
+}: {
+  result: TradeResponse;
+  scenario: SurplusScenario;
+  onScenario: (scenario: SurplusScenario) => void;
+  busy: boolean;
+}) {
   const a = result.team_a.team.abbreviation ?? 'A';
   const b = result.team_b.team.abbreviation ?? 'B';
   return (
     <section className="siq-exchange">
       <header className="siq-exchange__head">
         <span className="ds-eyebrow">The exchange</span>
-        <small>What each side gives up — salary and modeled asset value</small>
+        <small>What each side gives up — salary and modeled contract surplus. Tap a player for the year-by-year math.</small>
+        <div className="siq-scenario-toggle" role="group" aria-label="Contract-year scenario">
+          {(Object.keys(SCENARIO_LABEL) as SurplusScenario[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              className={`siq-scenario-btn${scenario === key ? ' is-active' : ''}`}
+              aria-pressed={scenario === key}
+              disabled={busy}
+              onClick={() => onScenario(key)}
+              title={key === 'committed'
+                ? 'Count only fully guaranteed years (options excluded).'
+                : 'Count every listed year, including options and non-guaranteed years (upside/downside).'}
+            >
+              {SCENARIO_LABEL[key]}
+            </button>
+          ))}
+        </div>
       </header>
+      <p className="siq-exchange__legend ds-note">
+        <Info size={13} aria-hidden="true" />
+        <span>
+          <strong>Contract surplus</strong> is modeled value minus salary owed over a player&apos;s remaining years, from
+          each team&apos;s own team-state lens. Positive means the model values the player above their salary; negative
+          means the salary owed exceeds modeled value. It is not total trade-market value.
+        </span>
+      </p>
       <div className="siq-exchange__grid">
         <ExchangeSide analysis={result.team_a} toAbbr={b} />
         <div className="siq-exchange__swap" aria-hidden="true"><ArrowLeftRight size={18} /></div>
@@ -557,7 +690,7 @@ const LEGALITY_WORD: Record<string, string> = {
   'incomplete': 'Incomplete',
 };
 
-function TradeVerdictBar({ result, stale }: { result: TradeResponse; stale: boolean }) {
+export function TradeVerdictBar({ result, stale }: { result: TradeResponse; stale: boolean }) {
   const { balance } = result;
   const status = result.overall_status;
   const tone = status === 'modeled-compliant' ? 'positive'
@@ -565,12 +698,13 @@ function TradeVerdictBar({ result, stale }: { result: TradeResponse; stale: bool
   const a = result.team_a.team.abbreviation ?? 'A';
   const b = result.team_b.team.abbreviation ?? 'B';
   const label = balance.fairness_label.replace('Team A', a).replace('Team B', b);
+  const cap = result.cap_reference;
 
   return (
     <section className={`siq-trade-verdict-bar siq-trade-verdict-bar--${status}`}>
       <div className="siq-trade-verdict-legality" data-tone={tone}>
         <div className="siq-trade-verdict-stamp">
-          <span className="ds-eyebrow">Trade verdict</span>
+          <span className="ds-eyebrow">Trade verdict · salary &amp; legality</span>
           <div className="siq-trade-verdict-stamp-row">
             <Badge tone={tone} icon={tone === 'positive' ? <Check size={14} /> : <TriangleAlert size={14} />}>
               {LEGALITY_WORD[status] ?? 'Review'}
@@ -580,6 +714,17 @@ function TradeVerdictBar({ result, stale }: { result: TradeResponse; stale: bool
         </div>
         <h2>{result.overall_label}</h2>
         <p>{result.summary}</p>
+        {result.review_reasons.length ? (
+          <ul className="siq-trade-review-reasons">
+            {result.review_reasons.map((reason) => (
+              <li key={reason}><TriangleAlert size={13} aria-hidden="true" /><span>{reason}</span></li>
+            ))}
+          </ul>
+        ) : null}
+        <p className="siq-trade-cap-ref ds-note">
+          Priced against the {cap.season}{cap.is_projected ? ' projected' : ''} cap of {fmtM(cap.salary_cap_usd)}.
+          Salary matching, contract surplus, and roster legality are independent checks.
+        </p>
       </div>
       <div className="siq-trade-verdict-balance">
         <span className="ds-eyebrow">Value balance</span>
@@ -639,6 +784,7 @@ export default function TradeLabPage() {
   const [teamBSendsPicks, setTeamBSendsPicks] = useState<number[]>([]);
   const [teamAState, setTeamAState] = useState<TradeTeamState>('neutral');
   const [teamBState, setTeamBState] = useState<TradeTeamState>('neutral');
+  const [surplusScenario, setSurplusScenario] = useState<SurplusScenario>('committed');
   const [picker, setPicker] = useState<'a' | 'b' | null>(null);
   const [result, setResult] = useState<TradeResponse | null>(null);
   const [analyzedKey, setAnalyzedKey] = useState<string | null>(null);
@@ -658,10 +804,11 @@ export default function TradeLabPage() {
     return () => controller.abort();
   }, [teamsRetry]);
 
-  const currentKey = [
+  const buildKey = (scenario: SurplusScenario) => [
     teamA, teamB, teamASends.join(','), teamBSends.join(','),
-    teamASendsPicks.join(','), teamBSendsPicks.join(','), teamAState, teamBState,
+    teamASendsPicks.join(','), teamBSendsPicks.join(','), teamAState, teamBState, scenario,
   ].join(':');
+  const currentKey = buildKey(surplusScenario);
   const stale = result != null && analyzedKey !== currentKey;
   const canAnalyze = Boolean(
     teamA && teamB && teamA !== teamB
@@ -669,9 +816,9 @@ export default function TradeLabPage() {
     && !teamAWorkspace.loading && !teamBWorkspace.loading,
   );
 
-  const runAnalysis = async () => {
+  const runAnalysis = async (scenario: SurplusScenario = surplusScenario) => {
     if (!teamA || !teamB || !canAnalyze) return;
-    const requestKey = currentKey;
+    const requestKey = buildKey(scenario);
     setAnalyzing(true);
     setError(null);
     try {
@@ -685,6 +832,7 @@ export default function TradeLabPage() {
         team_b_sends_picks: teamBSendsPicks,
         team_a_state: teamAState,
         team_b_state: teamBState,
+        surplus_scenario: scenario,
       });
       setResult(next);
       setAnalyzedKey(requestKey);
@@ -693,6 +841,14 @@ export default function TradeLabPage() {
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  // Flipping the scenario re-prices surplus immediately when a result already exists,
+  // rather than leaving it stale behind an Analyze click (it only changes surplus math).
+  const changeScenario = (scenario: SurplusScenario) => {
+    if (scenario === surplusScenario) return;
+    setSurplusScenario(scenario);
+    if (result && canAnalyze && !analyzing) runAnalysis(scenario);
   };
 
   const chooseTeamA = (id: number | null) => {
@@ -789,7 +945,7 @@ export default function TradeLabPage() {
           variant="primary"
           icon={analyzing ? <LoaderCircle size={16} className="siq-spin" /> : <ArrowLeftRight size={16} />}
           disabled={!canAnalyze || analyzing}
-          onClick={runAnalysis}
+          onClick={() => runAnalysis()}
         >
           {analyzing ? 'Analyzing trade…' : stale ? 'Analyze changes' : 'Analyze trade'}
         </Button>
@@ -798,7 +954,7 @@ export default function TradeLabPage() {
       {result ? (
         <section className={`siq-trade-results${stale ? ' is-stale' : ''}`} aria-busy={analyzing}>
           <TradeVerdictBar result={result} stale={stale} />
-          <TradeExchange result={result} />
+          <TradeExchange result={result} scenario={surplusScenario} onScenario={changeScenario} busy={analyzing} />
           <div className="siq-trade-impacts">
             <Impact analysis={result.team_a} />
             <Impact analysis={result.team_b} />
