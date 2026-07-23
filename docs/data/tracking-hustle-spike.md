@@ -1,13 +1,23 @@
 # ScoutIQ — NBA Tracking/Hustle Data Feasibility Spike (issue #94)
 
+> **Status: PARTIAL — probe infrastructure only, this is not a completed spike.** The source was
+> unreachable from this environment (§6.1), so the things this spike exists to measure — the
+> season-by-season **coverage matrix**, the **ID join rate**, **per-field null rates**, and this
+> doc's own proceed/limitations/stop **recommendation** (§7) — are all **UNMEASURED**, not
+> "clean" or "acceptable." What *is* done and stands as evidenced: the adapter/CLI probe itself,
+> its offline fixtures/tests, and the reachability evidence in §6.1 showing the block is
+> source-side (NBA edge/WAF), not a local network problem. None of that evidenced-blocking
+> material below is softened or walked back by this status line — it stays as reported.
+>
 > **Purpose:** answer whether nba.com's tracking/hustle endpoints (Second Spectrum-derived
 > player tracking, exposed via `nba_api`) are usable as future six-axis role inputs — before any
 > DB migration, loader, or model change is attempted.
 >
 > **Scope of this doc:** the read-only probe (adapter + CLI + fixtures/tests) is built and verified
-> offline in this pass. The **Live validation results** and **Recommendation** sections below are
-> explicitly left as `TODO` — they are filled in by a separate live run against stats.nba.com, not
-> guessed here.
+> offline in this pass. The **Live validation results** (§6) and **Recommendation** (§7) sections
+> below are populated — but only with the live-run *attempt* and its outcome (source unreachable).
+> They do not report the coverage/join/null numbers the spike set out to produce, because none
+> were measured; see the status line above.
 
 ---
 
@@ -65,6 +75,23 @@ fixtures backing the offline tests in this pass. The other three `tracking` meas
 (`Passing`, `Rebounding`, `CatchShoot`) are wired into the probe and adapter but their exact column
 names could not be confirmed without a network call — the live run should capture and correct these.
 
+### Sampling methodology (rotation-player qualification)
+
+The probe does not compute join rate and null rate over `frame.head(N)` — an unfiltered `head(N)`
+samples whatever order the endpoint happened to return rows in, which is not a representative
+rotation-player set and would let a handful of two-minute-per-game players who never touch the
+ball skew both rates. Instead:
+
+- Rows are **qualified** by a minutes threshold before sampling: `--min-minutes` (default `200`)
+  against whichever of `MIN`/`MINUTES`/`MIN_TOTAL` is present on the frame.
+- Qualified rows are **sorted by minutes, descending**, and only then capped to `--sample-size`
+  rows — so a bounded sample is the highest-minutes rows, not an arbitrary prefix.
+- If the frame has **no minutes column at all**, the probe cannot qualify rows. It falls back to
+  raw endpoint order (`head(N)`) and **prints a warning** (`sample.qualified = False` in the JSON
+  output) stating that this fallback sample is **NOT representative** and that any rate computed
+  from it should be treated accordingly. This is a deliberate degrade-and-say-so, not a silent
+  substitution.
+
 ---
 
 ## 2. Proposed canonical input schema (for a future loader — not built in this pass)
@@ -91,6 +118,39 @@ player-season), keyed the same way:
 All rate fields (`*_PCT`) are already fractions in nba.com's response, not percentages — a loader
 must not re-divide by 100.
 
+**Grain:** one row per `(player, season, family, measure_type)` — i.e. one row per player per
+season per stat family, and for the `tracking` family, additionally per `pt_measure_type`
+(`Drives`/`Passing`/`Rebounding`/`CatchShoot`). `hustle`, `defense`, and `shooting` have no
+`measure_type` axis, so their grain collapses to `(player, season, family)`.
+
+**Uniqueness key:** `(player_id, season, family, measure_type)`, with `measure_type = NULL` for
+the three families that don't have one. `player_id` is the per-family id resolved via the §1
+id-column table (`CLOSE_DEF_PERSON_ID` for `defense`, `PLAYER_ID` for the other three) — never a
+name-based key.
+
+**Provenance fields** (required on every row, not just the metric columns):
+
+| Field | Meaning |
+|-------|---------|
+| `source_endpoint` | The `nba_api` class used, e.g. `leaguedashptstats.LeagueDashPtStats` |
+| `season` | `'2023-24'`-style season string |
+| `measure_type` | `pt_measure_type` for `tracking` rows, `NULL` otherwise |
+| `fetched_at_utc` | Ingestion timestamp, from `FetchOutcome.fetched_at_utc` (§4) |
+| `source` | Literal `'nba_stats'` — distinguishes this family from BBRef-sourced rows in the same eventual schema |
+
+**Qualification thresholds:** a row is a *rotation-player* row only above a minutes floor
+(`--min-minutes`, default `200`, see the Sampling methodology subsection in §1) — low-minutes
+players produce noisy per-possession rates on small samples, so a loader should carry the
+qualifying threshold (minutes, and possessions where the family exposes them) alongside the row
+rather than filtering silently, so downstream consumers can re-qualify with a different bar.
+
+**Missingness policy:** a null in any metric column means nba.com did not report that field for
+that player-season (e.g. a stat introduced in a later season, or a `tracking/Passing`-style
+measure type this spike could not confirm — §1). **A null must never be coerced to 0** — 0 drives
+and "not reported" are different facts, and collapsing them would fabricate a rotation player who
+never drives. A loader must preserve the null and let downstream consumers decide how to handle
+it (exclude the player-season from that axis, impute explicitly and label it as imputed, etc.).
+
 ---
 
 ## 3. Metric → six-axis mapping
@@ -98,10 +158,10 @@ must not re-divide by 100.
 | Axis | Candidate metrics | Support |
 |------|--------------------|---------|
 | **Creation load** | `DRIVES`, `DRIVE_PASSES`, `DRIVE_AST`, `POTENTIAL_AST` (tracking/Passing, unconfirmed) | Plausibly supported — drive/passing volume is a reasonable creation-load proxy, pending Passing column confirmation. |
-| **Rim pressure** | `DRIVES`, `DRIVE_FGA`, `DRIVE_PTS` | Supported — drive frequency and drive scoring are direct rim-pressure signals. |
+| **Rim pressure** | `DRIVES`, `DRIVE_FGA`, `DRIVE_PTS` | Partially supported — `DRIVES` is a **proxy** for rim pressure (how often a player drives), not direct rim-attempt evidence: a drive can end in a kick-out pass, a pull-up jumper, or a floater well outside the restricted area, none of which this family's columns distinguish. `DRIVE_FGA`/`DRIVE_PTS` narrow this somewhat but remain drive-outcome stats, not shot-location stats. |
 | **Shooting gravity** | `CATCH_SHOOT_FGA`, `CATCH_SHOOT_EFG_PCT` (unconfirmed), `FG3A`/`FG3_PCT` (shooting) | Partially supported — catch-and-shoot volume/efficiency is the closest proxy available; true gravity (defender attention, closeout rates) is **not measured by any of these four families**. |
 | **Connective play** | `DRIVE_PASSES`, `DRIVE_AST`, `SCREEN_ASSISTS` (hustle) | Supported — screen assists plus drive-and-kick passing are reasonable connective-play signals. |
-| **Perimeter disruption** | `DEFLECTIONS` (hustle), `D_FGA`/`D_FG_PCT`/`PCT_PLUSMINUS` (defense) | Supported — deflections and perimeter closest-defender FG% differential are direct signals. |
+| **Perimeter disruption** | `DEFLECTIONS` (hustle), `D_FGA`/`D_FG_PCT`/`PCT_PLUSMINUS` (defense) | Partially supported — `DEFLECTIONS` (hustle) is a reasonable perimeter-disruption signal on its own. The `defense` family (`LeagueDashPtDefend`) measures a defender's **overall** closest-defender field-goal-percentage impact, not specifically perimeter disruption — `D_FGA`/`D_FG_PCT`/`PCT_PLUSMINUS` are not filtered to perimeter possessions, so this axis is **not directly supported by the defense family**; that would need a shot-distance/zone filter this spike does not probe. |
 | **Interior/rebounding impact** | `OFF_BOXOUTS`, `DEF_BOXOUTS`, `BOX_OUTS` (hustle), `REB_CHANCES`/`REB_CHANCE_PCT` (tracking/Rebounding, unconfirmed) | Partially supported — box-out counts are solid; true rebounding-chance conversion rate depends on the unconfirmed Rebounding columns. |
 
 **Axes NOT credibly supported by these four families alone:** none of the six axes are fully
@@ -148,7 +208,7 @@ backend/.venv/bin/python -m scoutiq.etl.check_tracking_coverage --help
 backend/.venv/bin/python -m scoutiq.etl.check_tracking_coverage \
   --season 2024-25 --season 2023-24 \
   --measure-types Drives,Passing,Rebounding,CatchShoot \
-  --sample-size 200 \
+  --sample-size 200 --min-minutes 200 \
   --pause 1.5 --timeout 45 \
   --json
 

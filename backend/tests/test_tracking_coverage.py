@@ -153,3 +153,45 @@ class _FakeSession:
 
 def _fake_get_session():
     return _FakeSession()
+
+
+def test_join_rate_denominator_is_all_sampled_rows_not_just_rows_with_ids():
+    """A sample of one matching id + one null id must not read as 100%.
+
+    Regression for a review finding: dividing matches by only the id-bearing rows
+    overstated coverage while the printed total said 1/2.
+    """
+    import pandas as pd
+    from scoutiq.etl.check_tracking_coverage import join_rate
+
+    frame = pd.DataFrame({"PLAYER_ID": [201939, None]})
+    stats = join_rate(frame, "PLAYER_ID", {201939})
+
+    assert stats["total_rows"] == 2
+    assert stats["rows_with_id"] == 1
+    assert stats["rows_missing_id"] == 1
+    assert stats["matched"] == 1
+    # Over ALL sampled rows, not just the id-bearing subset.
+    assert stats["join_rate"] == 0.5
+    # The id-present subset is reported separately rather than hidden.
+    assert stats["match_rate_where_id_present"] == 1.0
+    assert stats["id_presence_rate"] == 0.5
+
+
+def test_qualified_sample_uses_minutes_and_flags_when_it_cannot():
+    """head(N) is endpoint ordering, not a rotation-player sample."""
+    import pandas as pd
+    from scoutiq.etl.check_tracking_coverage import qualified_sample
+
+    frame = pd.DataFrame({"PLAYER_ID": [1, 2, 3], "MIN": [50, 900, 400]})
+    sample, meta = qualified_sample(frame, sample_size=2, min_minutes=200)
+    assert meta["qualified"] is True
+    assert meta["minutes_column"] == "MIN"
+    # Sub-threshold row excluded; highest minutes first.
+    assert sample["PLAYER_ID"].tolist() == [2, 3]
+
+    no_min = pd.DataFrame({"PLAYER_ID": [1, 2, 3]})
+    sample2, meta2 = qualified_sample(no_min, sample_size=2, min_minutes=200)
+    assert meta2["qualified"] is False
+    assert "NOT a qualified" in meta2["note"]
+    assert len(sample2) == 2
