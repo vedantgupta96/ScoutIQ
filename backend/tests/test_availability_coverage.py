@@ -1,12 +1,14 @@
 from pathlib import Path
 
-from scoutiq.etl.check_availability_coverage import _match_identities
+from scoutiq.etl.check_availability_coverage import _is_indeterminate, _match_identities
 from scoutiq.sources import nba_injury_reports as inj
 from scoutiq.sources.nba_injury_reports import (
-    edition_effective_utc,
+    EditionOutcome,
+    edition_token_utc,
     fetch_edition,
     normalize_name,
     parse_edition_text,
+    report_effective_utc,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "availability"
@@ -28,7 +30,7 @@ class _FakeTeam:
 def _parse_fixture():
     return parse_edition_text(
         EDITION_TEXT,
-        edition_effective_utc="2024-01-15T22:45:00+00:00",
+        edition_token_utc="2024-01-15T22:45:00+00:00",
         source_url="https://ak-static.cms.nba.com/referee/injury/Injury-Report_2024-01-15_05PM.pdf",
         known_teams=("Fake Rockets",),
     )
@@ -53,34 +55,77 @@ def test_status_and_reason_are_preserved_verbatim():
     assert jane.reason == "Injury/Illness - Left Knee; Sprain"
 
 
-def test_both_provenance_timestamps_are_carried_on_every_row():
+def test_all_provenance_fields_are_carried_on_every_row():
     rows, _ = _parse_fixture()
     for row in rows:
-        assert row.edition_effective_utc == "2024-01-15T22:45:00+00:00"
+        assert row.report_effective_utc == "2024-01-15T22:45:00+00:00"
+        assert row.edition_token_utc == "2024-01-15T22:45:00+00:00"
         assert row.source_url.endswith("Injury-Report_2024-01-15_05PM.pdf")
+
+
+# --- Sp1: report_effective_utc reads the PDF's own header; edition_token_utc is
+#          the filename-token fallback — the two must not collapse into each other --
+
+
+def test_report_effective_utc_extracts_the_header_line_tolerant_of_newlines():
+    # The fixture's header is 'Injury' 'Report:' '01/15/24' '05:45' 'PM', one token
+    # per line — 2024-01-15 is EST (UTC-5): 05:45 PM ET -> 22:45 UTC.
+    assert report_effective_utc(EDITION_TEXT) == "2024-01-15T22:45:00+00:00"
+
+
+def test_report_effective_utc_is_none_when_the_header_line_is_absent():
+    text = (
+        "01/15/2024 07:00 (ET) AAA@BBB Fake Rockets "
+        "Doe, Jane Out Injury/Illness - Left Knee; Sprain"
+    )
+    assert report_effective_utc(text) is None
+
+
+def test_header_absent_leaves_edition_token_utc_populated_on_the_row():
+    text = (
+        "01/15/2024 07:00 (ET) AAA@BBB Fake Rockets "
+        "Doe, Jane Out Injury/Illness - Left Knee; Sprain"
+    )
+    rows, _ = parse_edition_text(
+        text,
+        edition_token_utc="2024-01-15T22:00:00+00:00",
+        known_teams=("Fake Rockets",),
+    )
+    assert rows[0].report_effective_utc is None
+    assert rows[0].edition_token_utc == "2024-01-15T22:00:00+00:00"
+
+
+def test_report_effective_utc_and_edition_token_utc_are_independent_on_a_row():
+    rows, _ = parse_edition_text(
+        EDITION_TEXT,
+        edition_token_utc="1999-01-01T00:00:00+00:00",
+        known_teams=("Fake Rockets",),
+    )
+    assert rows[0].report_effective_utc == "2024-01-15T22:45:00+00:00"
+    assert rows[0].edition_token_utc == "1999-01-01T00:00:00+00:00"
 
 
 # --- B1: edition-token -> UTC parsing ----------------------------------------
 
 
-def test_edition_effective_utc_parses_legacy_whole_hour_token():
+def test_edition_token_utc_parses_legacy_whole_hour_token():
     # 2025-12-20 is EST (UTC-5): 05PM ET -> 22:00 UTC.
-    assert edition_effective_utc("2025-12-20", "05PM") == "2025-12-20T22:00:00+00:00"
+    assert edition_token_utc("2025-12-20", "05PM") == "2025-12-20T22:00:00+00:00"
 
 
-def test_edition_effective_utc_parses_modern_minute_precision_token():
+def test_edition_token_utc_parses_modern_minute_precision_token():
     # 2026-04-08 is EDT (UTC-4): 05:30PM ET -> 21:30 UTC.
-    assert edition_effective_utc("2026-04-08", "05_30PM") == "2026-04-08T21:30:00+00:00"
+    assert edition_token_utc("2026-04-08", "05_30PM") == "2026-04-08T21:30:00+00:00"
 
 
-def test_edition_effective_utc_parses_modern_am_token():
+def test_edition_token_utc_parses_modern_am_token():
     # 2026-02-11 is EST (UTC-5): 11:30AM ET -> 16:30 UTC.
-    assert edition_effective_utc("2026-02-11", "11_30AM") == "2026-02-11T16:30:00+00:00"
+    assert edition_token_utc("2026-02-11", "11_30AM") == "2026-02-11T16:30:00+00:00"
 
 
-def test_edition_effective_utc_returns_none_for_unparseable_token():
-    assert edition_effective_utc("2026-02-11", "garbage") is None
-    assert edition_effective_utc("2026-02-11", "") is None
+def test_edition_token_utc_returns_none_for_unparseable_token():
+    assert edition_token_utc("2026-02-11", "garbage") is None
+    assert edition_token_utc("2026-02-11", "") is None
 
 
 # --- B3: absent classification is explicitly provisional ---------------------
@@ -102,7 +147,8 @@ def test_s3_access_denied_403_is_classified_absent_not_failed(monkeypatch):
     assert outcome.status == "absent"
     assert outcome.http_status == 403
     assert outcome.error_type is None
-    assert outcome.edition_effective_utc is None
+    assert outcome.report_effective_utc is None
+    assert outcome.edition_token_utc is None
     assert outcome.source_last_modified_utc is None
     assert outcome.fetched_at_utc is not None
     assert outcome.absent_is_provisional is True
@@ -149,6 +195,47 @@ def test_html_body_on_200_is_classified_failed_not_a_crash_or_ok(monkeypatch, tm
     assert outcome.raw_text is None
 
 
+# --- S1: an invalid PDF response must never poison the disk cache ------------
+
+
+def test_invalid_pdf_body_on_200_is_not_written_to_the_cache_dir(monkeypatch, tmp_path):
+    class FakeResponse:
+        status_code = 200
+        content = b"<html><body>Access Denied</body></html>"
+        headers = {}
+
+    def fake_get(url, timeout):
+        return FakeResponse()
+
+    monkeypatch.setattr(inj.requests, "get", fake_get)
+
+    outcome = fetch_edition("2026-01-05", "05PM", use_cache=False, pause=0, cache_dir=tmp_path)
+
+    assert outcome.status == "failed"
+    assert list(tmp_path.iterdir()) == []
+
+
+# --- S2: a malformed Last-Modified header must not crash the adapter ---------
+
+
+def test_malformed_last_modified_header_yields_none_not_an_exception(monkeypatch, tmp_path):
+    class FakeResponse:
+        status_code = 200
+        content = b"%PDF-1.4 fake"
+        headers = {"Last-Modified": "invalid"}
+
+    def fake_get(url, timeout):
+        return FakeResponse()
+
+    monkeypatch.setattr(inj.requests, "get", fake_get)
+    monkeypatch.setattr(inj, "_extract_text", lambda raw: EDITION_TEXT)
+
+    outcome = fetch_edition("2025-12-20", "05PM", use_cache=False, pause=0, cache_dir=tmp_path)
+
+    assert outcome.status == "ok"
+    assert outcome.source_last_modified_utc is None
+
+
 def test_server_error_status_is_classified_failed_with_http_status(monkeypatch):
     class FakeResponse:
         status_code = 500
@@ -166,10 +253,10 @@ def test_server_error_status_is_classified_failed_with_http_status(monkeypatch):
     assert outcome.http_status == 500
 
 
-# --- B4: three distinct time fields --------------------------------------------
+# --- B4/Sp1: four distinct time fields -------------------------------------
 
 
-def test_ok_edition_preserves_all_three_distinct_timestamps(monkeypatch, tmp_path):
+def test_ok_edition_preserves_all_four_distinct_timestamps(monkeypatch, tmp_path):
     class FakeResponse:
         status_code = 200
         content = b"%PDF-1.4 fake"
@@ -184,13 +271,17 @@ def test_ok_edition_preserves_all_three_distinct_timestamps(monkeypatch, tmp_pat
     outcome = fetch_edition("2025-12-20", "05PM", use_cache=False, pause=0, cache_dir=tmp_path)
 
     assert outcome.status == "ok"
-    # edition_effective_utc: what the filename token claims (05PM ET -> UTC).
-    assert outcome.edition_effective_utc == "2025-12-20T22:00:00+00:00"
+    # report_effective_utc: the PDF's own header (fixture says 01/15/24 05:45 PM ET) —
+    # authoritative, and computed from the text regardless of the requested date/edition.
+    assert outcome.report_effective_utc == "2024-01-15T22:45:00+00:00"
+    # edition_token_utc: what the filename token claims (05PM ET -> UTC) — a fallback.
+    assert outcome.edition_token_utc == "2025-12-20T22:00:00+00:00"
     # source_last_modified_utc: the response's own Last-Modified header.
     assert outcome.source_last_modified_utc == "2025-12-20T22:45:09+00:00"
     assert outcome.fetched_at_utc is not None
-    # All three are distinct concepts and must not collapse into each other.
-    assert outcome.edition_effective_utc != outcome.source_last_modified_utc
+    # All four are distinct concepts and must not collapse into each other.
+    assert outcome.report_effective_utc != outcome.edition_token_utc
+    assert outcome.edition_token_utc != outcome.source_last_modified_utc
     assert outcome.source_last_modified_utc != outcome.fetched_at_utc
 
 
@@ -209,11 +300,12 @@ def test_ok_edition_without_last_modified_header_has_no_source_last_modified(mon
     outcome = fetch_edition("2025-12-20", "05PM", use_cache=False, pause=0, cache_dir=tmp_path)
 
     assert outcome.status == "ok"
-    assert outcome.edition_effective_utc == "2025-12-20T22:00:00+00:00"
+    assert outcome.report_effective_utc == "2024-01-15T22:45:00+00:00"
+    assert outcome.edition_token_utc == "2025-12-20T22:00:00+00:00"
     assert outcome.source_last_modified_utc is None
 
 
-def test_cache_hit_has_edition_effective_utc_but_no_source_last_modified(monkeypatch, tmp_path):
+def test_cache_hit_has_edition_token_utc_but_no_source_last_modified(monkeypatch, tmp_path):
     cache_file = tmp_path / "Injury-Report_2025-12-20_05PM.pdf"
     cache_file.write_bytes(b"%PDF-1.4 fake")
     monkeypatch.setattr(inj, "_extract_text", lambda raw: EDITION_TEXT)
@@ -222,7 +314,8 @@ def test_cache_hit_has_edition_effective_utc_but_no_source_last_modified(monkeyp
 
     assert outcome.status == "ok"
     assert outcome.source == "cache"
-    assert outcome.edition_effective_utc == "2025-12-20T22:00:00+00:00"
+    assert outcome.report_effective_utc == "2024-01-15T22:45:00+00:00"
+    assert outcome.edition_token_utc == "2025-12-20T22:00:00+00:00"
     assert outcome.source_last_modified_utc is None
 
 
@@ -301,3 +394,46 @@ def test_hyphenated_surname_truncation_is_flagged_separately_from_unparseable():
     # match) — it must not be counted as an unparseable line.
     assert summary.unparseable_lines == 0
     assert summary.suspected_truncated_names == 1
+
+
+# --- S3: an all-absent run is indeterminate; a mixed run is not --------------
+
+
+def _outcome(status: str) -> EditionOutcome:
+    return EditionOutcome(
+        date="2026-01-05",
+        edition="05PM",
+        url="https://example.invalid/Injury-Report_2026-01-05_05PM.pdf",
+        status=status,
+        http_status={"ok": 200, "absent": 403, "failed": 500}[status],
+        absent_is_provisional=status == "absent",
+        classification_note=None,
+        rows=None,
+        error_type=None,
+        error_message=None,
+        attempts=1,
+        elapsed_s=0.0,
+        source="live",
+        report_effective_utc=None,
+        edition_token_utc=None,
+        source_last_modified_utc=None,
+        fetched_at_utc="2026-01-05T00:00:00+00:00",
+        raw_bytes=None,
+        raw_text=None,
+    )
+
+
+def test_all_absent_outcomes_are_indeterminate():
+    assert _is_indeterminate([_outcome("absent"), _outcome("absent")]) is True
+
+
+def test_one_ok_among_scattered_absents_is_not_indeterminate():
+    assert _is_indeterminate([_outcome("ok"), _outcome("absent"), _outcome("absent")]) is False
+
+
+def test_all_ok_is_not_indeterminate():
+    assert _is_indeterminate([_outcome("ok"), _outcome("ok")]) is False
+
+
+def test_all_failed_with_no_absent_is_not_indeterminate():
+    assert _is_indeterminate([_outcome("failed")]) is False

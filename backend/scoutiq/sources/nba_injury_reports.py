@@ -83,17 +83,56 @@ def _parse_edition_token(edition: str) -> tuple[int, int] | None:
     return hour, minute
 
 
-def edition_effective_utc(date: str, edition: str) -> str | None:
-    """What this edition claims to be, in UTC: the filename's date + edition token,
-    interpreted in the league's publication timezone (US/Eastern — the NBA publishes
-    injury reports on ET) and converted to UTC. Returns None if the token cannot be
-    parsed, rather than emitting an invalid string."""
+def edition_token_utc(date: str, edition: str) -> str | None:
+    """What this edition's filename token claims to be, in UTC: the filename's date +
+    edition token, interpreted in the league's publication timezone (US/Eastern — the
+    NBA publishes injury reports on ET) and converted to UTC. Returns None if the token
+    cannot be parsed, rather than emitting an invalid string.
+
+    This is a fallback/label, not the authoritative effective time — see
+    `report_effective_utc` below, which reads the PDF's own header and is off by
+    30-45 minutes from this value in the legacy whole-hour-token era."""
     parsed = _parse_edition_token(edition)
     if parsed is None:
         return None
     hour, minute = parsed
     try:
         year, month, day = (int(p) for p in date.split("-"))
+        local = datetime(year, month, day, hour, minute, tzinfo=REPORT_TIMEZONE)
+    except ValueError:
+        return None
+    return local.astimezone(timezone.utc).isoformat()
+
+
+_REPORT_HEADER_RE = re.compile(
+    r"Injury\s+Report:\s*(\d{1,2}/\d{1,2}/\d{2,4})\s+(\d{1,2}:\d{2})\s*([AP]M)"
+)
+
+
+def report_effective_utc(text: str) -> str | None:
+    """The PDF's own effective time, in UTC: parsed from its 'Injury Report: M/D/YY
+    HH:MM AM|PM' header line, interpreted in America/New_York and converted to UTC.
+    This is the authoritative effective time — unlike `edition_token_utc`, it reads
+    what the report itself claims rather than inferring from the filename. Returns
+    None if the header line is absent or unparseable; callers must never guess."""
+    m = _REPORT_HEADER_RE.search(text)
+    if not m:
+        return None
+    date_str, time_str, meridiem = m.groups()
+    try:
+        month, day, year = (int(p) for p in date_str.split("/"))
+        hour, minute = (int(p) for p in time_str.split(":"))
+    except ValueError:
+        return None
+    if year < 100:
+        year += 2000
+    if not (1 <= hour <= 12) or not (0 <= minute <= 59):
+        return None
+    if meridiem == "PM" and hour != 12:
+        hour += 12
+    elif meridiem == "AM" and hour == 12:
+        hour = 0
+    try:
         local = datetime(year, month, day, hour, minute, tzinfo=REPORT_TIMEZONE)
     except ValueError:
         return None
@@ -154,7 +193,8 @@ class EditionOutcome:
     attempts: int
     elapsed_s: float
     source: str  # 'cache' | 'live'
-    edition_effective_utc: str | None  # what the edition claims to be (filename token, ET->UTC)
+    report_effective_utc: str | None  # the PDF header's own effective time (authoritative); None if header absent/unparseable
+    edition_token_utc: str | None  # what the filename token claims (ET->UTC) — fallback/label, not authoritative
     source_last_modified_utc: str | None  # the response's Last-Modified header, if any
     fetched_at_utc: str  # this run's ingestion time
     raw_bytes: int | None
@@ -205,7 +245,8 @@ def fetch_edition(
                 attempts=0,
                 elapsed_s=0.0,
                 source="cache",
-                edition_effective_utc=None,
+                report_effective_utc=None,
+                edition_token_utc=None,
                 source_last_modified_utc=None,
                 fetched_at_utc=fetched_at_utc,
                 raw_bytes=len(raw),
@@ -225,7 +266,8 @@ def fetch_edition(
             attempts=0,
             elapsed_s=0.0,
             source="cache",
-            edition_effective_utc=edition_effective_utc(date, edition),
+            report_effective_utc=report_effective_utc(text),
+            edition_token_utc=edition_token_utc(date, edition),
             source_last_modified_utc=None,
             fetched_at_utc=fetched_at_utc,
             raw_bytes=len(raw),
@@ -253,15 +295,22 @@ def fetch_edition(
         elapsed = time.monotonic() - started
 
         if resp.status_code == 200:
-            cache.parent.mkdir(parents=True, exist_ok=True)
-            cache.write_bytes(resp.content)
             last_modified = resp.headers.get("Last-Modified")
-            source_last_modified_utc = (
-                parsedate_to_datetime(last_modified).astimezone(timezone.utc).isoformat()
-                if last_modified
-                else None
-            )
             try:
+                source_last_modified_utc = (
+                    parsedate_to_datetime(last_modified).astimezone(timezone.utc).isoformat()
+                    if last_modified
+                    else None
+                )
+            except Exception:
+                source_last_modified_utc = None
+
+            # Validate before caching: a 200 with an HTML/WAF body must never be
+            # written to disk, or every later run fails until the file is deleted
+            # by hand.
+            try:
+                if not resp.content.startswith(b"%PDF"):
+                    raise ValueError("response body is not a PDF (missing %PDF header)")
                 text = _extract_text(resp.content)
             except Exception as exc:
                 return EditionOutcome(
@@ -278,12 +327,15 @@ def fetch_edition(
                     attempts=attempt,
                     elapsed_s=elapsed,
                     source="live",
-                    edition_effective_utc=None,
+                    report_effective_utc=None,
+                    edition_token_utc=None,
                     source_last_modified_utc=source_last_modified_utc,
                     fetched_at_utc=fetched_at_utc,
                     raw_bytes=len(resp.content),
                     raw_text=None,
                 )
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_bytes(resp.content)
             return EditionOutcome(
                 date=date,
                 edition=edition,
@@ -298,7 +350,8 @@ def fetch_edition(
                 attempts=attempt,
                 elapsed_s=elapsed,
                 source="live",
-                edition_effective_utc=edition_effective_utc(date, edition),
+                report_effective_utc=report_effective_utc(text),
+                edition_token_utc=edition_token_utc(date, edition),
                 source_last_modified_utc=source_last_modified_utc,
                 fetched_at_utc=fetched_at_utc,
                 raw_bytes=len(resp.content),
@@ -320,7 +373,8 @@ def fetch_edition(
                 attempts=attempt,
                 elapsed_s=elapsed,
                 source="live",
-                edition_effective_utc=None,
+                report_effective_utc=None,
+                edition_token_utc=None,
                 source_last_modified_utc=None,
                 fetched_at_utc=fetched_at_utc,
                 raw_bytes=len(resp.content),
@@ -347,7 +401,8 @@ def fetch_edition(
         attempts=attempts,
         elapsed_s=elapsed,
         source="live",
-        edition_effective_utc=None,
+        report_effective_utc=None,
+        edition_token_utc=None,
         source_last_modified_utc=None,
         fetched_at_utc=fetched_at_utc,
         raw_bytes=None,
@@ -390,7 +445,8 @@ class AvailabilityRow:
     player_name: str
     status: str
     reason: str
-    edition_effective_utc: str | None
+    report_effective_utc: str | None
+    edition_token_utc: str | None
     source_url: str
 
 
@@ -405,7 +461,7 @@ class ParseSummary:
 def parse_edition_text(
     text: str,
     *,
-    edition_effective_utc: str | None = None,
+    edition_token_utc: str | None = None,
     source_url: str = "",
     pages: int = 0,
     known_teams: tuple[str, ...] = NBA_TEAM_NAMES,
@@ -413,9 +469,12 @@ def parse_edition_text(
     """Extract player-status rows from PDF-extracted text.
 
     `status` and `reason` are copied verbatim from the source — never mapped to a
-    diagnosis, severity, or risk value. Rows carry provenance (edition_effective_utc,
-    source_url) so downstream consumers can trace every row back to its snapshot.
+    diagnosis, severity, or risk value. Rows carry provenance (report_effective_utc,
+    parsed here from the PDF's own header; edition_token_utc, the caller-supplied
+    filename-token fallback; source_url) so downstream consumers can trace every row
+    back to its snapshot.
     """
+    header_utc = report_effective_utc(text)
     blob = re.sub(r"\s+", " ", text).strip()
 
     anchors: list[tuple[int, int, str, object]] = []
@@ -463,7 +522,8 @@ def parse_edition_text(
                     player_name=f"{last}, {first}",
                     status=status,
                     reason=reason,
-                    edition_effective_utc=edition_effective_utc,
+                    report_effective_utc=header_utc,
+                    edition_token_utc=edition_token_utc,
                     source_url=source_url,
                 )
             )

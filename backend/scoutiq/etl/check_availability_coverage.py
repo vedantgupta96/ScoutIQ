@@ -90,6 +90,17 @@ def _match_identities(
     return out
 
 
+def _is_indeterminate(outcomes: list[EditionOutcome]) -> bool:
+    """True when a run produced zero usable ('ok') outcomes and at least one
+    provisional-absent — absence dominating with no successes at all should read as
+    a possible access-policy change to automation, not a quiet day (see the S3 review
+    finding on issue #95). A run with at least one 'ok' and some scattered absents is
+    not indeterminate; those are genuine per-edition absences."""
+    ok_count = sum(1 for o in outcomes if o.status == "ok")
+    absent_count = sum(1 for o in outcomes if o.status == "absent")
+    return ok_count == 0 and absent_count > 0
+
+
 def run(
     dates: list[str],
     editions: list[str],
@@ -125,7 +136,7 @@ def run(
             if outcome.status == "ok" and outcome.raw_text:
                 rows, summary = parse_edition_text(
                     outcome.raw_text,
-                    edition_effective_utc=outcome.edition_effective_utc,
+                    edition_token_utc=outcome.edition_token_utc,
                     source_url=outcome.url,
                     pages=0,
                 )
@@ -145,6 +156,7 @@ def run(
 
     absent_editions = [f"{o.date} {o.edition}" for o in outcomes if o.status == "absent"]
     failed_editions = [f"{o.date} {o.edition}" for o in outcomes if o.status == "failed"]
+    indeterminate = _is_indeterminate(outcomes)
 
     result = {
         "retrieval": [
@@ -158,7 +170,8 @@ def run(
                 "attempts": o.attempts,
                 "elapsed_s": round(o.elapsed_s, 3),
                 "source": o.source,
-                "edition_effective_utc": o.edition_effective_utc,
+                "report_effective_utc": o.report_effective_utc,
+                "edition_token_utc": o.edition_token_utc,
                 "source_last_modified_utc": o.source_last_modified_utc,
                 "fetched_at_utc": o.fetched_at_utc,
             }
@@ -180,6 +193,7 @@ def run(
             "failed": failed_editions,
             "absent_caveat": _ABSENT_CAVEAT if absent_editions else None,
         },
+        "indeterminate": indeterminate,
     }
 
     if as_json:
@@ -190,12 +204,20 @@ def run(
             print(
                 f"  {o.date} {o.edition:6} status={o.status:6} http={o.http_status} "
                 f"attempts={o.attempts} elapsed={o.elapsed_s:.2f}s source={o.source} "
-                f"edition_effective_utc={o.edition_effective_utc} "
+                f"report_effective_utc={o.report_effective_utc} "
+                f"edition_token_utc={o.edition_token_utc} "
                 f"source_last_modified_utc={o.source_last_modified_utc} "
                 f"fetched_at_utc={o.fetched_at_utc}"
             )
         if absent_editions:
             print(f"\n  CAVEAT: {len(absent_editions)} {_ABSENT_CAVEAT}")
+        if indeterminate:
+            print(
+                f"\n  INDETERMINATE: 0 'ok' outcomes out of {len(outcomes)}, "
+                f"{len(absent_editions)} provisional-absent. This run produced no usable "
+                f"data — treat as a possible access-policy change, not a quiet day, until "
+                f"investigated."
+            )
 
         print("\n=== parsed row counts ===")
         for key, v in parse_summaries.items():
@@ -216,8 +238,9 @@ def run(
         print("\n=== archive limitation ===")
         print(f"  absent: {absent_editions or 'none'}")
         print(f"  failed: {failed_editions or 'none'}")
+        print(f"  indeterminate: {indeterminate}")
 
-    return 1 if failed_editions else 0
+    return 1 if (failed_editions or indeterminate) else 0
 
 
 def main() -> None:
