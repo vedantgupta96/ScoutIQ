@@ -18,6 +18,7 @@ import {
 import { DecisionQueueResponse, QueueItem, getDecisionQueue } from '@/lib/decisionQueueApi';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { Panel } from '@/components/ui/Panel';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Select } from '@/components/ui/Select';
@@ -112,10 +113,9 @@ function DecisionQueuePanel({ teamId }: { teamId: number }) {
   if (error) {
     return <Alert tone="negative">{error} — is the FastAPI server running?</Alert>;
   }
-  if (loading && !data) {
+  if (loading || data == null || data.team_id !== teamId) {
     return <LoadingNote>Loading the decision queue…</LoadingNote>;
   }
-  if (!data) return null;
 
   const actionable = data.items.filter((item) => item.type !== 'cap_tier');
 
@@ -136,31 +136,52 @@ function DecisionQueuePanel({ teamId }: { teamId: number }) {
   );
 }
 
+function parseTeamId(raw: string | null): number | null {
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function readStoredTeamId(): number | null {
   if (typeof window === 'undefined') return null;
-  const raw = window.localStorage.getItem(TEAM_STORAGE_KEY);
-  const parsed = raw ? Number(raw) : NaN;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  try {
+    return parseTeamId(window.localStorage.getItem(TEAM_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredTeamId(teamId: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(TEAM_STORAGE_KEY, String(teamId));
+  } catch {
+    // Private mode / disabled storage — persistence is a nice-to-have, not required.
+  }
 }
 
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const teamParam = searchParams.get('team');
-  const selectedId = teamParam ? Number(teamParam) : null;
+  const selectedId = parseTeamId(searchParams.get('team'));
 
-  const [teams, setTeams] = useState<TeamListItem[]>([]);
+  const [teamsRetry, setTeamsRetry] = useState(0);
+  const { data: teamsData, loading: teamsLoading, error: teamsError } = useApi<TeamListItem[]>(
+    (signal) => getTeams(signal),
+    [teamsRetry],
+    { fallback: 'Failed to load teams.' },
+  );
+  const teams = teamsData ?? [];
+
   const [cautions, setCautions] = useState<PlayerValuationCautionsResponse | null>(null);
   const [backtest, setBacktest] = useState<BacktestResponse | null>(null);
 
-  useEffect(() => { getTeams().then(setTeams).catch(() => {}); }, []);
-
   useEffect(() => {
-    if (selectedId != null) {
-      if (typeof window !== 'undefined') window.localStorage.setItem(TEAM_STORAGE_KEY, String(selectedId));
+    if (teams.length === 0) return;
+    if (selectedId != null && teams.some((t) => t.team_id === selectedId)) {
+      writeStoredTeamId(selectedId);
       return;
     }
-    if (teams.length === 0) return;
     const stored = readStoredTeamId();
     const fallback = stored != null && teams.some((t) => t.team_id === stored) ? stored : teams[0].team_id;
     router.replace(`/?team=${fallback}`);
@@ -199,13 +220,27 @@ function HomeContent() {
             value={selectedId ?? ''}
             onChange={(e) => router.replace(`/?team=${e.target.value}`)}
             aria-label="Select team"
+            disabled={teams.length === 0}
           >
-            {teams.length === 0 && <option value="">Loading teams…</option>}
+            {teams.length === 0 && <option value="">{teamsLoading ? 'Loading teams…' : 'No teams'}</option>}
             {teams.map((t) => <option key={t.team_id} value={t.team_id}>{t.name ?? t.abbreviation}</option>)}
           </Select>
         }
       >
-        {selectedId != null ? <DecisionQueuePanel teamId={selectedId} /> : <LoadingNote>Loading teams…</LoadingNote>}
+        {teamsError ? (
+          <Alert tone="negative">
+            {teamsError}{' '}
+            <Button size="sm" variant="secondary" onClick={() => setTeamsRetry((value) => value + 1)}>Retry</Button>
+          </Alert>
+        ) : teamsLoading ? (
+          <LoadingNote>Loading teams…</LoadingNote>
+        ) : teams.length === 0 ? (
+          <EmptyState title="No teams available." description="The teams endpoint returned no rosters to choose from." />
+        ) : selectedId != null ? (
+          <DecisionQueuePanel teamId={selectedId} />
+        ) : (
+          <LoadingNote>Loading the decision queue…</LoadingNote>
+        )}
       </Panel>
 
       <Panel eyebrow="Model, on the record" icon={<Target size={15} />} className="siq-home-calibration">

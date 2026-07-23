@@ -89,27 +89,41 @@ def test_sort_key_id_is_the_final_tiebreaker():
     assert [i.id for i in ordered] == ["roster_need:a", "roster_need:b"]
 
 
-def test_destinations_are_never_trade_routes():
+def test_destinations_are_never_trade_routes(monkeypatch):
     player = Player(player_id=1, full_name="Test Player", position="PG", current_team_id=LAL_ID)
-    # No cap_pct/aav on the option year -> option_cap_pct is None -> the value lookup (which
-    # would need a real db) is never reached; only .destination is under test here.
+    # No cap_pct on the option year -> option_cap_pct is None -> no verdict is computed;
+    # only .destination is under test here.
     final_year = ContractYear(contract_id=1, season="2025-26", cap_pct=None, aav=None, is_player_option=True)
-    option = dq._option_item(None, player, LAL_ID, "2025-26", final_year, {})
-    expiring = dq._expiring_item(player, LAL_ID, "2025-26", ContractYear(contract_id=1, season="2025-26", cap_pct=0.10))
-    team = Team(team_id=LAL_ID, abbreviation="LAL", name="Los Angeles Lakers")
+    option = dq._option_item(player, LAL_ID, "2025-26", final_year, {}, None)
+    expiring = dq._expiring_item(
+        player, LAL_ID, "2025-26", ContractYear(contract_id=1, season="2025-26", cap_pct=0.10), {}, None,
+    )
 
-    destinations = [option.destination, expiring.destination, f"/players/{player.player_id}",
-                    f"/teams/{team.team_id}", "/free-agency?tab=targets"]
+    monkeypatch.setattr(dq, "team_cap_hits", lambda db, ids, season: ({}, {}))
+    cap_tier = dq._cap_tier_item(None, _team(), LAL_ID, "2025-26", [], dict(CAPS))
+
+    monkeypatch.setattr(dq, "load_fit_context", lambda db, season: object())
+    need = RosterNeed(key="spacing", label="Spacing", coverage_pct=40.0, deficit_pct=60.0, status="need", caution=None)
+    monkeypatch.setattr(dq, "profile_roster", lambda context, ids: TeamFitProfile(
+        roster_player_count=1, profiled_player_count=1, confidence="medium", needs=[need],
+    ))
+    roster_need = dq._roster_need_item(None, LAL_ID, [player], "2025-26")
+
+    destinations = [
+        option.destination, expiring.destination, f"/players/{player.player_id}",
+        cap_tier.destination, roster_need.destination,
+    ]
     assert not any(d.startswith("/trade") for d in destinations)
+    assert cap_tier.destination == f"/teams?team={LAL_ID}"
+    assert roster_need.destination == f"/free-agency?tab=targets&team={LAL_ID}"
 
 
 # --------------------------------------------------------------------------- option / expiring
-def test_option_item_high_band_with_verdict(monkeypatch):
-    monkeypatch.setattr(dq, "_latest_value_pct", lambda db, player_id: 25.0)
+def test_option_item_high_band_with_verdict():
     player = Player(player_id=1, full_name="Option Kid", position="PG", current_team_id=LAL_ID)
     final_year = ContractYear(contract_id=1, season="2025-26", cap_pct=0.10, is_player_option=True)
 
-    item = dq._option_item(None, player, LAL_ID, "2025-26", final_year, dict(CAPS))
+    item = dq._option_item(player, LAL_ID, "2025-26", final_year, dict(CAPS), 25.0)
 
     assert item.priority == "high"
     assert item.type == dq.TYPE_OPTION
@@ -119,12 +133,11 @@ def test_option_item_high_band_with_verdict(monkeypatch):
     assert item.destination == "/free-agency?tab=options"
 
 
-def test_option_item_missing_value_stays_high_band_with_caution(monkeypatch):
-    monkeypatch.setattr(dq, "_latest_value_pct", lambda db, player_id: None)
+def test_option_item_missing_value_stays_high_band_with_caution():
     player = Player(player_id=1, full_name="Option Kid", position="PG", current_team_id=LAL_ID)
     final_year = ContractYear(contract_id=1, season="2025-26", cap_pct=0.10, is_team_option=True)
 
-    item = dq._option_item(None, player, LAL_ID, "2025-26", final_year, dict(CAPS))
+    item = dq._option_item(player, LAL_ID, "2025-26", final_year, dict(CAPS), None)
 
     assert item.priority == "high"  # factual, not valuation-dependent
     assert item.value_pct is None
@@ -135,7 +148,7 @@ def test_option_item_missing_cap_data_omits_verdict():
     player = Player(player_id=1, full_name="Option Kid", position="PG", current_team_id=LAL_ID)
     final_year = ContractYear(contract_id=1, season="2025-26", cap_pct=None, aav=None, is_team_option=True)
 
-    item = dq._option_item(None, player, LAL_ID, "2025-26", final_year, {})
+    item = dq._option_item(player, LAL_ID, "2025-26", final_year, {}, None)
 
     assert item.priority == "high"
     assert item.gap_pct is None
@@ -143,54 +156,97 @@ def test_option_item_missing_cap_data_omits_verdict():
     assert "option decision pending" in item.title
 
 
-def test_option_or_expiring_item_dispatches_on_option_flag(monkeypatch):
-    monkeypatch.setattr(dq, "_latest_contract", lambda db, player_id: Contract(id=1, player_id=player_id, season_start="2023-24", years=1))
-    monkeypatch.setattr(
-        dq, "_contract_years",
-        lambda db, contract_id: [ContractYear(contract_id=1, season="2025-26", cap_pct=0.12, is_team_option=True)],
-    )
-    monkeypatch.setattr(dq, "_latest_value_pct", lambda db, player_id: 20.0)
+def test_option_or_expiring_item_option_pool_member_produces_option_item():
+    """F3: pool membership drives the dispatch, not the option flag alone."""
     player = Player(player_id=1, full_name="Kid", current_team_id=LAL_ID)
-    item = dq._option_or_expiring_item(None, player, LAL_ID, "2025-26", {})
+    contract = Contract(id=10, player_id=1, season_start="2023-24", years=1)
+    years = [ContractYear(contract_id=10, season="2025-26", cap_pct=0.12, is_team_option=True)]
+
+    item = dq._option_or_expiring_item(
+        player, LAL_ID, "2025-26", {}, {1: contract}, {10: years}, {1: 20.0}, {1}, {},
+    )
+
     assert item.type == dq.TYPE_OPTION
 
 
-def test_option_or_expiring_item_expiring_when_not_option(monkeypatch):
-    monkeypatch.setattr(dq, "_latest_contract", lambda db, player_id: Contract(id=1, player_id=player_id, season_start="2023-24", years=1))
-    monkeypatch.setattr(
-        dq, "_contract_years",
-        lambda db, contract_id: [ContractYear(contract_id=1, season="2025-26", cap_pct=0.12)],
-    )
+def test_option_or_expiring_item_expiring_when_not_in_option_pool():
     player = Player(player_id=1, full_name="Vet", current_team_id=LAL_ID)
-    item = dq._option_or_expiring_item(None, player, LAL_ID, "2025-26", {})
+    contract = Contract(id=10, player_id=1, season_start="2023-24", years=1)
+    years = [ContractYear(contract_id=10, season="2025-26", cap_pct=0.12)]
+
+    item = dq._option_or_expiring_item(
+        player, LAL_ID, "2025-26", {}, {1: contract}, {10: years}, {}, set(), {},
+    )
+
     assert item.type == dq.TYPE_EXPIRING
     assert item.priority == "medium"
     assert item.priority_reason == "Final guaranteed year is 2025-26; reaches free agency after it."
 
 
-def test_option_or_expiring_item_none_when_final_year_before_season(monkeypatch):
-    monkeypatch.setattr(dq, "_latest_contract", lambda db, player_id: Contract(id=1, player_id=player_id, season_start="2023-24", years=1))
-    monkeypatch.setattr(
-        dq, "_contract_years",
-        lambda db, contract_id: [ContractYear(contract_id=1, season="2024-25", cap_pct=0.12)],
+def test_option_or_expiring_item_future_option_not_in_pool_produces_no_item():
+    """F3: an option flagged several seasons out isn't in the current entering-season Free
+    Agency options pool, so it isn't "pending" yet and produces no item at all."""
+    player = Player(player_id=1, full_name="Gone Later", current_team_id=LAL_ID)
+    contract = Contract(id=10, player_id=1, season_start="2023-24", years=6)
+    years = [ContractYear(contract_id=10, season="2028-29", cap_pct=0.15, is_player_option=True)]
+
+    item = dq._option_or_expiring_item(
+        player, LAL_ID, "2025-26", {}, {1: contract}, {10: years}, {}, set(), {},
     )
+
+    assert item is None
+
+
+def test_option_or_expiring_item_none_when_final_year_before_season():
     player = Player(player_id=1, full_name="Gone", current_team_id=LAL_ID)
-    assert dq._option_or_expiring_item(None, player, LAL_ID, "2025-26", {}) is None
+    contract = Contract(id=10, player_id=1, season_start="2022-23", years=2)
+    years = [ContractYear(contract_id=10, season="2024-25", cap_pct=0.12)]
+
+    item = dq._option_or_expiring_item(
+        player, LAL_ID, "2025-26", {}, {1: contract}, {10: years}, {}, set(), {},
+    )
+
+    assert item is None
 
 
-def test_option_or_expiring_item_none_without_contract(monkeypatch):
-    monkeypatch.setattr(dq, "_latest_contract", lambda db, player_id: None)
+def test_current_option_pool_ids_filters_to_option_types(monkeypatch):
+    class _Entry:
+        def __init__(self, player_id, fa_type):
+            self.player = Player(player_id=player_id)
+            self.fa_type = fa_type
+
+    monkeypatch.setattr(dq.fa_router, "_resolve_entering", lambda season: "2026-27")
+    monkeypatch.setattr(
+        dq.fa_router, "_assemble_pool",
+        lambda db, entering, **kw: [
+            _Entry(1, dq.fa.FA_PLAYER_OPTION), _Entry(2, dq.fa.FA_TEAM_OPTION), _Entry(3, dq.fa.FA_EXPIRING),
+        ],
+    )
+    assert dq._current_option_pool_ids(None) == {1, 2}
+
+
+def test_option_or_expiring_item_none_without_contract():
     player = Player(player_id=1, full_name="No Contract", current_team_id=LAL_ID)
-    assert dq._option_or_expiring_item(None, player, LAL_ID, "2025-26", {}) is None
+    assert dq._option_or_expiring_item(player, LAL_ID, "2025-26", {}, {}, {}, {}, set(), {}) is None
 
 
 def test_expiring_item_uses_stored_cap_pct():
     player = Player(player_id=2, full_name="Vet Expiring")
     final_year = ContractYear(contract_id=1, season="2026-27", cap_pct=0.18, aav=20_000_000)
-    item = dq._expiring_item(player, LAL_ID, "2026-27", final_year)
+    item = dq._expiring_item(player, LAL_ID, "2026-27", final_year, {}, None)
     assert item.pay_pct == 18.0
     assert item.pay_usd == 20_000_000
     assert item.destination == "/free-agency"
+
+
+def test_expiring_item_derives_pay_pct_from_cap_hit_when_cap_pct_missing():
+    player = Player(player_id=3, full_name="No Stored Pct")
+    final_year = ContractYear(contract_id=1, season="2026-27", cap_pct=None, aav=None)
+    caps = {"2026-27": SeasonCapData("2026-27", 165_000_000, 200_000_000, 210_000_000, 220_000_000)}
+
+    item = dq._expiring_item(player, LAL_ID, "2026-27", final_year, caps, 16_500_000)
+
+    assert item.pay_pct == 10.0
 
 
 # --------------------------------------------------------------------------- extension
@@ -327,7 +383,7 @@ def test_roster_need_critical_is_medium_and_need_is_low(monkeypatch):
     ))
     item = dq._roster_need_item(None, LAL_ID, roster, "2025-26")
     assert item.priority == "medium"
-    assert item.destination == "/free-agency?tab=targets"
+    assert item.destination == f"/free-agency?tab=targets&team={LAL_ID}"
     assert item.as_of == dq.LATEST_SEASON
 
     lesser_need = RosterNeed(key="defense", label="Defensive activity", coverage_pct=85.0, deficit_pct=15.0, status="need", caution="noisy metric")
@@ -373,7 +429,7 @@ def test_build_decision_queue_assembles_and_sorts(monkeypatch):
 
     monkeypatch.setattr(
         dq, "_player_items",
-        lambda db, player, team_id, season, caps: (
+        lambda db, player, team_id, season, caps, *args: (
             [_item(priority="high", type_=dq.TYPE_OPTION, player_id=player.player_id, id_=f"option:{player.player_id}")]
             if player.player_id == 1
             else [_item(priority="low", type_=dq.TYPE_EXTENSION, player_id=player.player_id, id_=f"extension:{player.player_id}")]
@@ -394,7 +450,7 @@ def test_build_decision_queue_assembles_and_sorts(monkeypatch):
     assert [i.id for i in queue.items] == ["option:1", "cap_tier:team", "extension:2"]
 
 
-def test_build_decision_queue_generated_from_non_latest_season(monkeypatch):
+def test_build_decision_queue_accepts_explicit_current_season(monkeypatch):
     team = _team()
     db = FakeDB(teams=[team], players=[])
     monkeypatch.setattr(dq, "load_season_caps", lambda db: dict(CAPS))
@@ -404,10 +460,22 @@ def test_build_decision_queue_generated_from_non_latest_season(monkeypatch):
     )
     monkeypatch.setattr(dq, "_roster_need_item", lambda db, team_id, roster, season: None)
 
-    queue = dq.build_decision_queue(db, LAL_ID, "2026-27")
+    queue = dq.build_decision_queue(db, LAL_ID, dq.LATEST_SEASON)
 
-    assert queue.season == "2026-27"
-    assert queue.generated_from == "2026-27"
+    assert queue.season == dq.LATEST_SEASON
+    assert queue.generated_from == "latest"
+
+
+def test_build_decision_queue_rejects_non_current_season():
+    """F1: the endpoint composes current contracts/rosters/valuations/roster-fit, so any
+    season other than LATEST_SEASON is rejected rather than silently served."""
+    team = _team()
+    db = FakeDB(teams=[team], players=[])
+    try:
+        dq.build_decision_queue(db, LAL_ID, "2023-24")
+        assert False, "expected ValueError"
+    except ValueError as e:
+        assert dq.LATEST_SEASON in str(e)
 
 
 # --------------------------------------------------------------------------- router
@@ -421,6 +489,24 @@ def test_router_bad_season_422():
     db = FakeDB(teams=[_team()])
     resp = _client(db).get("/decision-queue", params={"team_id": LAL_ID, "season": "20xx"})
     assert resp.status_code == 422
+
+
+def test_router_non_current_season_422():
+    db = FakeDB(teams=[_team()])
+    resp = _client(db).get("/decision-queue", params={"team_id": LAL_ID, "season": "2023-24"})
+    assert resp.status_code == 422
+
+
+def test_router_accepts_current_season(monkeypatch):
+    canned = dq.DecisionQueue(
+        team_id=LAL_ID, team_name="Los Angeles Lakers", season="2025-26", generated_from="latest",
+        items=[], caveat="caveat text",
+    )
+    monkeypatch.setattr(dqr, "build_decision_queue", lambda db, team_id, season: canned)
+
+    resp = _client(FakeDB()).get("/decision-queue", params={"team_id": LAL_ID, "season": dq.LATEST_SEASON})
+
+    assert resp.status_code == 200
 
 
 def test_router_happy_path(monkeypatch):

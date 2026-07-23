@@ -3,7 +3,7 @@
 Thin HTTP wrapper: all ranking, banding, and verdict logic lives in the deep module
 scoutiq.api.decision_queue. Per-item degradation (missing contract, missing valuation, missing
 model artifact) is handled inside that module, so this endpoint only needs to turn an unknown
-team into a 404 and an invalid season into a 422.
+team into a 404 and an invalid or non-current season into a 422.
 """
 from __future__ import annotations
 
@@ -61,6 +61,8 @@ def get_decision_queue(
         queue = build_decision_queue(db, team_id, season)
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     return DecisionQueueResponse(
         team_id=queue.team_id,

@@ -1,8 +1,19 @@
 """Team Decision Queue — composes existing extension, option, cap-tier, and roster-need
 logic into one prioritized, read-only list of a team's highest-leverage contract, cap, and
-roster questions. Deep module: no router imports; DB orchestration only (contract load,
-extension/option verdicts, cap tier, roster fit) so it stays unit-testable without a live DB
-or model artifact.
+roster questions. Deep module: DB orchestration only (contract load, extension/option
+verdicts, cap tier, roster fit) so it stays unit-testable without a live DB or model
+artifact — the one exception is reusing free_agency's pool-assembly helpers for option
+discovery (see below), a plain function import rather than a route dependency.
+
+Only the current season (LATEST_SEASON) is supported: every item here composes today's
+contracts, rosters, valuations, and roster-fit, so `season` must be omitted or equal to
+LATEST_SEASON. Anything else raises ValueError (the router maps that to 422) rather than
+silently serving a historical snapshot — as-of-season composition is not implemented.
+
+An `option` item is only emitted when the player is actually in the current entering-season
+Free Agency options pool (reusing free_agency._assemble_pool / _resolve_entering), so its
+`/free-agency?tab=options` destination always contains the player — a final contract year
+several seasons out with an option flag is not "pending" yet and produces no item at all.
 
 Ordering (deterministic, covered by tests):
   1. Priority band: high > medium > low.
@@ -41,8 +52,9 @@ from scoutiq.api.cap import (
 from scoutiq.api.extension import decide_extension
 from scoutiq.api.roster_fit import load_fit_context
 from scoutiq.api.rosters import team_cap_hits
+from scoutiq.api.routers import free_agency as fa_router
 from scoutiq.api.season import LATEST_SEASON
-from scoutiq.api.valuation import value_player_detail
+from scoutiq.api.valuation import value_players
 from scoutiq.model.roster_fit import profile_roster
 from scoutiq.models import Contract, ContractYear, Player, Team
 
@@ -65,7 +77,9 @@ QUEUE_CAVEAT = (
     "Composes the extension, option, cap-tier, and roster-need logic already surfaced "
     "elsewhere in ScoutIQ into one read-only prioritization view. There is no mutation, "
     "assignment, completion state, or composite score — every item's band is explained by "
-    "its own priority_reason, and links go to the existing ScoutIQ surface for that decision."
+    "its own priority_reason, and links go to the existing ScoutIQ surface for that decision. "
+    f"Only available for the current season ({LATEST_SEASON}); as-of-season composition is "
+    "not implemented."
 )
 
 
@@ -123,21 +137,32 @@ def _sort_key(item: QueueItem):
 
 
 # --------------------------------------------------------------------------- contract lookups
-def _latest_contract(db, player_id: int) -> Contract | None:
-    return db.scalars(
+def _latest_contracts_for(db, player_ids: list[int]) -> dict[int, Contract]:
+    """One contract per player_id, batched for the whole roster in a single query."""
+    if not player_ids:
+        return {}
+    contracts = db.scalars(
         select(Contract)
-        .where(Contract.player_id == player_id)
-        .order_by(desc(Contract.season_start), desc(Contract.scraped_at))
-        .limit(1)
-    ).first()
-
-
-def _contract_years(db, contract_id: int) -> list[ContractYear]:
-    return db.scalars(
-        select(ContractYear)
-        .where(ContractYear.contract_id == contract_id)
-        .order_by(ContractYear.season)
+        .where(Contract.player_id.in_(player_ids))
+        .distinct(Contract.player_id)
+        .order_by(Contract.player_id, desc(Contract.season_start), desc(Contract.scraped_at))
     ).all()
+    return {c.player_id: c for c in contracts}
+
+
+def _contract_years_for(db, contract_ids: list[int]) -> dict[int, list[ContractYear]]:
+    """Contract years for a batch of contract ids, grouped and ordered ascending by season."""
+    if not contract_ids:
+        return {}
+    years = db.scalars(
+        select(ContractYear)
+        .where(ContractYear.contract_id.in_(contract_ids))
+        .order_by(ContractYear.contract_id, ContractYear.season)
+    ).all()
+    by_contract: dict[int, list[ContractYear]] = {}
+    for cy in years:
+        by_contract.setdefault(cy.contract_id, []).append(cy)
+    return by_contract
 
 
 def _year_cap_pct(year: ContractYear, caps: dict[str, SeasonCapData]) -> float | None:
@@ -150,26 +175,28 @@ def _year_cap_pct(year: ContractYear, caps: dict[str, SeasonCapData]) -> float |
     return None
 
 
-def _latest_value_pct(db, player_id: int) -> float | None:
-    """Model value at the latest loaded season, degrading to None on any valuation failure —
-    missing stats (LookupError) or a missing model artifact (FileNotFoundError) alike, so one
-    player's model gap never breaks the rest of the queue."""
-    try:
-        valuation, _features, _attribution = value_player_detail(db, player_id, LATEST_SEASON)
-    except (LookupError, FileNotFoundError):
-        return None
-    return valuation.value_pct
+def _current_option_pool_ids(db) -> set[int]:
+    """Player ids in the Free Agency options pool for the season entering next — the same
+    pool assembly `/free-agency?tab=options` renders, reused so a queue option item never
+    links to a board that doesn't list the player."""
+    entering = fa_router._resolve_entering(None)
+    pool = fa_router._assemble_pool(db, entering, type_filter=None, position=None)
+    return {entry.player.player_id for entry in pool if entry.fa_type in (fa.FA_PLAYER_OPTION, fa.FA_TEAM_OPTION)}
 
 
 # --------------------------------------------------------------------------- option / expiring
 def _option_item(
-    db, player: Player, team_id: int, season: str, final_year: ContractYear, caps: dict[str, SeasonCapData]
+    player: Player,
+    team_id: int,
+    season: str,
+    final_year: ContractYear,
+    caps: dict[str, SeasonCapData],
+    value_pct: float | None,
 ) -> QueueItem:
     fa_type = fa.free_agent_type(final_year.is_player_option, final_year.is_team_option)
     option_cap_pct = _year_cap_pct(final_year, caps)
     verdict = None
     if option_cap_pct is not None:
-        value_pct = _latest_value_pct(db, player.player_id)
         verdict = fa.option_decision(value_pct, option_cap_pct, fa_type)
 
     if verdict is not None:
@@ -209,8 +236,20 @@ def _option_item(
     )
 
 
-def _expiring_item(player: Player, team_id: int, season: str, final_year: ContractYear) -> QueueItem:
-    pay_pct = round(float(final_year.cap_pct) * 100, 2) if final_year.cap_pct is not None else None
+def _expiring_item(
+    player: Player,
+    team_id: int,
+    season: str,
+    final_year: ContractYear,
+    caps: dict[str, SeasonCapData],
+    cap_hit: int | None,
+) -> QueueItem:
+    if final_year.cap_pct is not None:
+        pay_pct = round(float(final_year.cap_pct) * 100, 2)
+    else:
+        season_cap = cap_for(season, caps)
+        salary_cap = season_cap.salary_cap if season_cap else None
+        pay_pct = round(cap_hit / salary_cap * 100, 2) if (cap_hit and salary_cap) else None
     reason = f"Final guaranteed year is {season}; reaches free agency after it."
     return QueueItem(
         id=f"expiring:{team_id}:{player.player_id}:{season}",
@@ -234,12 +273,20 @@ def _expiring_item(player: Player, team_id: int, season: str, final_year: Contra
 
 
 def _option_or_expiring_item(
-    db, player: Player, team_id: int, season: str, caps: dict[str, SeasonCapData]
+    player: Player,
+    team_id: int,
+    season: str,
+    caps: dict[str, SeasonCapData],
+    contracts_by_player: dict[int, Contract],
+    years_by_contract: dict[int, list[ContractYear]],
+    value_pct_by_player: dict[int, float],
+    option_pool_ids: set[int],
+    cap_hits: dict[int, int],
 ) -> QueueItem | None:
-    contract = _latest_contract(db, player.player_id)
+    contract = contracts_by_player.get(player.player_id)
     if contract is None:
         return None
-    years = _contract_years(db, contract.id)
+    years = years_by_contract.get(contract.id, [])
     if not years:
         return None
 
@@ -247,10 +294,10 @@ def _option_or_expiring_item(
     if final_year.season < season:
         return None
 
-    if final_year.is_player_option or final_year.is_team_option:
-        return _option_item(db, player, team_id, season, final_year, caps)
+    if player.player_id in option_pool_ids:
+        return _option_item(player, team_id, season, final_year, caps, value_pct_by_player.get(player.player_id))
     if final_year.season == season:
-        return _expiring_item(player, team_id, season, final_year)
+        return _expiring_item(player, team_id, season, final_year, caps, cap_hits.get(player.player_id))
     return None
 
 
@@ -265,6 +312,10 @@ _EXTENSION_PRIORITY = {
 
 
 def _extension_item(db, player: Player, team_id: int, season: str) -> QueueItem | None:
+    # decide_extension re-fetches this player's contract, contract-years, and valuation
+    # itself (it's a shared deep module used well beyond this queue); batching it here would
+    # mean forking or extending its interface, so this one call stays a per-player DB round
+    # trip — the residual cost F4 didn't fully close out.
     try:
         decision = decide_extension(db, player.player_id)
     except (LookupError, FileNotFoundError):
@@ -299,10 +350,22 @@ def _extension_item(db, player: Player, team_id: int, season: str) -> QueueItem 
 
 
 def _player_items(
-    db, player: Player, team_id: int, season: str, caps: dict[str, SeasonCapData]
+    db,
+    player: Player,
+    team_id: int,
+    season: str,
+    caps: dict[str, SeasonCapData],
+    contracts_by_player: dict[int, Contract],
+    years_by_contract: dict[int, list[ContractYear]],
+    value_pct_by_player: dict[int, float],
+    option_pool_ids: set[int],
+    cap_hits: dict[int, int],
 ) -> list[QueueItem]:
     items: list[QueueItem] = []
-    option_or_expiring = _option_or_expiring_item(db, player, team_id, season, caps)
+    option_or_expiring = _option_or_expiring_item(
+        player, team_id, season, caps, contracts_by_player, years_by_contract,
+        value_pct_by_player, option_pool_ids, cap_hits,
+    )
     if option_or_expiring is not None:
         items.append(option_or_expiring)
     extension_item = _extension_item(db, player, team_id, season)
@@ -395,7 +458,7 @@ def _cap_tier_item(
         gap_pct=None,
         value_usd=None,
         pay_usd=payroll,
-        destination=f"/teams/{team_id}",
+        destination=f"/teams?team={team_id}",
         season=season,
         as_of=season,
         caution=caution,
@@ -435,7 +498,7 @@ def _roster_need_item(db, team_id: int, roster: list[Player], season: str) -> Qu
         gap_pct=None,
         value_usd=None,
         pay_usd=None,
-        destination="/free-agency?tab=targets",
+        destination=f"/free-agency?tab=targets&team={team_id}",
         season=season,
         as_of=LATEST_SEASON,
         caution=top.caution,
@@ -444,23 +507,42 @@ def _roster_need_item(db, team_id: int, roster: list[Player], season: str) -> Qu
 
 # --------------------------------------------------------------------------- assembly
 def build_decision_queue(db, team_id: int, season: str | None = None) -> DecisionQueue:
-    """Assemble, band, and order a team's decision queue for `season` (defaults to LATEST_SEASON).
+    """Assemble, band, and order a team's decision queue. `season` must be omitted or equal
+    to LATEST_SEASON — every item here composes today's contracts, rosters, valuations, and
+    roster-fit, so as-of-season composition is not implemented for any other value.
 
-    Raises LookupError if the team does not exist; the router maps that to a 404. Every other
+    Raises ValueError if `season` is provided and isn't LATEST_SEASON (the router maps that to
+    422), and LookupError if the team does not exist (the router maps that to 404). Every other
     per-item failure (missing contract, missing valuation, missing model artifact) degrades that
     one item rather than raising, so the queue as a whole never 500s on one player's gap.
     """
+    if season is not None and season != LATEST_SEASON:
+        raise ValueError(
+            f"decision-queue is only available for the current season {LATEST_SEASON}; "
+            "as-of-season composition is not implemented."
+        )
     team = db.get(Team, team_id)
     if team is None:
         raise LookupError(f"Team {team_id} not found.")
-    target_season = season or LATEST_SEASON
+    target_season = LATEST_SEASON
 
     roster = db.scalars(select(Player).where(Player.current_team_id == team_id)).all()
+    roster_ids = [p.player_id for p in roster]
     caps = load_season_caps(db)
+
+    contracts_by_player = _latest_contracts_for(db, roster_ids)
+    years_by_contract = _contract_years_for(db, [c.id for c in contracts_by_player.values()])
+    valuations = value_players(db, [(pid, LATEST_SEASON) for pid in roster_ids])
+    value_pct_by_player = {pid: v.value_pct for (pid, _season), v in valuations.items()}
+    option_pool_ids = _current_option_pool_ids(db)
+    cap_hits, _pay_source = team_cap_hits(db, roster_ids, target_season)
 
     items: list[QueueItem] = []
     for player in roster:
-        items.extend(_player_items(db, player, team_id, target_season, caps))
+        items.extend(_player_items(
+            db, player, team_id, target_season, caps,
+            contracts_by_player, years_by_contract, value_pct_by_player, option_pool_ids, cap_hits,
+        ))
 
     items.append(_cap_tier_item(db, team, team_id, target_season, roster, caps))
     need_item = _roster_need_item(db, team_id, roster, target_season)
@@ -473,7 +555,7 @@ def build_decision_queue(db, team_id: int, season: str | None = None) -> Decisio
         team_id=team_id,
         team_name=team.name,
         season=target_season,
-        generated_from="latest" if target_season == LATEST_SEASON else target_season,
+        generated_from="latest",
         items=items,
         caveat=QUEUE_CAVEAT,
     )
