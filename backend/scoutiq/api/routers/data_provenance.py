@@ -4,17 +4,24 @@ Lab: no trade workspace/scenario data is ever surfaced here.
 
 Each dataset is queried independently and degrades on its own — one dataset's query
 failing never 500s the whole response, consistent with docs/adr/0001 (valuation
-surfaces degrade when the model is unavailable).
+surfaces degrade when the model is unavailable). On Postgres, a failed statement
+aborts the whole transaction until rolled back, so each dataset runs inside its own
+SAVEPOINT (`db.begin_nested()`) — a failure there rolls back just that savepoint,
+leaving the shared transaction usable for every dataset queried after it.
+
+Every builder computes counts/spans with SQL aggregates and never selects the
+sensitive payload columns (stat JSON, valuation payloads, scout report bodies/
+citations, rating evidence spans) — only the columns needed to count and label.
 """
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 from fastapi import APIRouter
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
 from scoutiq.api.deps import DB
@@ -68,25 +75,31 @@ class DatasetProvenance(BaseModel):
 
 
 class ProvenanceResponse(BaseModel):
+    """The full provenance snapshot. Every field on every `DatasetProvenance` record
+    is deterministic for a fixed database — the same query against the same data
+    always produces the same value. `generated_at_utc` is the sole exception: it is
+    wall-clock time at request handling and is expected to differ between calls."""
+
     datasets: list[DatasetProvenance]
     generated_at_utc: str
     caveat: str
 
 
-def _season_span(seasons: Iterable[str | None]) -> tuple[int, str | None, str | None]:
-    uniq = sorted({s for s in seasons if s})
-    if not uniq:
-        return 0, None, None
-    return len(uniq), uniq[0], uniq[-1]
-
-
-def _latest(timestamps: Iterable[datetime | None]) -> datetime | None:
-    present = [dt for dt in timestamps if dt is not None]
-    return max(present) if present else None
-
-
 def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt is not None else None
+
+
+def _grouped_source(db: Session, col, where=None) -> str | None:
+    """Group `col` and return its value distribution as a "value (count), ..." string,
+    ordered by count desc, with null values skipped. None if there are no rows."""
+    stmt = select(col, func.count()).where(col.isnot(None))
+    if where is not None:
+        stmt = stmt.where(where)
+    stmt = stmt.group_by(col).order_by(func.count().desc())
+    rows = db.execute(stmt).all()
+    if not rows:
+        return None
+    return ", ".join(f"{value} ({count})" for value, count in rows)
 
 
 def _unavailable(key: str, name: str, source: str, error: Exception) -> DatasetProvenance:
@@ -101,265 +114,286 @@ def _unavailable(key: str, name: str, source: str, error: Exception) -> DatasetP
 
 def _player_seasons(db: Session) -> DatasetProvenance:
     key, name, source = "player_seasons", "Player seasons & statistics", "nba.com Advanced + Basketball-Reference"
-    try:
-        rows = db.scalars(select(PlayerSeason)).all()
-        season_count, earliest, latest = _season_span(r.season for r in rows)
-        return DatasetProvenance(
-            key=key,
-            name=name,
-            source=source,
-            record_count=len(rows),
-            player_count=len({r.player_id for r in rows}),
-            season_count=season_count,
-            earliest_season=earliest,
-            latest_season=latest,
-            caveat=(
-                "record_count is rows in player_seasons (one per player-season); player_count is "
-                "distinct players with a stat row; season_count/earliest/latest span the seasons on "
-                "file. Advanced metrics merge nba.com Advanced with Basketball-Reference. No "
-                "ingestion timestamp is stored for this table, so freshness is unknown, not assumed "
-                "current."
-            ),
-        )
-    except Exception as exc:  # noqa: BLE001 - each dataset must degrade independently
-        return _unavailable(key, name, source, exc)
+    record_count = db.scalar(select(func.count()).select_from(PlayerSeason))
+    player_count = db.scalar(select(func.count(distinct(PlayerSeason.player_id))))
+    season_count = db.scalar(select(func.count(distinct(PlayerSeason.season))))
+    earliest = db.scalar(select(func.min(PlayerSeason.season)))
+    latest = db.scalar(select(func.max(PlayerSeason.season)))
+    return DatasetProvenance(
+        key=key,
+        name=name,
+        source=source,
+        record_count=record_count,
+        player_count=player_count,
+        season_count=season_count,
+        earliest_season=earliest,
+        latest_season=latest,
+        caveat=(
+            "record_count is rows in player_seasons (one per player-season); player_count is "
+            "distinct players with a stat row; season_count/earliest/latest span the seasons on "
+            "file. Advanced metrics merge nba.com Advanced with Basketball-Reference. "
+            "player_seasons has no per-row source column, so this label is descriptive, not a "
+            "grouped count. No ingestion timestamp is stored for this table, so freshness is "
+            "unknown, not assumed current."
+        ),
+    )
 
 
 def _player_salaries(db: Session) -> DatasetProvenance:
-    key, name, source = "player_salaries", "Realized pay (player salaries)", "Basketball-Reference (bbref)"
-    try:
-        rows = db.scalars(select(PlayerSalary)).all()
-        season_count, earliest, latest = _season_span(r.season for r in rows)
-        return DatasetProvenance(
-            key=key,
-            name=name,
-            source=source,
-            record_count=len(rows),
-            player_count=len({r.player_id for r in rows}),
-            season_count=season_count,
-            earliest_season=earliest,
-            latest_season=latest,
-            caveat=(
-                "record_count is rows in player_salaries (one per player-season of realized pay); "
-                "player_count is distinct players; season_count/earliest/latest span the seasons on "
-                "file. The stored source column is 'bbref'. No ingestion timestamp is stored, so "
-                "freshness is unknown, not assumed current."
-            ),
-        )
-    except Exception as exc:  # noqa: BLE001
-        return _unavailable(key, name, source, exc)
+    key, name = "player_salaries", "Realized pay (player salaries)"
+    source = _grouped_source(db, PlayerSalary.source) or "no source recorded"
+    record_count = db.scalar(select(func.count()).select_from(PlayerSalary))
+    player_count = db.scalar(select(func.count(distinct(PlayerSalary.player_id))))
+    season_count = db.scalar(select(func.count(distinct(PlayerSalary.season))))
+    earliest = db.scalar(select(func.min(PlayerSalary.season)))
+    latest = db.scalar(select(func.max(PlayerSalary.season)))
+    return DatasetProvenance(
+        key=key,
+        name=name,
+        source=source,
+        record_count=record_count,
+        player_count=player_count,
+        season_count=season_count,
+        earliest_season=earliest,
+        latest_season=latest,
+        caveat=(
+            "record_count is rows in player_salaries (one per player-season of realized pay); "
+            "player_count is distinct players; season_count/earliest/latest span the seasons on "
+            "file. source is the distribution of player_salaries.source values, most common "
+            "first. No ingestion timestamp is stored, so freshness is unknown, not assumed "
+            "current."
+        ),
+    )
 
 
 def _contracts(db: Session) -> DatasetProvenance:
-    key, name, source = "contracts", "Forward contracts", "Spotrac"
-    try:
-        contracts = db.scalars(select(Contract)).all()
-        years = db.scalars(select(ContractYear)).all()
-        season_count, earliest, latest = _season_span(y.season for y in years)
-        last_updated = _latest(c.scraped_at for c in contracts)
-        return DatasetProvenance(
-            key=key,
-            name=name,
-            source=source,
-            record_count=len(years),
-            player_count=len({c.player_id for c in contracts}),
-            season_count=season_count,
-            earliest_season=earliest,
-            latest_season=latest,
-            last_updated_utc=_iso(last_updated),
-            last_updated_basis="contracts.scraped_at" if last_updated is not None else None,
-            caveat=(
-                "record_count is rows in contract_years (one per contract-season); player_count is "
-                "distinct players with a forward contract; season_count/earliest/latest span "
-                "contract_years.season. last_updated_utc is the most recent contracts.scraped_at "
-                "across all contracts — when Spotrac was last scraped for any player, not a "
-                "per-player freshness guarantee."
-            ),
-        )
-    except Exception as exc:  # noqa: BLE001
-        return _unavailable(key, name, source, exc)
+    key, name = "contracts", "Forward contracts"
+    source = _grouped_source(db, Contract.source) or "no source recorded"
+    record_count = db.scalar(select(func.count()).select_from(ContractYear))
+    player_count = db.scalar(select(func.count(distinct(Contract.player_id))))
+    season_count = db.scalar(select(func.count(distinct(ContractYear.season))))
+    earliest = db.scalar(select(func.min(ContractYear.season)))
+    latest = db.scalar(select(func.max(ContractYear.season)))
+    last_updated = db.scalar(select(func.max(Contract.scraped_at)))
+    return DatasetProvenance(
+        key=key,
+        name=name,
+        source=source,
+        record_count=record_count,
+        player_count=player_count,
+        season_count=season_count,
+        earliest_season=earliest,
+        latest_season=latest,
+        last_updated_utc=_iso(last_updated),
+        last_updated_basis="contracts.scraped_at" if last_updated is not None else None,
+        caveat=(
+            "record_count is rows in contract_years (one per contract-season); player_count is "
+            "distinct players with a forward contract; season_count/earliest/latest span "
+            "contract_years.season. source is the distribution of contracts.source values, most "
+            "common first. last_updated_utc is the most recent contracts.scraped_at across all "
+            "contracts — when a contract was last scraped for any player, not a per-player "
+            "freshness guarantee."
+        ),
+    )
 
 
 def _cap_constants(db: Session) -> DatasetProvenance:
     key, name, source = "cap_constants", "Salary cap constants", "CBA / league"
-    try:
-        rows = db.scalars(select(CapConstants)).all()
-        season_count, earliest, latest = _season_span(r.season for r in rows)
-        return DatasetProvenance(
-            key=key,
-            name=name,
-            source=source,
-            record_count=len(rows),
-            season_count=season_count,
-            earliest_season=earliest,
-            latest_season=latest,
-            caveat=(
-                "record_count/season_count is rows in cap_constants (one per season); "
-                "earliest/latest span the seasons on file. These are hand/CBA-maintained constants, "
-                "not scraped, and no ingestion timestamp is stored, so freshness is unknown, not "
-                "assumed current."
-            ),
-        )
-    except Exception as exc:  # noqa: BLE001
-        return _unavailable(key, name, source, exc)
+    record_count = db.scalar(select(func.count()).select_from(CapConstants))
+    season_count = db.scalar(select(func.count(distinct(CapConstants.season))))
+    earliest = db.scalar(select(func.min(CapConstants.season)))
+    latest = db.scalar(select(func.max(CapConstants.season)))
+    return DatasetProvenance(
+        key=key,
+        name=name,
+        source=source,
+        record_count=record_count,
+        season_count=season_count,
+        earliest_season=earliest,
+        latest_season=latest,
+        caveat=(
+            "record_count/season_count is rows in cap_constants (one per season); "
+            "earliest/latest span the seasons on file. These are hand/CBA-maintained constants, "
+            "not scraped; cap_constants has no per-row source column, so this label is "
+            "descriptive, not a grouped count. No ingestion timestamp is stored, so freshness is "
+            "unknown, not assumed current."
+        ),
+    )
 
 
 def _free_agent_rights(db: Session) -> DatasetProvenance:
-    key, name, source = "free_agent_rights", "Free-agent rights", "Spotrac"
-    try:
-        rows = db.scalars(select(FreeAgentRight)).all()
-        season_count, earliest, latest = _season_span(r.entering_season for r in rows)
-        last_updated = _latest(r.scraped_at for r in rows)
-        return DatasetProvenance(
-            key=key,
-            name=name,
-            source=source,
-            record_count=len(rows),
-            player_count=len({r.player_id for r in rows}),
-            season_count=season_count,
-            earliest_season=earliest,
-            latest_season=latest,
-            last_updated_utc=_iso(last_updated),
-            last_updated_basis="free_agent_rights.scraped_at" if last_updated is not None else None,
-            caveat=(
-                "record_count is rows in free_agent_rights (one per player per entering season); "
-                "player_count is distinct players; season_count/earliest/latest span "
-                "entering_season. last_updated_utc is the most recent free_agent_rights.scraped_at "
-                "across all rows."
-            ),
-        )
-    except Exception as exc:  # noqa: BLE001
-        return _unavailable(key, name, source, exc)
+    key, name = "free_agent_rights", "Free-agent rights"
+    source = _grouped_source(db, FreeAgentRight.source) or "no source recorded"
+    record_count = db.scalar(select(func.count()).select_from(FreeAgentRight))
+    player_count = db.scalar(select(func.count(distinct(FreeAgentRight.player_id))))
+    season_count = db.scalar(select(func.count(distinct(FreeAgentRight.entering_season))))
+    earliest = db.scalar(select(func.min(FreeAgentRight.entering_season)))
+    latest = db.scalar(select(func.max(FreeAgentRight.entering_season)))
+    last_updated = db.scalar(select(func.max(FreeAgentRight.scraped_at)))
+    return DatasetProvenance(
+        key=key,
+        name=name,
+        source=source,
+        record_count=record_count,
+        player_count=player_count,
+        season_count=season_count,
+        earliest_season=earliest,
+        latest_season=latest,
+        last_updated_utc=_iso(last_updated),
+        last_updated_basis="free_agent_rights.scraped_at" if last_updated is not None else None,
+        caveat=(
+            "record_count is rows in free_agent_rights (one per player per entering season); "
+            "player_count is distinct players; season_count/earliest/latest span "
+            "entering_season. source is the distribution of free_agent_rights.source values, "
+            "most common first. last_updated_utc is the most recent "
+            "free_agent_rights.scraped_at across all rows."
+        ),
+    )
 
 
 def _rosters(db: Session) -> DatasetProvenance:
-    key, name, source = "rosters", "Current roster assignments", "Spotrac"
-    try:
-        players = db.scalars(select(Player)).all()
-        with_team = sum(1 for p in players if p.current_team_id is not None)
-        last_updated = _latest(p.current_team_updated_at for p in players)
-        return DatasetProvenance(
-            key=key,
-            name=name,
-            source=source,
-            record_count=with_team,
-            player_count=with_team,
-            last_updated_utc=_iso(last_updated),
-            last_updated_basis="players.current_team_updated_at" if last_updated is not None else None,
-            caveat=(
-                f"record_count/player_count is players carrying a current_team_id ({with_team}) — "
-                "current-roster assignment coverage only. Two-way status is tracked as its own "
-                "dataset (two_way_status) with its own freshness, not folded into this one. "
-                "last_updated_utc is the most recent players.current_team_updated_at across all "
-                "players."
-            ),
-        )
-    except Exception as exc:  # noqa: BLE001
-        return _unavailable(key, name, source, exc)
+    key, name = "rosters", "Current roster assignments"
+    has_team = Player.current_team_id.isnot(None)
+    source = _grouped_source(db, Player.current_team_source, where=has_team) or "no source recorded"
+    with_team = db.scalar(select(func.count()).select_from(Player).where(has_team))
+    last_updated = db.scalar(select(func.max(Player.current_team_updated_at)))
+    return DatasetProvenance(
+        key=key,
+        name=name,
+        source=source,
+        record_count=with_team,
+        player_count=with_team,
+        last_updated_utc=_iso(last_updated),
+        last_updated_basis="players.current_team_updated_at" if last_updated is not None else None,
+        caveat=(
+            f"record_count/player_count is players carrying a current_team_id ({with_team}) — "
+            "current-roster assignment coverage only. source is the distribution of "
+            "players.current_team_source values among those players, most common first. "
+            "Two-way status is tracked as its own dataset (two_way_status) with its own "
+            "freshness, not folded into this one. last_updated_utc is the most recent "
+            "players.current_team_updated_at across all players."
+        ),
+    )
 
 
 def _two_way_status(db: Session) -> DatasetProvenance:
     key, name, source = "two_way_status", "Two-way contract flags", "Spotrac (load_two_way_status ETL)"
-    try:
-        players = db.scalars(select(Player)).all()
-        total = len(players)
-        two_way = sum(1 for p in players if p.is_two_way)
-        return DatasetProvenance(
-            key=key,
-            name=name,
-            source=source,
-            record_count=two_way,
-            player_count=total,
-            caveat=(
-                f"record_count is players flagged is_two_way ({two_way}); player_count is total "
-                f"players considered ({total}), the denominator. The load_two_way_status ETL does "
-                "not record its own run time, so last_updated_utc/last_updated_basis are always null "
-                "here — two-way freshness is unknown, and it must not be read as inheriting the "
-                "current-roster-assignment timestamp from the rosters dataset. A record_count of 0 "
-                "means the load_two_way_status ETL has not populated the flag — unloaded, not "
-                "evidence that no two-way players exist — exactly the kind of coverage fact this "
-                "provenance center exists to surface."
-            ),
-        )
-    except Exception as exc:  # noqa: BLE001
-        return _unavailable(key, name, source, exc)
+    two_way = db.scalar(select(func.count()).select_from(Player).where(Player.is_two_way.is_(True)))
+    total = db.scalar(select(func.count()).select_from(Player))
+    return DatasetProvenance(
+        key=key,
+        name=name,
+        source=source,
+        record_count=two_way,
+        player_count=total,
+        caveat=(
+            f"record_count is players flagged is_two_way ({two_way}); player_count is total "
+            f"players considered ({total}), the denominator. is_two_way defaults to false with "
+            "no observed/loaded marker, so a player who is genuinely not two-way can't be "
+            "distinguished from one whose flag was never loaded — record_count is players "
+            "currently flagged true out of all tracked players, not a verified two-way count. "
+            "The load_two_way_status ETL does not record its own run time, so "
+            "last_updated_utc/last_updated_basis are always null here — two-way freshness is "
+            "unknown, and it must not be read as inheriting the current-roster-assignment "
+            "timestamp from the rosters dataset. A record_count of 0 may indicate the "
+            "load_two_way_status ETL has not populated the flag — unloaded, not evidence that no "
+            "two-way players exist — exactly the kind of coverage fact this provenance center "
+            "exists to surface."
+        ),
+    )
 
 
 def _scout_reports(db: Session) -> DatasetProvenance:
-    key, name, source = "scout_reports", "Scout reports & ratings", "Perplexity Sonar"
-    try:
-        reports = db.scalars(select(ScoutReport)).all()
-        ratings = db.scalars(select(PlayerRating)).all()
-        season_count, earliest, latest = _season_span(r.season for r in reports)
-        last_updated = _latest(r.fetched_at for r in reports)
-        return DatasetProvenance(
-            key=key,
-            name=name,
-            source=source,
-            record_count=len(reports),
-            player_count=len({r.player_id for r in reports}),
-            season_count=season_count,
-            earliest_season=earliest,
-            latest_season=latest,
-            last_updated_utc=_iso(last_updated),
-            last_updated_basis="scout_reports.fetched_at" if last_updated is not None else None,
-            caveat=(
-                f"record_count is rows in scout_reports (one per fetched narrative); "
-                "player_count/season_count span distinct players/seasons with a report. "
-                f"{len(ratings)} trait ratings have been extracted from these reports (player_ratings"
-                "). Report bodies, citations, and evidence spans are never exposed here — counts and "
-                "timestamps only. These are fixture/LLM-sourced qualitative context (Sonar "
-                "narratives, Claude-extracted ratings), not official scouting or ground truth."
-            ),
-        )
-    except Exception as exc:  # noqa: BLE001
-        return _unavailable(key, name, source, exc)
+    key, name = "scout_reports", "Scout reports & ratings"
+    source = _grouped_source(db, ScoutReport.source_label) or "no source recorded"
+    record_count = db.scalar(select(func.count()).select_from(ScoutReport))
+    player_count = db.scalar(select(func.count(distinct(ScoutReport.player_id))))
+    season_count = db.scalar(select(func.count(distinct(ScoutReport.season))))
+    earliest = db.scalar(select(func.min(ScoutReport.season)))
+    latest = db.scalar(select(func.max(ScoutReport.season)))
+    last_updated = db.scalar(select(func.max(ScoutReport.fetched_at)))
+    rating_count = db.scalar(select(func.count()).select_from(PlayerRating))
+    return DatasetProvenance(
+        key=key,
+        name=name,
+        source=source,
+        record_count=record_count,
+        player_count=player_count,
+        season_count=season_count,
+        earliest_season=earliest,
+        latest_season=latest,
+        last_updated_utc=_iso(last_updated),
+        last_updated_basis="scout_reports.fetched_at" if last_updated is not None else None,
+        caveat=(
+            "record_count is rows in scout_reports (one per fetched narrative); "
+            "player_count/season_count span distinct players/seasons with a report. source is "
+            "the distribution of scout_reports.source_label values, most common first. "
+            f"{rating_count} trait ratings have been extracted from these reports "
+            "(player_ratings). Report bodies, citations, and evidence spans are never exposed "
+            "here — counts and timestamps only. These are fixture/LLM-sourced qualitative "
+            "context (Sonar narratives, Claude-extracted ratings), not official scouting or "
+            "ground truth."
+        ),
+    )
 
 
 def _player_valuations(db: Session) -> DatasetProvenance:
     key, name, source = "player_valuations", "Published valuations", "ScoutIQ model"
-    try:
-        rows = db.scalars(select(PlayerValuation)).all()
-        season_count, earliest, latest = _season_span(r.season for r in rows)
-        last_updated = _latest(r.computed_at for r in rows)
-        versions = len({r.model_version for r in rows if r.model_version})
-        return DatasetProvenance(
-            key=key,
-            name=name,
-            source=source,
-            record_count=len(rows),
-            player_count=len({r.player_id for r in rows}),
-            season_count=season_count,
-            earliest_season=earliest,
-            latest_season=latest,
-            last_updated_utc=_iso(last_updated),
-            last_updated_basis="player_valuations.computed_at" if last_updated is not None else None,
-            caveat=(
-                "record_count is rows in player_valuations (one per player-season with a published "
-                f"model valuation); player_count/season_count/earliest/latest span those rows, across "
-                f"{versions} distinct model_version value(s) on file. last_updated_utc is the most "
-                "recent computed_at — when valuations were last published, not when the underlying "
-                "stats or contracts changed."
-            ),
-        )
-    except Exception as exc:  # noqa: BLE001
-        return _unavailable(key, name, source, exc)
+    record_count = db.scalar(select(func.count()).select_from(PlayerValuation))
+    player_count = db.scalar(select(func.count(distinct(PlayerValuation.player_id))))
+    season_count = db.scalar(select(func.count(distinct(PlayerValuation.season))))
+    earliest = db.scalar(select(func.min(PlayerValuation.season)))
+    latest = db.scalar(select(func.max(PlayerValuation.season)))
+    last_updated = db.scalar(select(func.max(PlayerValuation.computed_at)))
+    versions = db.scalar(select(func.count(distinct(PlayerValuation.model_version))))
+    return DatasetProvenance(
+        key=key,
+        name=name,
+        source=source,
+        record_count=record_count,
+        player_count=player_count,
+        season_count=season_count,
+        earliest_season=earliest,
+        latest_season=latest,
+        last_updated_utc=_iso(last_updated),
+        last_updated_basis="player_valuations.computed_at" if last_updated is not None else None,
+        caveat=(
+            "record_count is rows in player_valuations (one per player-season with a published "
+            f"model valuation); player_count/season_count/earliest/latest span those rows, "
+            f"across {versions} distinct model_version value(s) on file. player_valuations has "
+            "no per-row source column beyond model_version, so this label is descriptive, not a "
+            "grouped count. last_updated_utc is the most recent computed_at — when valuations "
+            "were last published, not when the underlying stats or contracts changed."
+        ),
+    )
 
 
 @router.get("", response_model=ProvenanceResponse)
 def get_data_provenance(db: DB = None) -> ProvenanceResponse:
-    """One record per dataset — source, coverage, and freshness. Never trade data."""
-    datasets = [
-        _player_seasons(db),
-        _player_salaries(db),
-        _contracts(db),
-        _cap_constants(db),
-        _free_agent_rights(db),
-        _rosters(db),
-        _two_way_status(db),
-        _scout_reports(db),
-        _player_valuations(db),
+    """One record per dataset — source, coverage, and freshness. Never trade data.
+
+    Each builder runs inside its own SAVEPOINT: a query failure there rolls back
+    only that savepoint, so it degrades to _unavailable(...) without poisoning the
+    shared transaction the other datasets query from.
+    """
+    builders: list[tuple[str, str, str, Callable[[Session], DatasetProvenance]]] = [
+        ("player_seasons", "Player seasons & statistics", "nba.com Advanced + Basketball-Reference", _player_seasons),
+        ("player_salaries", "Realized pay (player salaries)", "Basketball-Reference (bbref)", _player_salaries),
+        ("contracts", "Forward contracts", "Spotrac", _contracts),
+        ("cap_constants", "Salary cap constants", "CBA / league", _cap_constants),
+        ("free_agent_rights", "Free-agent rights", "Spotrac", _free_agent_rights),
+        ("rosters", "Current roster assignments", "Spotrac", _rosters),
+        ("two_way_status", "Two-way contract flags", "Spotrac (load_two_way_status ETL)", _two_way_status),
+        ("scout_reports", "Scout reports & ratings", "Perplexity Sonar", _scout_reports),
+        ("player_valuations", "Published valuations", "ScoutIQ model", _player_valuations),
     ]
+    datasets: list[DatasetProvenance] = []
+    for key, name, source, builder in builders:
+        try:
+            with db.begin_nested():
+                datasets.append(builder(db))
+        except Exception as exc:  # noqa: BLE001 - each dataset must degrade independently
+            datasets.append(_unavailable(key, name, source, exc))
     return ProvenanceResponse(
         datasets=datasets,
         generated_at_utc=datetime.now(timezone.utc).isoformat(),
