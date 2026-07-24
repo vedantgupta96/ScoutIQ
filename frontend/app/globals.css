@@ -6159,3 +6159,45 @@ textarea::placeholder {
   .siq-compare-rowlabel { width: 100px; }
   .siq-compare-table { font-size: 12px; }
 }
+
+/* ============================================================
+   Data provenance center (issue #98) — source, coverage, freshness per dataset
+   ============================================================ */
+.siq-data-heading h1 { margin: 4px 0 6px; font-size: clamp(22px, 3vw, 30px); }
+.siq-data-heading p { margin: 0; color: var(--text-secondary); max-width: 78ch; font-size: 13px; }
+
+.siq-data-generated { margin: 0; }
+
+.siq-data-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--panel-gap);
+  align-items: start;
+}
+
+.siq-data-source-tag { display: inline-flex; align-items: center; gap: 6px; }
+
+.siq-data-card-body { display: flex; flex-direction: column; gap: 8px; }
+
+.siq-data-stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 10px;
+}
+
+.siq-data-season-range { margin: 0; }
+
+.siq-data-freshness-label { margin-top: 4px; }
+
+.siq-data-freshness { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.siq-data-caveat { margin: 4px 0 0; line-height: 1.5; }
+
+.siq-provenance-link {
+  display: inline-block;
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+}
+.siq-provenance-link:hover { text-decoration: underline; }

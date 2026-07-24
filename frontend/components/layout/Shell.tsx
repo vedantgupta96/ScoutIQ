@@ -33,6 +33,7 @@ const TITLES: Record<string, string> = {
   '/simulator': 'Cap simulator',
   '/strategy':  'Backtesting',
   '/model':     'Model trust',
+  '/data':      'Data provenance',
 };
 
 function Sidebar({ active, collapsed }: { active: string; collapsed: boolean }) {

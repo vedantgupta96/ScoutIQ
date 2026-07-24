@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FlaskConical, Play, TrendingUp, TriangleAlert, LoaderCircle } from 'lucide-react';
 import {
@@ -258,6 +259,7 @@ export default function StrategyPage() {
         <span className="ds-eyebrow">Test a signing philosophy across 13 NBA offseasons</span>
         <h1>Backtesting</h1>
         <p>Pick a rule for which players to sign, replay it across every offseason since 2012-13, and see whether it built more value than a GM signing at random. The model picks the players; real on-court production (Win Shares) grades them — so the model never grades its own picks.</p>
+        <Link href="/data" className="siq-provenance-link">Data provenance →</Link>
       </header>
 
       <Panel variant="card" padded eyebrow="Signing rule" icon={<FlaskConical size={15} />}>

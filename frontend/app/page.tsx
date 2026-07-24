@@ -262,6 +262,7 @@ function HomeContent() {
               <div><dt>80% interval held</dt><dd>{(metrics.interval_80_coverage * 100).toFixed(1)}%</dd></div>
             </dl>
             <Link href="/model" className="siq-home-cal__link">See the backtest →</Link>
+            <Link href="/data" className="siq-provenance-link">Data provenance →</Link>
           </div>
         ) : (
           <Skeleton height={56} />
