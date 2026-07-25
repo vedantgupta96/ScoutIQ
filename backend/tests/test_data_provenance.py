@@ -9,10 +9,12 @@ provably read from the data, not hardcoded. We also assert no dataset record eve
 leaks scout-report/rating text, and that a per-dataset query failure degrades only
 that dataset (docs/adr/0001) without poisoning the shared transaction.
 """
+import re
 from datetime import datetime, timezone
 
 import scoutiq.api.routers.data_provenance as data_provenance
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from provenance_db import make_session, seed
 
@@ -112,7 +114,7 @@ def test_data_provenance_populated_db_reports_counts_seasons_sources_and_timesta
         "scout_reports",
         "player_valuations",
     ]
-    assert body["generated_at_utc"]
+    assert body["data_as_of_utc"] == _dt(2026, 7, 15).isoformat()
     assert body["caveat"]
 
     rows = _by_key(body)
@@ -128,7 +130,8 @@ def test_data_provenance_populated_db_reports_counts_seasons_sources_and_timesta
     sal = rows["player_salaries"]
     assert sal["record_count"] == 2
     assert sal["player_count"] == 2
-    assert sal["source"] == "bbref (2)"
+    assert sal["source"] == "bbref"
+    assert sal["source_breakdown"] == [{"source": "bbref", "count": 2}]
     assert sal["last_updated_utc"] is None
 
     con = rows["contracts"]
@@ -137,7 +140,11 @@ def test_data_provenance_populated_db_reports_counts_seasons_sources_and_timesta
     assert con["season_count"] == 3
     assert con["earliest_season"] == "2023-24"
     assert con["latest_season"] == "2025-26"
-    assert con["source"] == "spotrac (2), bbref_contracts (1)"
+    assert con["source"] == "spotrac, bbref_contracts"
+    assert con["source_breakdown"] == [
+        {"source": "spotrac", "count": 2},
+        {"source": "bbref_contracts", "count": 1},
+    ]
     assert con["last_updated_utc"] == _dt(2026, 7, 1).isoformat()
     assert con["last_updated_basis"] == "contracts.scraped_at"
 
@@ -152,14 +159,16 @@ def test_data_provenance_populated_db_reports_counts_seasons_sources_and_timesta
     assert far["player_count"] == 2
     assert far["earliest_season"] == "2025-26"
     assert far["latest_season"] == "2026-27"
-    assert far["source"] == "spotrac (2)"
+    assert far["source"] == "spotrac"
+    assert far["source_breakdown"] == [{"source": "spotrac", "count": 2}]
     assert far["last_updated_utc"] == _dt(2026, 5, 1).isoformat()
     assert far["last_updated_basis"] == "free_agent_rights.scraped_at"
 
     rosters = rows["rosters"]
     assert rosters["record_count"] == 3  # players with current_team_id set
     assert rosters["player_count"] == 3
-    assert rosters["source"] == "nba_api.commonallplayers:2025-26 (3)"
+    assert rosters["source"] == "nba_api.commonallplayers:2025-26"
+    assert rosters["source_breakdown"] == [{"source": "nba_api.commonallplayers:2025-26", "count": 3}]
     assert "Spotrac" not in rosters["source"]
     assert rosters["last_updated_utc"] == _dt(2026, 6, 20).isoformat()
     assert rosters["last_updated_basis"] == "players.current_team_updated_at"
@@ -176,7 +185,8 @@ def test_data_provenance_populated_db_reports_counts_seasons_sources_and_timesta
     assert sr["record_count"] == 2
     assert sr["player_count"] == 2
     assert sr["season_count"] == 2
-    assert sr["source"] == "Perplexity Sonar (2)"
+    assert sr["source"] == "Perplexity Sonar"
+    assert sr["source_breakdown"] == [{"source": "Perplexity Sonar", "count": 2}]
     assert sr["last_updated_utc"] == _dt(2026, 3, 15).isoformat()
     assert sr["last_updated_basis"] == "scout_reports.fetched_at"
     assert "3" in sr["caveat"]  # rating count called out explicitly
@@ -190,56 +200,92 @@ def test_data_provenance_populated_db_reports_counts_seasons_sources_and_timesta
     assert val["last_updated_basis"] == "player_valuations.computed_at"
     assert "2 distinct model_version" in val["caveat"]
 
+    # No embedded "(count)" — rosters' real source value legitimately contains a
+    # digit (a season tag), so this checks for the removed count-in-parens artifact
+    # specifically, not for the absence of any digit anywhere in the label.
+    for key in ("player_salaries", "contracts", "free_agent_rights", "rosters", "scout_reports"):
+        assert not re.search(r"\(\d+\)", rows[key]["source"])
+    for key in ("player_seasons", "cap_constants", "two_way_status", "player_valuations"):
+        assert rows[key]["source_breakdown"] == []
+
 
 def test_data_provenance_empty_db_returns_all_zero_or_null():
     resp = _client(make_session()).get("/data-provenance")
     assert resp.status_code == 200
     body = resp.json()
     assert len(body["datasets"]) == 9
+    assert body["data_as_of_utc"] is None
 
     for row in body["datasets"]:
         assert row["record_count"] == 0
         assert row["last_updated_utc"] is None
         assert row["last_updated_basis"] is None
+        assert row["source_breakdown"] == []
         assert row["caveat"]
 
 
-def test_data_provenance_determinism_ignores_generated_at_utc():
+def test_data_provenance_response_is_fully_deterministic():
     db = _populated_session()
     client = _client(db)
 
     first = client.get("/data-provenance").json()
     second = client.get("/data-provenance").json()
 
-    assert first["datasets"] == second["datasets"]
-    assert first["caveat"] == second["caveat"]
+    assert first == second
 
 
-def test_data_provenance_degrades_one_dataset_without_affecting_others(monkeypatch):
+def test_data_provenance_early_dataset_failure_is_isolated_by_savepoint(monkeypatch):
     def boom(db):
-        raise RuntimeError("valuation store unavailable")
+        raise RuntimeError("contracts store unavailable")
 
-    monkeypatch.setattr(data_provenance, "_player_valuations", boom)
+    monkeypatch.setattr(data_provenance, "_contracts", boom)
+
+    real_begin_nested = Session.begin_nested
+    calls = []
+
+    def counting_begin_nested(self, *args, **kwargs):
+        calls.append(1)
+        return real_begin_nested(self, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "begin_nested", counting_begin_nested)
 
     resp = _client(_populated_session()).get("/data-provenance")
     assert resp.status_code == 200
     rows = _by_key(resp.json())
 
-    val = rows["player_valuations"]
-    assert val["record_count"] is None
-    assert val["player_count"] is None
-    assert val["last_updated_utc"] is None
-    assert "unavailable" in val["caveat"]
+    con = rows["contracts"]
+    assert con["record_count"] is None
+    assert con["source"] == "Source unavailable"
+    assert "unavailable" in con["caveat"]
 
-    # Every other dataset — including ones queried after player_valuations would
-    # have been, in the endpoint's declared order — is unaffected by the failure,
-    # proving the SAVEPOINT rolls back only the failing dataset's work.
-    assert rows["player_seasons"]["record_count"] == 3
-    assert rows["contracts"]["record_count"] == 4
-    assert rows["contracts"]["source"] == "spotrac (2), bbref_contracts (1)"
-    assert rows["scout_reports"]["record_count"] == 2
+    # SQLite doesn't abort the whole transaction on a failed statement the way
+    # Postgres does, so this test can't reproduce the PG-specific abort. Instead it
+    # proves the structural savepoint contract the endpoint depends on: begin_nested()
+    # runs once per dataset (so deleting the savepoints would break the assertion
+    # below), and every dataset queried after the failing one still returns real,
+    # populated data — i.e. the shared session recovered from the earlier failure.
+    assert len(calls) == 9
+
     assert rows["rosters"]["record_count"] == 3
     assert rows["two_way_status"]["record_count"] == 2
+    assert rows["scout_reports"]["record_count"] == 2
+    assert rows["player_valuations"]["record_count"] == 3
+
+
+def test_data_provenance_source_breakdown_tie_break_is_alphabetical():
+    db = make_session()
+    seed(db, table="contracts", rows=[
+        {"id": 1, "player_id": 1, "source": "spotrac", "scraped_at": _dt(2026, 6, 1)},
+        {"id": 2, "player_id": 2, "source": "bbref_contracts", "scraped_at": _dt(2026, 6, 1)},
+    ])
+    resp = _client(db).get("/data-provenance")
+    assert resp.status_code == 200
+    con = _by_key(resp.json())["contracts"]
+    assert con["source"] == "bbref_contracts, spotrac"
+    assert con["source_breakdown"] == [
+        {"source": "bbref_contracts", "count": 1},
+        {"source": "spotrac", "count": 1},
+    ]
 
 
 def test_data_provenance_never_leaks_report_bodies_or_evidence_text():

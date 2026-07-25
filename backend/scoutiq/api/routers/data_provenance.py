@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
@@ -50,6 +50,11 @@ TOP_LEVEL_CAVEAT = (
 )
 
 
+class SourceBreakdown(BaseModel):
+    source: str
+    count: int
+
+
 class DatasetProvenance(BaseModel):
     """One dataset's source, coverage, and freshness.
 
@@ -58,12 +63,18 @@ class DatasetProvenance(BaseModel):
     `player_count` / `season_count` / `earliest_season` / `latest_season` are filled
     in only where a player or season dimension is meaningful. `last_updated_utc` is
     the latest known source/ingestion timestamp on file for the dataset — null means
-    no such timestamp is stored, not that the data is stale or fresh.
+    no such timestamp is stored, not that the data is stale or fresh. `source` is a
+    stable label: for datasets with a source column, it's source names only —
+    ordered by count desc then name asc, no counts, deterministic on ties; for
+    datasets without one, it's a fixed descriptive string. `source_breakdown` carries
+    the same order with per-source counts for datasets with a source column, and is
+    empty for datasets without one.
     """
 
     key: str
     name: str
     source: str
+    source_breakdown: list[SourceBreakdown] = Field(default_factory=list)
     record_count: int | None = None
     player_count: int | None = None
     season_count: int | None = None
@@ -75,13 +86,14 @@ class DatasetProvenance(BaseModel):
 
 
 class ProvenanceResponse(BaseModel):
-    """The full provenance snapshot. Every field on every `DatasetProvenance` record
-    is deterministic for a fixed database — the same query against the same data
-    always produces the same value. `generated_at_utc` is the sole exception: it is
-    wall-clock time at request handling and is expected to differ between calls."""
+    """The full provenance snapshot. Every field on every `DatasetProvenance` record,
+    and the response itself, is deterministic for a fixed database — the same query
+    against the same data always produces the same value. `data_as_of_utc` is the max
+    of every dataset's `last_updated_utc` on file — the freshest ingestion timestamp
+    among them — or null when every dataset's is null. It is never wall-clock time."""
 
     datasets: list[DatasetProvenance]
-    generated_at_utc: str
+    data_as_of_utc: str | None = None
     caveat: str
 
 
@@ -89,25 +101,32 @@ def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt is not None else None
 
 
-def _grouped_source(db: Session, col, where=None) -> str | None:
-    """Group `col` and return its value distribution as a "value (count), ..." string,
-    ordered by count desc, with null values skipped. None if there are no rows."""
+def _grouped_source(db: Session, col, where=None) -> list:
+    """Group `col` and return its (value, count) distribution, ordered by count desc
+    then value asc — an explicit tie-break so equal counts still sort deterministically.
+    Null values are skipped. Empty list if there are no rows."""
     stmt = select(col, func.count()).where(col.isnot(None))
     if where is not None:
         stmt = stmt.where(where)
-    stmt = stmt.group_by(col).order_by(func.count().desc())
-    rows = db.execute(stmt).all()
-    if not rows:
-        return None
-    return ", ".join(f"{value} ({count})" for value, count in rows)
+    stmt = stmt.group_by(col).order_by(func.count().desc(), col.asc())
+    return db.execute(stmt).all()
 
 
-def _unavailable(key: str, name: str, source: str, error: Exception) -> DatasetProvenance:
+def _source_fields(pairs, fallback: str) -> tuple[str, list[SourceBreakdown]]:
+    """Build the stable `source` label and `source_breakdown` list from a
+    `_grouped_source` result. `fallback` covers the no-rows case: a descriptive
+    source label with an empty breakdown."""
+    if not pairs:
+        return fallback, []
+    return ", ".join(value for value, _ in pairs), [SourceBreakdown(source=value, count=count) for value, count in pairs]
+
+
+def _unavailable(key: str, name: str, error: Exception) -> DatasetProvenance:
     logger.warning("data-provenance dataset %s query failed: %s", key, error.__class__.__name__)
     return DatasetProvenance(
         key=key,
         name=name,
-        source=source,
+        source="Source unavailable",
         caveat=f"{name} is temporarily unavailable — its query failed; other datasets are unaffected.",
     )
 
@@ -141,7 +160,7 @@ def _player_seasons(db: Session) -> DatasetProvenance:
 
 def _player_salaries(db: Session) -> DatasetProvenance:
     key, name = "player_salaries", "Realized pay (player salaries)"
-    source = _grouped_source(db, PlayerSalary.source) or "no source recorded"
+    source, source_breakdown = _source_fields(_grouped_source(db, PlayerSalary.source), "no source recorded")
     record_count = db.scalar(select(func.count()).select_from(PlayerSalary))
     player_count = db.scalar(select(func.count(distinct(PlayerSalary.player_id))))
     season_count = db.scalar(select(func.count(distinct(PlayerSalary.season))))
@@ -151,6 +170,7 @@ def _player_salaries(db: Session) -> DatasetProvenance:
         key=key,
         name=name,
         source=source,
+        source_breakdown=source_breakdown,
         record_count=record_count,
         player_count=player_count,
         season_count=season_count,
@@ -168,7 +188,7 @@ def _player_salaries(db: Session) -> DatasetProvenance:
 
 def _contracts(db: Session) -> DatasetProvenance:
     key, name = "contracts", "Forward contracts"
-    source = _grouped_source(db, Contract.source) or "no source recorded"
+    source, source_breakdown = _source_fields(_grouped_source(db, Contract.source), "no source recorded")
     record_count = db.scalar(select(func.count()).select_from(ContractYear))
     player_count = db.scalar(select(func.count(distinct(Contract.player_id))))
     season_count = db.scalar(select(func.count(distinct(ContractYear.season))))
@@ -179,6 +199,7 @@ def _contracts(db: Session) -> DatasetProvenance:
         key=key,
         name=name,
         source=source,
+        source_breakdown=source_breakdown,
         record_count=record_count,
         player_count=player_count,
         season_count=season_count,
@@ -223,7 +244,7 @@ def _cap_constants(db: Session) -> DatasetProvenance:
 
 def _free_agent_rights(db: Session) -> DatasetProvenance:
     key, name = "free_agent_rights", "Free-agent rights"
-    source = _grouped_source(db, FreeAgentRight.source) or "no source recorded"
+    source, source_breakdown = _source_fields(_grouped_source(db, FreeAgentRight.source), "no source recorded")
     record_count = db.scalar(select(func.count()).select_from(FreeAgentRight))
     player_count = db.scalar(select(func.count(distinct(FreeAgentRight.player_id))))
     season_count = db.scalar(select(func.count(distinct(FreeAgentRight.entering_season))))
@@ -234,6 +255,7 @@ def _free_agent_rights(db: Session) -> DatasetProvenance:
         key=key,
         name=name,
         source=source,
+        source_breakdown=source_breakdown,
         record_count=record_count,
         player_count=player_count,
         season_count=season_count,
@@ -254,13 +276,16 @@ def _free_agent_rights(db: Session) -> DatasetProvenance:
 def _rosters(db: Session) -> DatasetProvenance:
     key, name = "rosters", "Current roster assignments"
     has_team = Player.current_team_id.isnot(None)
-    source = _grouped_source(db, Player.current_team_source, where=has_team) or "no source recorded"
+    source, source_breakdown = _source_fields(
+        _grouped_source(db, Player.current_team_source, where=has_team), "no source recorded"
+    )
     with_team = db.scalar(select(func.count()).select_from(Player).where(has_team))
     last_updated = db.scalar(select(func.max(Player.current_team_updated_at)))
     return DatasetProvenance(
         key=key,
         name=name,
         source=source,
+        source_breakdown=source_breakdown,
         record_count=with_team,
         player_count=with_team,
         last_updated_utc=_iso(last_updated),
@@ -305,7 +330,7 @@ def _two_way_status(db: Session) -> DatasetProvenance:
 
 def _scout_reports(db: Session) -> DatasetProvenance:
     key, name = "scout_reports", "Scout reports & ratings"
-    source = _grouped_source(db, ScoutReport.source_label) or "no source recorded"
+    source, source_breakdown = _source_fields(_grouped_source(db, ScoutReport.source_label), "no source recorded")
     record_count = db.scalar(select(func.count()).select_from(ScoutReport))
     player_count = db.scalar(select(func.count(distinct(ScoutReport.player_id))))
     season_count = db.scalar(select(func.count(distinct(ScoutReport.season))))
@@ -317,6 +342,7 @@ def _scout_reports(db: Session) -> DatasetProvenance:
         key=key,
         name=name,
         source=source,
+        source_breakdown=source_breakdown,
         record_count=record_count,
         player_count=player_count,
         season_count=season_count,
@@ -376,26 +402,27 @@ def get_data_provenance(db: DB = None) -> ProvenanceResponse:
     only that savepoint, so it degrades to _unavailable(...) without poisoning the
     shared transaction the other datasets query from.
     """
-    builders: list[tuple[str, str, str, Callable[[Session], DatasetProvenance]]] = [
-        ("player_seasons", "Player seasons & statistics", "nba.com Advanced + Basketball-Reference", _player_seasons),
-        ("player_salaries", "Realized pay (player salaries)", "Basketball-Reference (bbref)", _player_salaries),
-        ("contracts", "Forward contracts", "Spotrac", _contracts),
-        ("cap_constants", "Salary cap constants", "CBA / league", _cap_constants),
-        ("free_agent_rights", "Free-agent rights", "Spotrac", _free_agent_rights),
-        ("rosters", "Current roster assignments", "Spotrac", _rosters),
-        ("two_way_status", "Two-way contract flags", "Spotrac (load_two_way_status ETL)", _two_way_status),
-        ("scout_reports", "Scout reports & ratings", "Perplexity Sonar", _scout_reports),
-        ("player_valuations", "Published valuations", "ScoutIQ model", _player_valuations),
+    builders: list[tuple[str, str, Callable[[Session], DatasetProvenance]]] = [
+        ("player_seasons", "Player seasons & statistics", _player_seasons),
+        ("player_salaries", "Realized pay (player salaries)", _player_salaries),
+        ("contracts", "Forward contracts", _contracts),
+        ("cap_constants", "Salary cap constants", _cap_constants),
+        ("free_agent_rights", "Free-agent rights", _free_agent_rights),
+        ("rosters", "Current roster assignments", _rosters),
+        ("two_way_status", "Two-way contract flags", _two_way_status),
+        ("scout_reports", "Scout reports & ratings", _scout_reports),
+        ("player_valuations", "Published valuations", _player_valuations),
     ]
     datasets: list[DatasetProvenance] = []
-    for key, name, source, builder in builders:
+    for key, name, builder in builders:
         try:
             with db.begin_nested():
                 datasets.append(builder(db))
         except Exception as exc:  # noqa: BLE001 - each dataset must degrade independently
-            datasets.append(_unavailable(key, name, source, exc))
+            datasets.append(_unavailable(key, name, exc))
+    known_timestamps = [d.last_updated_utc for d in datasets if d.last_updated_utc is not None]
     return ProvenanceResponse(
         datasets=datasets,
-        generated_at_utc=datetime.now(timezone.utc).isoformat(),
+        data_as_of_utc=max(known_timestamps) if known_timestamps else None,
         caveat=TOP_LEVEL_CAVEAT,
     )

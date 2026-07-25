@@ -82,6 +82,9 @@ function DatasetCard({ dataset }: { dataset: DatasetProvenance }) {
             )}
             {seasonRange && <p className="ds-note siq-data-season-range">Seasons on file: {seasonRange}</p>}
             {dataset.record_count === 0 && <p className="ds-note">No rows on file yet.</p>}
+            {dataset.source_breakdown.length > 0 && (
+              <p className="ds-note">{dataset.source_breakdown.map((b) => `${b.source} ${b.count}`).join(' · ')}</p>
+            )}
 
             <span className="ds-eyebrow siq-data-freshness-label">Last updated</span>
             <FreshnessFact dataset={dataset} />
@@ -132,7 +135,9 @@ export default function DataProvenancePage() {
 
       {data && data.datasets.length > 0 && (
         <>
-          <p className="ds-note siq-data-generated">Generated {fmtDateTime(data.generated_at_utc)}</p>
+          <p className="ds-note siq-data-generated">
+            {data.data_as_of_utc ? `Data as of ${fmtDateTime(data.data_as_of_utc)}` : 'Freshness not tracked'}
+          </p>
           <div className="siq-data-grid">
             {data.datasets.map((dataset) => <DatasetCard key={dataset.key} dataset={dataset} />)}
           </div>

@@ -1,9 +1,15 @@
 import { apiFetch } from '@/lib/api';
 
+export interface SourceBreakdown {
+  source: string;
+  count: number;
+}
+
 export interface DatasetProvenance {
   key: string;
   name: string;
   source: string;
+  source_breakdown: SourceBreakdown[];
   record_count: number | null;
   player_count: number | null;
   season_count: number | null;
@@ -16,7 +22,7 @@ export interface DatasetProvenance {
 
 export interface ProvenanceResponse {
   datasets: DatasetProvenance[];
-  generated_at_utc: string;
+  data_as_of_utc: string | null;
   caveat: string;
 }
 
