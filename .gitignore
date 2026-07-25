@@ -25,6 +25,9 @@ backend/scoutiq/model/artifacts/*.joblib
 # deploy without a training step; ad-hoc/experimental joblibs stay ignored.
 !backend/scoutiq/model/artifacts/model.joblib
 
+# --- Offline experiment harness output (regenerable; never production) ---
+backend/scoutiq/model/experiments/output/
+
 # --- OS / editor cruft ---
 .DS_Store
 Thumbs.db
