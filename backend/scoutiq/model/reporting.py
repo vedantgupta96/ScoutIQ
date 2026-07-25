@@ -8,40 +8,52 @@ from __future__ import annotations
 import numpy as np
 
 
-def midcontract_persistence_reference(
+def persistence_reference(
     y_true: np.ndarray,
     prior_pct_cap: np.ndarray,
-    decision_point: np.ndarray,
+    segment_mask: np.ndarray,
 ) -> dict:
-    """Persistence baseline restricted to the true mid-contract population.
+    """Persistence baseline (predict next pay = prior salary) for one segment.
 
-    "Mid-contract" means the target season does **not** start a new contract
-    (``decision_point == False``) -- the exact population the segment table uses.
-    A decision-point row is never counted as mid-contract merely because a prior
-    salary exists.
-
-    The persistence baseline (predict next pay = the player's prior salary) is
-    only defined where a prior salary is known, so the MAE is computed on that
-    usable subset while the total mid-contract count is reported alongside it.
-    Both denominators come from here so the top-level metric and the
-    ``segments.mid_contract`` population cannot drift apart.
-
-    Returns percent-of-cap values rounded to 3 dp to match ``metrics.json``.
+    ``segment_mask`` selects the rows in the segment. The baseline is only
+    defined where a prior salary is known, so the MAE is computed on that usable
+    subset while the segment size and the usable-subset size are reported
+    alongside it -- no hidden minimum-sample gate, so callers can judge the
+    sample size from ``n_with_prior`` rather than silently getting ``None``.
+    Percent-of-cap, MAE rounded to 3 dp to match ``metrics.json``.
     """
-    decision_point = np.asarray(decision_point, dtype=bool)
+    segment_mask = np.asarray(segment_mask, dtype=bool)
     y_true = np.asarray(y_true, dtype=float)
     prior = np.asarray(prior_pct_cap, dtype=float)
 
-    midcontract = ~decision_point
-    usable = midcontract & ~np.isnan(prior)
-
+    usable = segment_mask & ~np.isnan(prior)
     if usable.any():
         mae_pct = round(float(np.mean(np.abs(y_true[usable] - prior[usable]))) * 100, 3)
     else:
         mae_pct = None
 
     return {
-        "n_midcontract": int(midcontract.sum()),
-        "n_midcontract_with_prior": int(usable.sum()),
+        "n": int(segment_mask.sum()),
+        "n_with_prior": int(usable.sum()),
         "persistence_mae_pct": mae_pct,
+    }
+
+
+def segment_persistence_metrics(
+    y_true: np.ndarray,
+    prior_pct_cap: np.ndarray,
+    decision_point: np.ndarray,
+) -> dict:
+    """Persistence reference for both backtest segments from one calculation.
+
+    "Mid-contract" means the target season does **not** start a new contract
+    (``decision_point == False``) -- a decision-point row is never counted as
+    mid-contract merely because a prior salary exists. Both the segments table
+    and the top-level mid-contract fields read from this single result, so their
+    populations and MAEs cannot drift apart.
+    """
+    decision_point = np.asarray(decision_point, dtype=bool)
+    return {
+        "decision_point": persistence_reference(y_true, prior_pct_cap, decision_point),
+        "mid_contract": persistence_reference(y_true, prior_pct_cap, ~decision_point),
     }

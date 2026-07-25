@@ -28,7 +28,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split  # noqa: E
 
 from scoutiq.model.dataset import build_dataset  # noqa: E402
 from scoutiq.model.features import FEATURE_COLS, TARGET  # noqa: E402
-from scoutiq.model.reporting import midcontract_persistence_reference  # noqa: E402
+from scoutiq.model.reporting import segment_persistence_metrics  # noqa: E402
 
 ART = Path(__file__).parent / "artifacts"
 TRAIN_MAX_TARGET = "2023-24"          # train where next_season <= this (lexicographic works for YYYY-YY)
@@ -165,23 +165,21 @@ def main() -> None:
 
     # decision-point segmentation: the rows where a valuation model is actionable
     # (target season starts a new Spotrac contract) vs contractually locked rows.
+    # One persistence-reference calculation per segment feeds both this table and
+    # the top-level mid-contract fields, so their populations can't drift apart.
+    persistence = segment_persistence_metrics(yte, test["prior_pct_cap"].to_numpy(), decision_test)
     segments = {}
     dp = decision_test
     for name, mask in (("decision_point", dp), ("mid_contract", ~dp)):
         if mask.sum() < 5:
             segments[name] = {"n": int(mask.sum())}
             continue
-        seg_prior = test["prior_pct_cap"].to_numpy()[mask]
-        seg_has_prior = ~np.isnan(seg_prior)
         segments[name] = {
-            "n": int(mask.sum()),
+            "n": persistence[name]["n"],
             "mae_pct_of_cap": round(mean_absolute_error(yte[mask], pred[mask]) * 100, 3),
             "r2": round(r2_score(yte[mask], pred[mask]), 3) if mask.sum() >= 30 else None,
             "interval_80_coverage": round(float(np.mean((yte[mask] >= lo[mask]) & (yte[mask] <= hi[mask]))), 3),
-            "persistence_mae_pct": (
-                round(mean_absolute_error(yte[mask][seg_has_prior], seg_prior[seg_has_prior]) * 100, 3)
-                if seg_has_prior.sum() >= 5 else None
-            ),
+            "persistence_mae_pct": persistence[name]["persistence_mae_pct"],
         }
 
     # permutation importance (explainability)
@@ -189,16 +187,6 @@ def main() -> None:
     importance = (
         pd.DataFrame({"feature": FEATURE_COLS, "importance": perm.importances_mean})
         .sort_values("importance", ascending=False).head(12)
-    )
-
-    # honest reference: a persistence baseline using CURRENT salary (which we deliberately exclude as a
-    # feature) is hard to beat mid-contract — pay is contractually sticky, not a production signal. We
-    # report it so the trade-off is explicit, not hidden. "Mid-contract" means the target season does
-    # not start a new contract (decision_point == False) — the same population the segment table uses;
-    # a decision-point row is never counted as mid-contract just because a prior salary exists. The
-    # baseline itself is only defined where prior salary is known, so its MAE uses that usable subset.
-    persistence_ref = midcontract_persistence_reference(
-        yte, test["prior_pct_cap"].to_numpy(), decision_test
     )
 
     metrics = {
@@ -217,9 +205,9 @@ def main() -> None:
         "interval_80_half_width_min_pct": round(float(np.min(half_width)) * 100, 2),
         "interval_80_half_width_max_pct": round(float(np.max(half_width)) * 100, 2),
         "naive_mean_baseline_mae_pct": round(naive_mae * 100, 3),
-        "persistence_ref_mae_pct_midcontract": persistence_ref["persistence_mae_pct"],
-        "n_midcontract": persistence_ref["n_midcontract"],
-        "n_midcontract_with_prior": persistence_ref["n_midcontract_with_prior"],
+        "persistence_ref_mae_pct_midcontract": persistence["mid_contract"]["persistence_mae_pct"],
+        "n_midcontract": persistence["mid_contract"]["n"],
+        "n_midcontract_with_prior": persistence["mid_contract"]["n_with_prior"],
         "segments": segments,
         "calibration": calib,
     }
