@@ -395,6 +395,7 @@ export interface BacktestMetrics {
   naive_mean_baseline_mae_pct: number;
   persistence_ref_mae_pct_midcontract: number;
   n_midcontract: number;
+  n_midcontract_with_prior: number;
   segments: {
     decision_point: BacktestSegment;
     mid_contract: BacktestSegment;

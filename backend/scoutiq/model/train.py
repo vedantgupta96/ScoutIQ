@@ -28,6 +28,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split  # noqa: E
 
 from scoutiq.model.dataset import build_dataset  # noqa: E402
 from scoutiq.model.features import FEATURE_COLS, TARGET  # noqa: E402
+from scoutiq.model.reporting import midcontract_persistence_reference  # noqa: E402
 
 ART = Path(__file__).parent / "artifacts"
 TRAIN_MAX_TARGET = "2023-24"          # train where next_season <= this (lexicographic works for YYYY-YY)
@@ -132,13 +133,6 @@ def main() -> None:
     naive = float(np.mean(ytr))
     naive_mae = mean_absolute_error(yte, np.full_like(yte, naive))
 
-    # honest reference: a persistence baseline using CURRENT salary (which we deliberately exclude as a
-    # feature) is hard to beat on mid-contract players — pay is contractually sticky, not a production
-    # signal. We report it so the trade-off is explicit, not hidden.
-    prior = test["prior_pct_cap"].to_numpy()
-    has_prior = ~np.isnan(prior)
-    persistence_mae_mid = mean_absolute_error(yte[has_prior], prior[has_prior])
-
     # actionable output: production-implied value vs actual pay (next season).
     # gap > 0  => model values them above their pay (bargain);  gap < 0 => overpaid.
     val = test[["full_name", "next_season"]].copy()
@@ -197,6 +191,16 @@ def main() -> None:
         .sort_values("importance", ascending=False).head(12)
     )
 
+    # honest reference: a persistence baseline using CURRENT salary (which we deliberately exclude as a
+    # feature) is hard to beat mid-contract — pay is contractually sticky, not a production signal. We
+    # report it so the trade-off is explicit, not hidden. "Mid-contract" means the target season does
+    # not start a new contract (decision_point == False) — the same population the segment table uses;
+    # a decision-point row is never counted as mid-contract just because a prior salary exists. The
+    # baseline itself is only defined where prior salary is known, so its MAE uses that usable subset.
+    persistence_ref = midcontract_persistence_reference(
+        yte, test["prior_pct_cap"].to_numpy(), decision_test
+    )
+
     metrics = {
         "model_version": MODEL_VERSION,
         "n_train": int(len(train)), "n_calibration": int(len(Xcal)), "n_test": int(len(test)),
@@ -213,8 +217,9 @@ def main() -> None:
         "interval_80_half_width_min_pct": round(float(np.min(half_width)) * 100, 2),
         "interval_80_half_width_max_pct": round(float(np.max(half_width)) * 100, 2),
         "naive_mean_baseline_mae_pct": round(naive_mae * 100, 3),
-        "persistence_ref_mae_pct_midcontract": round(persistence_mae_mid * 100, 3),
-        "n_midcontract": int(has_prior.sum()),
+        "persistence_ref_mae_pct_midcontract": persistence_ref["persistence_mae_pct"],
+        "n_midcontract": persistence_ref["n_midcontract"],
+        "n_midcontract_with_prior": persistence_ref["n_midcontract_with_prior"],
         "segments": segments,
         "calibration": calib,
     }
@@ -337,12 +342,15 @@ def _write_report(metrics: dict, importance: pd.DataFrame, underpaid: pd.DataFra
         "much salary is driven by production.",
         "",
         "## Honest caveat: salary stickiness",
-        f"A persistence reference (predict next pay = *current* salary, which we deliberately **exclude** "
-        f"as a feature) scores {m['persistence_ref_mae_pct_midcontract']}% MAE on the "
-        f"{m['n_midcontract']} mid-contract test players — better than this model on those rows. That's "
-        "expected: their pay is contractually locked, not a production signal. We exclude current salary "
-        "on purpose so the model answers *worth*, not *what's already on the books*. The v1 upgrade "
-        "(contract-AAV target via Spotrac) evaluates at contract-decision points directly.",
+        f"*Mid-contract* here means the target season does **not** start a new contract "
+        f"(`decision_point == false`) — the same {m['n_midcontract']} players the segment table counts, "
+        f"not every row that happens to carry a prior salary. A persistence reference (predict next pay = "
+        f"*current* salary, which we deliberately **exclude** as a feature) scores "
+        f"{m['persistence_ref_mae_pct_midcontract']}% MAE on the {m['n_midcontract_with_prior']} of them "
+        f"with a known prior salary — better than this model on those rows. That's expected: their pay is "
+        "contractually locked, not a production signal. We exclude current salary on purpose so the model "
+        "answers *worth*, not *what's already on the books*. The v1 upgrade (contract-AAV target via "
+        "Spotrac) evaluates at contract-decision points directly.",
         "",
         "## Bargains & overpays (test set)",
         "Largest gaps between production-implied value and actual pay — the actionable output.",
