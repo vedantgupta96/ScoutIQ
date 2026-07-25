@@ -28,7 +28,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split  # noqa: E
 
 from scoutiq.model.dataset import build_dataset  # noqa: E402
 from scoutiq.model.features import FEATURE_COLS, TARGET  # noqa: E402
-from scoutiq.model.reporting import segment_persistence_metrics  # noqa: E402
+from scoutiq.model.reporting import build_segment, segment_persistence_metrics  # noqa: E402
 
 ART = Path(__file__).parent / "artifacts"
 TRAIN_MAX_TARGET = "2023-24"          # train where next_season <= this (lexicographic works for YYYY-YY)
@@ -166,21 +166,21 @@ def main() -> None:
     # decision-point segmentation: the rows where a valuation model is actionable
     # (target season starts a new Spotrac contract) vs contractually locked rows.
     # One persistence-reference calculation per segment feeds both this table and
-    # the top-level mid-contract fields, so their populations can't drift apart.
+    # the top-level mid-contract fields. Population and persistence fields always
+    # come from it (so they can't drift with segment size); only the model metrics
+    # below need enough rows to be meaningful.
     persistence = segment_persistence_metrics(yte, test["prior_pct_cap"].to_numpy(), decision_test)
     segments = {}
     dp = decision_test
     for name, mask in (("decision_point", dp), ("mid_contract", ~dp)):
-        if mask.sum() < 5:
-            segments[name] = {"n": int(mask.sum())}
-            continue
-        segments[name] = {
-            "n": persistence[name]["n"],
-            "mae_pct_of_cap": round(mean_absolute_error(yte[mask], pred[mask]) * 100, 3),
-            "r2": round(r2_score(yte[mask], pred[mask]), 3) if mask.sum() >= 30 else None,
-            "interval_80_coverage": round(float(np.mean((yte[mask] >= lo[mask]) & (yte[mask] <= hi[mask]))), 3),
-            "persistence_mae_pct": persistence[name]["persistence_mae_pct"],
-        }
+        model_metrics = None
+        if mask.sum() >= 5:
+            model_metrics = {
+                "mae_pct_of_cap": round(mean_absolute_error(yte[mask], pred[mask]) * 100, 3),
+                "r2": round(r2_score(yte[mask], pred[mask]), 3) if mask.sum() >= 30 else None,
+                "interval_80_coverage": round(float(np.mean((yte[mask] >= lo[mask]) & (yte[mask] <= hi[mask]))), 3),
+            }
+        segments[name] = build_segment(persistence[name], model_metrics)
 
     # permutation importance (explainability)
     perm = permutation_importance(model, Xte, yte, n_repeats=5, random_state=SEED, n_jobs=-1)

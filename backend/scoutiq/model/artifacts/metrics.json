@@ -25,6 +25,7 @@
   "segments": {
     "decision_point": {
       "n": 226,
+      "n_with_prior": 200,
       "mae_pct_of_cap": 3.146,
       "r2": 0.772,
       "interval_80_coverage": 0.827,
@@ -32,6 +33,7 @@
     },
     "mid_contract": {
       "n": 577,
+      "n_with_prior": 562,
       "mae_pct_of_cap": 2.611,
       "r2": 0.824,
       "interval_80_coverage": 0.877,

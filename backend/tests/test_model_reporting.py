@@ -3,7 +3,11 @@ from pathlib import Path
 
 import numpy as np
 
-from scoutiq.model.reporting import persistence_reference, segment_persistence_metrics
+from scoutiq.model.reporting import (
+    build_segment,
+    persistence_reference,
+    segment_persistence_metrics,
+)
 
 ARTIFACTS = Path(__file__).resolve().parents[1] / "scoutiq" / "model" / "artifacts"
 METRICS = json.loads((ARTIFACTS / "metrics.json").read_text(encoding="utf-8"))
@@ -28,7 +32,7 @@ def test_persistence_reference_counts_and_mae_on_fixture():
 
 def test_persistence_reference_reports_mae_from_a_single_usable_row():
     # No hidden minimum-sample gate: one usable row yields an MAE, with n_with_prior exposed so a
-    # consumer can judge the sample size. This is the edge the two old implementations disagreed on.
+    # consumer can judge the sample size.
     ref = persistence_reference(
         np.array([0.20, 0.30]), np.array([0.14, np.nan]), np.array([True, True])
     )
@@ -60,40 +64,64 @@ def test_segment_metrics_never_label_decision_point_rows_midcontract():
     assert both["mid_contract"]["n"] == 2
     assert both["mid_contract"]["n_with_prior"] == 2
     assert both["decision_point"]["n"] == 1
-    # mid-contract MAE excludes the decision-point row (prior 0.10):
     assert both["mid_contract"]["persistence_mae_pct"] == round(
         float(np.mean([abs(0.18 - 0.15), abs(0.22 - 0.25)])) * 100, 3
     )
 
 
-def test_top_level_and_segment_share_one_calculation():
-    # Mirrors train.py's wiring: segments.mid_contract AND the top-level mid-contract fields are read
-    # from the SAME segment_persistence_metrics result, so they cannot drift apart within a run.
-    y_true = np.array([0.20, 0.18, 0.22, 0.30])
-    prior = np.array([0.10, 0.15, 0.25, np.nan])
-    decision_point = np.array([True, False, False, False])
+def test_build_segment_orders_counts_then_model_metrics_then_persistence():
+    ref = {"n": 100, "n_with_prior": 80, "persistence_mae_pct": 1.5}
 
-    both = segment_persistence_metrics(y_true, prior, decision_point)
-    mid = both["mid_contract"]
+    seg = build_segment(
+        ref, {"mae_pct_of_cap": 2.6, "r2": 0.8, "interval_80_coverage": 0.87}
+    )
 
-    # concrete values: mid-contract = rows 1,2,3; usable = rows 1,2; MAE = mean(0.03, 0.03) = 3.0
-    assert mid["n"] == 3
-    assert mid["n_with_prior"] == 2
-    assert mid["persistence_mae_pct"] == 3.0
+    assert list(seg.keys()) == [
+        "n", "n_with_prior", "mae_pct_of_cap", "r2", "interval_80_coverage", "persistence_mae_pct",
+    ]
+    assert seg["n"] == 100
+    assert seg["n_with_prior"] == 80
+    assert seg["persistence_mae_pct"] == 1.5
 
-    # top-level fields and the segment table both read from `mid` -> identical by construction
-    assert mid["n"] == both["mid_contract"]["n"]
-    assert mid["persistence_mae_pct"] == both["mid_contract"]["persistence_mae_pct"]
-    assert mid["n_with_prior"] <= mid["n"]
+
+def test_small_segment_keeps_population_and_persistence_fields():
+    # Assembly branch for a segment with fewer than five rows: MAE/R^2/coverage are omitted (too few
+    # rows to score), but n, n_with_prior, and persistence_mae_pct still come from the shared result,
+    # so the segment cannot diverge from the top-level mid-contract fields.
+    y_true = np.array([0.20, 0.18, 0.22])          # 1 decision-point, 2 mid-contract (<5)
+    prior = np.array([0.10, 0.15, 0.25])
+    decision_point = np.array([True, False, False])
+
+    persistence = segment_persistence_metrics(y_true, prior, decision_point)
+    mid_ref = persistence["mid_contract"]
+
+    seg = build_segment(mid_ref, None)  # <5 rows -> no model metrics
+
+    assert seg == {
+        "n": 2,
+        "n_with_prior": 2,
+        "persistence_mae_pct": mid_ref["persistence_mae_pct"],
+    }
+    assert "mae_pct_of_cap" not in seg
+    # top-level mid-contract fields read from the SAME ref -> identical even though the segment was
+    # too small to score:
+    assert mid_ref["n"] == seg["n"]
+    assert mid_ref["n_with_prior"] == seg["n_with_prior"]
+    assert mid_ref["persistence_mae_pct"] == seg["persistence_mae_pct"]
 
 
 def test_committed_top_level_agrees_with_segment_population():
-    # Regression guard on the committed artifact: the top-level mid-contract metric must equal the
-    # segments.mid_contract population it is derived from.
+    # Regression guard on the committed artifact: the top-level mid-contract fields must equal the
+    # segments.mid_contract population they are derived from -- all three, not just n.
     mid = METRICS["segments"]["mid_contract"]
     assert METRICS["n_midcontract"] == mid["n"]
+    assert METRICS["n_midcontract_with_prior"] == mid["n_with_prior"]
     assert METRICS["persistence_ref_mae_pct_midcontract"] == mid["persistence_mae_pct"]
-    assert METRICS["n_midcontract_with_prior"] <= METRICS["n_midcontract"]
+
+
+def test_committed_segments_expose_usable_prior_counts():
+    assert METRICS["segments"]["decision_point"]["n_with_prior"] == 200
+    assert METRICS["segments"]["mid_contract"]["n_with_prior"] == 562
 
 
 def test_committed_metrics_use_corrected_population():

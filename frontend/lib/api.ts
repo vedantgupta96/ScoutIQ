@@ -405,6 +405,7 @@ export interface BacktestMetrics {
 
 export interface BacktestSegment {
   n: number;
+  n_with_prior: number;
   mae_pct_of_cap: number;
   r2: number | null;
   interval_80_coverage: number;

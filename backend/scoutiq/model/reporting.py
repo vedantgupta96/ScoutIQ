@@ -57,3 +57,20 @@ def segment_persistence_metrics(
         "decision_point": persistence_reference(y_true, prior_pct_cap, decision_point),
         "mid_contract": persistence_reference(y_true, prior_pct_cap, ~decision_point),
     }
+
+
+def build_segment(ref: dict, model_metrics: dict | None = None) -> dict:
+    """Assemble one segment's reported metrics from its persistence reference.
+
+    The population and persistence fields (``n``, ``n_with_prior``,
+    ``persistence_mae_pct``) always come from ``ref`` -- the same object the
+    top-level mid-contract fields read -- so they can't drift with segment size.
+    ``model_metrics`` (MAE/R^2/coverage) is supplied only for segments large
+    enough to score, and is inserted between the population counts and the
+    persistence reference.
+    """
+    seg = {"n": ref["n"], "n_with_prior": ref["n_with_prior"]}
+    if model_metrics:
+        seg.update(model_metrics)
+    seg["persistence_mae_pct"] = ref["persistence_mae_pct"]
+    return seg
