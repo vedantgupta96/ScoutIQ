@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ClipboardCheck, Target, TrendingUp, TrendingDown, TriangleAlert } from 'lucide-react';
 import {
@@ -222,6 +223,7 @@ function ScoutEvalPanel({ scoutEval }: { scoutEval: ScoutRatingEvalResponse | nu
           {scoutEval?.caveat ?? 'Eval metrics are loading from the FastAPI eval endpoint.'}
           {scoutEval ? ` CLI artifact: ${scoutEval.artifact_path}.` : ''}
         </p>
+        <Link href="/data" className="siq-provenance-link">Data provenance →</Link>
       </div>
     </Panel>
   );

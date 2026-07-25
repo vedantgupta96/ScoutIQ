@@ -39,6 +39,9 @@ _TABLE_DISPATCH: list[tuple[str, str]] = [
     ("FROM players", "players"),
     ("FROM teams", "teams"),
     ("player_seasons", "seasons"),
+    ("scout_reports", "scout_reports"),
+    ("player_ratings", "player_ratings"),
+    ("player_valuations", "valuations"),
 ]
 
 # model -> primary-key attribute, for get().
@@ -64,6 +67,9 @@ class FakeDB:
         contract_years=(),
         teams=(),
         rights=(),
+        scout_reports=(),
+        player_ratings=(),
+        valuations=(),
         on_scalars: Callable[[str], list | None] | None = None,
         on_execute: Callable[[str], list | None] | None = None,
     ):
@@ -75,6 +81,9 @@ class FakeDB:
         self.contract_years = list(contract_years)
         self.teams = list(teams)
         self.rights = list(rights)
+        self.scout_reports = list(scout_reports)
+        self.player_ratings = list(player_ratings)
+        self.valuations = list(valuations)
         self._on_scalars = on_scalars
         self._on_execute = on_execute
 
