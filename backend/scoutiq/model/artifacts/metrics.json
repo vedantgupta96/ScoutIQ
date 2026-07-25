@@ -19,11 +19,13 @@
   "interval_80_half_width_min_pct": 1.4,
   "interval_80_half_width_max_pct": 15.01,
   "naive_mean_baseline_mae_pct": 7.031,
-  "persistence_ref_mae_pct_midcontract": 2.101,
-  "n_midcontract": 762,
+  "persistence_ref_mae_pct_midcontract": 1.212,
+  "n_midcontract": 577,
+  "n_midcontract_with_prior": 562,
   "segments": {
     "decision_point": {
       "n": 226,
+      "n_with_prior": 200,
       "mae_pct_of_cap": 3.146,
       "r2": 0.772,
       "interval_80_coverage": 0.827,
@@ -31,6 +33,7 @@
     },
     "mid_contract": {
       "n": 577,
+      "n_with_prior": 562,
       "mae_pct_of_cap": 2.611,
       "r2": 0.824,
       "interval_80_coverage": 0.877,

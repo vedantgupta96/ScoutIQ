@@ -28,6 +28,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split  # noqa: E
 
 from scoutiq.model.dataset import build_dataset  # noqa: E402
 from scoutiq.model.features import FEATURE_COLS, TARGET  # noqa: E402
+from scoutiq.model.reporting import build_segment, segment_persistence_metrics  # noqa: E402
 
 ART = Path(__file__).parent / "artifacts"
 TRAIN_MAX_TARGET = "2023-24"          # train where next_season <= this (lexicographic works for YYYY-YY)
@@ -132,13 +133,6 @@ def main() -> None:
     naive = float(np.mean(ytr))
     naive_mae = mean_absolute_error(yte, np.full_like(yte, naive))
 
-    # honest reference: a persistence baseline using CURRENT salary (which we deliberately exclude as a
-    # feature) is hard to beat on mid-contract players — pay is contractually sticky, not a production
-    # signal. We report it so the trade-off is explicit, not hidden.
-    prior = test["prior_pct_cap"].to_numpy()
-    has_prior = ~np.isnan(prior)
-    persistence_mae_mid = mean_absolute_error(yte[has_prior], prior[has_prior])
-
     # actionable output: production-implied value vs actual pay (next season).
     # gap > 0  => model values them above their pay (bargain);  gap < 0 => overpaid.
     val = test[["full_name", "next_season"]].copy()
@@ -171,24 +165,22 @@ def main() -> None:
 
     # decision-point segmentation: the rows where a valuation model is actionable
     # (target season starts a new Spotrac contract) vs contractually locked rows.
+    # One persistence-reference calculation per segment feeds both this table and
+    # the top-level mid-contract fields. Population and persistence fields always
+    # come from it (so they can't drift with segment size); only the model metrics
+    # below need enough rows to be meaningful.
+    persistence = segment_persistence_metrics(yte, test["prior_pct_cap"].to_numpy(), decision_test)
     segments = {}
     dp = decision_test
     for name, mask in (("decision_point", dp), ("mid_contract", ~dp)):
-        if mask.sum() < 5:
-            segments[name] = {"n": int(mask.sum())}
-            continue
-        seg_prior = test["prior_pct_cap"].to_numpy()[mask]
-        seg_has_prior = ~np.isnan(seg_prior)
-        segments[name] = {
-            "n": int(mask.sum()),
-            "mae_pct_of_cap": round(mean_absolute_error(yte[mask], pred[mask]) * 100, 3),
-            "r2": round(r2_score(yte[mask], pred[mask]), 3) if mask.sum() >= 30 else None,
-            "interval_80_coverage": round(float(np.mean((yte[mask] >= lo[mask]) & (yte[mask] <= hi[mask]))), 3),
-            "persistence_mae_pct": (
-                round(mean_absolute_error(yte[mask][seg_has_prior], seg_prior[seg_has_prior]) * 100, 3)
-                if seg_has_prior.sum() >= 5 else None
-            ),
-        }
+        model_metrics = None
+        if mask.sum() >= 5:
+            model_metrics = {
+                "mae_pct_of_cap": round(mean_absolute_error(yte[mask], pred[mask]) * 100, 3),
+                "r2": round(r2_score(yte[mask], pred[mask]), 3) if mask.sum() >= 30 else None,
+                "interval_80_coverage": round(float(np.mean((yte[mask] >= lo[mask]) & (yte[mask] <= hi[mask]))), 3),
+            }
+        segments[name] = build_segment(persistence[name], model_metrics)
 
     # permutation importance (explainability)
     perm = permutation_importance(model, Xte, yte, n_repeats=5, random_state=SEED, n_jobs=-1)
@@ -213,8 +205,9 @@ def main() -> None:
         "interval_80_half_width_min_pct": round(float(np.min(half_width)) * 100, 2),
         "interval_80_half_width_max_pct": round(float(np.max(half_width)) * 100, 2),
         "naive_mean_baseline_mae_pct": round(naive_mae * 100, 3),
-        "persistence_ref_mae_pct_midcontract": round(persistence_mae_mid * 100, 3),
-        "n_midcontract": int(has_prior.sum()),
+        "persistence_ref_mae_pct_midcontract": persistence["mid_contract"]["persistence_mae_pct"],
+        "n_midcontract": persistence["mid_contract"]["n"],
+        "n_midcontract_with_prior": persistence["mid_contract"]["n_with_prior"],
         "segments": segments,
         "calibration": calib,
     }
@@ -337,12 +330,15 @@ def _write_report(metrics: dict, importance: pd.DataFrame, underpaid: pd.DataFra
         "much salary is driven by production.",
         "",
         "## Honest caveat: salary stickiness",
-        f"A persistence reference (predict next pay = *current* salary, which we deliberately **exclude** "
-        f"as a feature) scores {m['persistence_ref_mae_pct_midcontract']}% MAE on the "
-        f"{m['n_midcontract']} mid-contract test players — better than this model on those rows. That's "
-        "expected: their pay is contractually locked, not a production signal. We exclude current salary "
-        "on purpose so the model answers *worth*, not *what's already on the books*. The v1 upgrade "
-        "(contract-AAV target via Spotrac) evaluates at contract-decision points directly.",
+        f"*Mid-contract* here means the target season does **not** start a new contract "
+        f"(`decision_point == false`) — the same {m['n_midcontract']} players the segment table counts, "
+        f"not every row that happens to carry a prior salary. A persistence reference (predict next pay = "
+        f"*current* salary, which we deliberately **exclude** as a feature) scores "
+        f"{m['persistence_ref_mae_pct_midcontract']}% MAE on the {m['n_midcontract_with_prior']} of them "
+        f"with a known prior salary — better than this model on those rows. That's expected: their pay is "
+        "contractually locked, not a production signal. We exclude current salary on purpose so the model "
+        "answers *worth*, not *what's already on the books*. The v1 upgrade (contract-AAV target via "
+        "Spotrac) evaluates at contract-decision points directly.",
         "",
         "## Bargains & overpays (test set)",
         "Largest gaps between production-implied value and actual pay — the actionable output.",

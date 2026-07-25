@@ -27,7 +27,7 @@ Valuation matters where a contract is actually being set. Segments split the tes
 Production alone explains **R²=0.808** of pay and cuts error to 2.761% vs 7.031% for a mean-predictor — i.e. how much salary is driven by production.
 
 ## Honest caveat: salary stickiness
-A persistence reference (predict next pay = *current* salary, which we deliberately **exclude** as a feature) scores 2.101% MAE on the 762 mid-contract test players — better than this model on those rows. That's expected: their pay is contractually locked, not a production signal. We exclude current salary on purpose so the model answers *worth*, not *what's already on the books*. The v1 upgrade (contract-AAV target via Spotrac) evaluates at contract-decision points directly.
+*Mid-contract* here means the target season does **not** start a new contract (`decision_point == false`) — the same 577 players the segment table counts, not every row that happens to carry a prior salary. A persistence reference (predict next pay = *current* salary, which we deliberately **exclude** as a feature) scores 1.212% MAE on the 562 of them with a known prior salary — better than this model on those rows. That's expected: their pay is contractually locked, not a production signal. We exclude current salary on purpose so the model answers *worth*, not *what's already on the books*. The v1 upgrade (contract-AAV target via Spotrac) evaluates at contract-decision points directly.
 
 ## Bargains & overpays (test set)
 Largest gaps between production-implied value and actual pay — the actionable output.
