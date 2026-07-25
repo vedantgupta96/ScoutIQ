@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 import scoutiq.api.routers.data_provenance as data_provenance
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from provenance_db import make_session, seed
@@ -224,6 +225,65 @@ def test_data_provenance_empty_db_returns_all_zero_or_null():
         assert row["caveat"]
 
 
+def test_data_provenance_partially_populated_db_reports_each_dataset_independently():
+    db = make_session()
+    seed(db, table="players", rows=[
+        {"player_id": 1, "current_team_id": 10, "current_team_source": "nba_api.commonallplayers:2025-26",
+         "current_team_updated_at": _dt(2026, 6, 1), "is_two_way": False},
+        {"player_id": 2, "current_team_id": 20, "current_team_source": "nba_api.commonallplayers:2025-26",
+         "current_team_updated_at": _dt(2026, 6, 15), "is_two_way": True},
+    ])
+    seed(db, table="contracts", rows=[
+        {"id": 1, "player_id": 1, "source": "spotrac", "scraped_at": _dt(2026, 6, 10)},
+    ])
+    seed(db, table="contract_years", rows=[
+        {"id": 1, "contract_id": 1, "season": "2025-26"},
+        {"id": 2, "contract_id": 1, "season": "2026-27"},
+    ])
+    seed(db, table="player_seasons", rows=[
+        {"id": 1, "player_id": 1, "season": "2024-25"},
+        {"id": 2, "player_id": 1, "season": "2025-26"},
+    ])
+
+    resp = _client(db).get("/data-provenance")
+    assert resp.status_code == 200
+    body = resp.json()
+    rows = _by_key(body)
+
+    assert set(rows.keys()) == {
+        "player_seasons", "player_salaries", "contracts", "cap_constants",
+        "free_agent_rights", "rosters", "two_way_status", "scout_reports",
+        "player_valuations",
+    }
+
+    ps = rows["player_seasons"]
+    assert ps["record_count"] == 2
+    assert ps["player_count"] == 1
+    assert ps["earliest_season"] == "2024-25"
+    assert ps["latest_season"] == "2025-26"
+
+    con = rows["contracts"]
+    assert con["record_count"] == 2
+    assert con["player_count"] == 1
+    assert con["source"] == "spotrac"
+    assert con["last_updated_utc"] == _dt(2026, 6, 10).isoformat()
+
+    rosters = rows["rosters"]
+    assert rosters["record_count"] == 2
+    assert rosters["source"] == "nba_api.commonallplayers:2025-26"
+    assert rosters["last_updated_utc"] == _dt(2026, 6, 15).isoformat()
+
+    two_way = rows["two_way_status"]
+    assert two_way["record_count"] == 1
+    assert two_way["player_count"] == 2
+
+    for key in ("player_salaries", "free_agent_rights", "scout_reports", "player_valuations", "cap_constants"):
+        row = rows[key]
+        assert row["record_count"] == 0
+        assert row["last_updated_utc"] is None
+        assert row["caveat"]
+
+
 def test_data_provenance_response_is_fully_deterministic():
     db = _populated_session()
     client = _client(db)
@@ -270,6 +330,60 @@ def test_data_provenance_early_dataset_failure_is_isolated_by_savepoint(monkeypa
     assert rows["two_way_status"]["record_count"] == 2
     assert rows["scout_reports"]["record_count"] == 2
     assert rows["player_valuations"]["record_count"] == 3
+
+
+def test_data_provenance_absent_valuations_leaves_other_datasets_unaffected():
+    db = _populated_session()
+    db.execute(text("DELETE FROM player_valuations"))
+    db.commit()
+
+    resp = _client(db).get("/data-provenance")
+    assert resp.status_code == 200
+    body = resp.json()
+    rows = _by_key(body)
+
+    val = rows["player_valuations"]
+    assert val["record_count"] == 0
+    assert val["last_updated_utc"] is None
+    assert val["caveat"]
+
+    assert rows["contracts"]["record_count"] == 4
+    assert rows["rosters"]["record_count"] == 3
+    assert rows["two_way_status"]["record_count"] == 2
+    assert rows["scout_reports"]["record_count"] == 2
+
+    # Without valuations' 2026-07-15 timestamp (the highest on file), the freshest
+    # remaining known timestamp is contracts' 2026-07-01 — proving the aggregate
+    # isn't quietly still keyed off the now-absent dataset.
+    assert body["data_as_of_utc"] == _dt(2026, 7, 1).isoformat()
+
+
+def test_data_provenance_valuation_query_failure_degrades_only_that_dataset(monkeypatch):
+    def boom(db):
+        raise RuntimeError("valuation store unavailable")
+
+    monkeypatch.setattr(data_provenance, "_player_valuations", boom)
+
+    resp = _client(_populated_session()).get("/data-provenance")
+    assert resp.status_code == 200
+    body = resp.json()
+    rows = _by_key(body)
+
+    val = rows["player_valuations"]
+    assert val["record_count"] is None
+    assert val["source"] == "Source unavailable"
+    assert "unavailable" in val["caveat"]
+
+    assert rows["player_seasons"]["record_count"] == 3
+    assert rows["player_salaries"]["record_count"] == 2
+    assert rows["contracts"]["record_count"] == 4
+    assert rows["cap_constants"]["record_count"] == 2
+    assert rows["free_agent_rights"]["record_count"] == 2
+    assert rows["rosters"]["record_count"] == 3
+    assert rows["two_way_status"]["record_count"] == 2
+    assert rows["scout_reports"]["record_count"] == 2
+
+    assert body["data_as_of_utc"] == _dt(2026, 7, 1).isoformat()
 
 
 def test_data_provenance_source_breakdown_tie_break_is_alphabetical():
