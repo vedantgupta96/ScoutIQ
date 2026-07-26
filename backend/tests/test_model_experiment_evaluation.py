@@ -3,10 +3,12 @@ import json
 import numpy as np
 import pandas as pd
 
+from scoutiq.model import spec
 from scoutiq.model.experiments import candidates
 from scoutiq.model.experiments.candidates import train_calibration_split
 from scoutiq.model.experiments.evaluate import DEFAULT_OUT_DIR
-from scoutiq.model.experiments.folds import fold_frames, rolling_origin_folds
+from scoutiq.model.experiments.folds import Fold, fold_frames, rolling_origin_folds
+from scoutiq.model.experiments.gates import evaluate_gates
 from scoutiq.model.experiments.metrics import evaluate_predictions
 from scoutiq.model.experiments.runner import run_evaluation
 from scoutiq.model.features import FEATURE_COLS, POSITIONS, TARGET
@@ -52,7 +54,7 @@ def build_synthetic_dataset(n_seasons: int = 6, rows_per_season: int = 28, seed:
             target = float(np.clip(0.08 + 0.012 * bpm + 0.0035 * pts_pg + noise, 0.005, 0.9))
 
             prior = np.nan if rng.random() < 0.2 else float(rng.uniform(0.01, 0.35))
-            decision_point = bool(rng.random() < 0.3)
+            decision_point = bool(rng.random() < 0.35)
 
             row = {
                 "age": float(rng.uniform(19, 38)), "gp": gp, "minutes": minutes,
@@ -78,6 +80,7 @@ def build_synthetic_dataset(n_seasons: int = 6, rows_per_season: int = 28, seed:
                 "season": prior_of[ns],
                 "next_season": ns,
                 "full_name": f"Player {pid}",
+                "target_cap": float(rng.uniform(120_000_000, 145_000_000)),
                 TARGET: target,
             }
             rows.append(row)
@@ -142,6 +145,7 @@ def test_segments_match_segment_persistence_metrics():
         "decision_point": decision,
         "age": [25.0, 26.0, 27.0, 28.0, 29.0],
         "position": ["PG", "SG", "SF", "PF", "C"],
+        "target_cap": [130_000_000.0] * 5,
     })
     pred = y + np.array([-0.01, -0.01, 0.01, -0.01, 0.01])
     lo, hi = pred - 0.05, pred + 0.05
@@ -176,6 +180,7 @@ def test_small_segment_keeps_population_and_persistence():
         "decision_point": decision,
         "age": rng.uniform(20, 35, n),
         "position": rng.choice(["PG", "SG", "SF", "PF", "C"], n),
+        "target_cap": rng.uniform(120_000_000, 145_000_000, n),
     })
     pred = y + rng.normal(0, 0.01, n)
     lo, hi = pred - 0.05, pred + 0.05
@@ -191,7 +196,7 @@ def test_small_segment_keeps_population_and_persistence():
 
 
 def test_run_evaluation_deterministic_for_fixed_dataset_and_seed(monkeypatch):
-    monkeypatch.setitem(candidates.V1_HGB_PARAMS, "max_iter", 40)
+    monkeypatch.setitem(spec.HGB_PARAMS, "max_iter", 40)
     df = build_synthetic_dataset(n_seasons=6, rows_per_season=28, seed=0)
 
     r1 = run_evaluation(df, seed=42)
@@ -204,7 +209,7 @@ def test_run_evaluation_deterministic_for_fixed_dataset_and_seed(monkeypatch):
 
 
 def test_promotion_gates_present_and_leakage_passes(monkeypatch):
-    monkeypatch.setitem(candidates.V1_HGB_PARAMS, "max_iter", 40)
+    monkeypatch.setitem(spec.HGB_PARAMS, "max_iter", 40)
     df = build_synthetic_dataset(n_seasons=6, rows_per_season=28, seed=0)
 
     r1 = run_evaluation(df, seed=42)
@@ -222,7 +227,7 @@ def test_promotion_gates_present_and_leakage_passes(monkeypatch):
 
 
 def test_candidate_comparison_without_touching_production(monkeypatch):
-    monkeypatch.setitem(candidates.V1_HGB_PARAMS, "max_iter", 40)
+    monkeypatch.setitem(spec.HGB_PARAMS, "max_iter", 40)
     out_existed = DEFAULT_OUT_DIR.exists()
     df = build_synthetic_dataset(n_seasons=6, rows_per_season=28, seed=0)
 
@@ -237,3 +242,111 @@ def test_candidate_comparison_without_touching_production(monkeypatch):
     assert gates_by_id["decision_mae_vs_v1"]["status"] in {"pass", "fail"}
     assert r["decision"] in {"promote", "do_not_promote", "insufficient_evidence"}
     assert DEFAULT_OUT_DIR.exists() == out_existed  # run_evaluation writes nothing
+
+
+def test_v1_calibration_method_selection(monkeypatch):
+    monkeypatch.setitem(spec.HGB_PARAMS, "max_iter", 30)
+    df = build_synthetic_dataset(n_seasons=6, rows_per_season=28, seed=0)
+    target_seasons = sorted(df["next_season"].unique())
+    folds = rolling_origin_folds(target_seasons, min_train_seasons=3)
+    train, val = fold_frames(df, folds[0])
+    assert int(train["decision_point"].to_numpy(dtype=bool).sum()) >= 10
+
+    result = candidates.v1_candidate().fit_predict(train, val, seed=42)
+    assert result["calibration_method"] == "decision_point_oof"
+
+    tiny_train = train.copy()
+    tiny_train["decision_point"] = False
+    tiny_train.loc[tiny_train.index[:3], "decision_point"] = True
+    assert int(tiny_train["decision_point"].to_numpy(dtype=bool).sum()) < 10
+
+    fallback = candidates.v1_candidate().fit_predict(tiny_train, val, seed=42)
+    assert fallback["calibration_method"] == "global_split_conformal"
+
+
+def test_develop_mode_reserves_final_holdout(monkeypatch):
+    monkeypatch.setitem(spec.HGB_PARAMS, "max_iter", 30)
+    df = build_synthetic_dataset(n_seasons=6, rows_per_season=20, seed=5)
+    target_seasons = sorted(df["next_season"].unique())
+    holdout = target_seasons[-2:]
+
+    result = run_evaluation(df, seed=42, mode="develop", holdout_seasons=holdout)
+
+    assert result["final_holdout_seasons"] == holdout
+    assert result["folds"]
+    for fold in result["folds"]:
+        assert fold["val_target"] not in holdout
+        assert not (set(fold["train_targets"]) & set(holdout))
+
+
+def test_final_mode_validates_on_holdout(monkeypatch):
+    monkeypatch.setitem(spec.HGB_PARAMS, "max_iter", 30)
+    df = build_synthetic_dataset(n_seasons=6, rows_per_season=20, seed=5)
+    target_seasons = sorted(df["next_season"].unique())
+    holdout = target_seasons[-2:]
+
+    result = run_evaluation(df, seed=42, mode="final", holdout_seasons=holdout)
+
+    val_targets = {f["val_target"] for f in result["folds"]}
+    assert val_targets == set(holdout)
+    for fold in result["folds"]:
+        assert all(t < fold["val_target"] for t in fold["train_targets"])
+
+
+def _minimal_run(decision_mae, mean_ref=None, persist=None):
+    return {"aggregate": {
+        "decision_mae_pct_of_cap": decision_mae,
+        "references": {"mean_prediction_mae_pct": mean_ref},
+        "segments": {"decision_point": {"persistence_mae_pct": persist, "interval_80_coverage": 0.8}},
+    }}
+
+
+def test_gate_requires_strict_improvement():
+    folds = [Fold(("2011-12",), "2012-13")]
+
+    equal_gates = evaluate_gates(_minimal_run(3.0), _minimal_run(3.0, mean_ref=5.0, persist=5.0), folds)
+    gate = next(g for g in equal_gates if g["id"] == "decision_mae_vs_v1")
+    assert gate["status"] == "fail"
+
+    worse_than_mean_gates = evaluate_gates(
+        _minimal_run(3.5), _minimal_run(3.0, mean_ref=2.9, persist=5.0), folds,
+    )
+    gate = next(g for g in worse_than_mean_gates if g["id"] == "decision_mae_vs_v1")
+    assert gate["status"] == "fail"
+
+    strict_improvement_gates = evaluate_gates(
+        _minimal_run(4.0), _minimal_run(3.0, mean_ref=3.5, persist=3.8), folds,
+    )
+    gate = next(g for g in strict_improvement_gates if g["id"] == "decision_mae_vs_v1")
+    assert gate["status"] == "pass"
+
+
+def test_dollar_mae_reported():
+    rng = np.random.default_rng(7)
+    n_mid, n_decision = 2, 6
+    n = n_mid + n_decision
+    decision = np.array([True] * n_decision + [False] * n_mid)
+    y = rng.uniform(0.05, 0.3, n)
+    prior = rng.uniform(0.05, 0.3, n)
+    prior[rng.random(n) < 0.3] = np.nan
+    val = pd.DataFrame({
+        TARGET: y,
+        "prior_pct_cap": prior,
+        "decision_point": decision,
+        "age": rng.uniform(20, 35, n),
+        "position": rng.choice(["PG", "SG", "SF", "PF", "C"], n),
+        "target_cap": rng.uniform(120_000_000, 145_000_000, n),
+    })
+    pred = y + rng.normal(0, 0.01, n)
+    lo, hi = pred - 0.05, pred + 0.05
+    naive_pred = np.full(n, float(np.mean(y)))
+    calibration = [{"nominal": 0.8, "empirical": 0.8, "half_width_pct": 5.0}]
+
+    result = evaluate_predictions(val, pred, lo, hi, naive_pred=naive_pred,
+                                  calibration=calibration, feature_cols=("age",))
+
+    assert isinstance(result["mae_usd"], (int, float))
+    dp = result["segments"]["decision_point"]
+    assert "mae_usd" in dp and isinstance(dp["mae_usd"], (int, float))
+    mid = result["segments"]["mid_contract"]
+    assert "mae_usd" not in mid

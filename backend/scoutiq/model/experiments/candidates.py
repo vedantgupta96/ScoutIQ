@@ -2,9 +2,10 @@
 
 A candidate is the v1 fitting pipeline (HistGradientBoosting point model + CQR
 adaptive intervals) restricted to a feature set. Fitting and conformal
-calibration for a fold use only that fold's training rows (all with a target
-strictly before the validation target), so nothing downstream leaks. This module
-never loads or writes production model.joblib.
+calibration for a fold use only that fold's training rows. Interval calibration
+mirrors production v1 — decision-point cross-fitted conformal scores when the
+fold has enough contract starts — with a train-only split-conformal fallback and
+the method recorded so coverage is never mislabeled. Never loads/writes model.joblib.
 """
 from __future__ import annotations
 
@@ -16,12 +17,12 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.model_selection import train_test_split
 
 from scoutiq.model.features import FEATURE_COLS, LAG_FEATURES, TARGET
-from scoutiq.model.train import PRIMARY_ALPHA, SEED, conformal_q
+from scoutiq.model.spec import (
+    CAL_LEVELS, HGB_PARAMS, PRIMARY_ALPHA, SEED, conformal_q, decision_oof_cqr_scores,
+)
 
-# v1 production hyperparameters (mirror scoutiq.model.train.main); kept here so the
-# harness reproduces the baseline without importing production training internals.
-V1_HGB_PARAMS = dict(max_iter=500, learning_rate=0.05, max_leaf_nodes=31, l2_regularization=1.0)
-CAL_LEVELS = [0.50, 0.60, 0.70, 0.80, 0.90, 0.95]
+# Enough contract starts to cross-fit decision-point calibration (>= n_splits per class).
+MIN_DECISION_FOR_OOF = 10
 
 
 def train_calibration_split(train: pd.DataFrame, seed: int = SEED, test_size: float = 0.25):
@@ -38,33 +39,41 @@ class Candidate:
 
     def fit_predict(self, train: pd.DataFrame, val: pd.DataFrame, *, seed: int = SEED,
                     alpha: float = PRIMARY_ALPHA) -> dict:
-        """Fit on ``train``, predict on ``val``. Returns point predictions, an 80%
-        interval, a per-level conformal calibration table, and the naive train-mean
-        reference — all computed with train-only data."""
         cols = list(self.feature_cols)
+        params = dict(HGB_PARAMS, random_state=seed)
         pt_idx, cal_idx = train_calibration_split(train, seed)
         Xpt, ypt = train.loc[pt_idx, cols], train.loc[pt_idx, TARGET].to_numpy()
         Xcal, ycal = train.loc[cal_idx, cols], train.loc[cal_idx, TARGET].to_numpy()
 
-        params = dict(V1_HGB_PARAMS, random_state=seed)
         point = HistGradientBoostingRegressor(**params).fit(Xpt, ypt)
         lo_m = HistGradientBoostingRegressor(loss="quantile", quantile=alpha / 2, **params).fit(Xpt, ypt)
         hi_m = HistGradientBoostingRegressor(loss="quantile", quantile=1 - alpha / 2, **params).fit(Xpt, ypt)
 
-        cqr_scores = np.maximum(lo_m.predict(Xcal) - ycal, ycal - hi_m.predict(Xcal))
+        # Interval calibration: decision-point cross-fitted conformal when the fold has enough
+        # contract starts (production v1's method), else train-only split-conformal.
+        n_decision = int(train["decision_point"].to_numpy(dtype=bool).sum())
+        scores = np.array([])
+        calibration_method = "global_split_conformal"
+        if n_decision >= MIN_DECISION_FOR_OOF:
+            scores = decision_oof_cqr_scores(train, params, feature_cols=cols, seed=seed)
+            if len(scores):
+                calibration_method = "decision_point_oof"
+        if len(scores) == 0:
+            scores = np.maximum(lo_m.predict(Xcal) - ycal, ycal - hi_m.predict(Xcal))
+            calibration_method = "global_split_conformal"
 
         Xval = val[cols]
         pred = point.predict(Xval)
         qlo, qhi = lo_m.predict(Xval), hi_m.predict(Xval)
         yval = val[TARGET].to_numpy()
 
-        q80 = conformal_q(cqr_scores, 1 - alpha)
+        q80 = conformal_q(scores, 1 - alpha)
         lo = np.minimum(qlo - q80, pred)
         hi = np.maximum(qhi + q80, pred)
 
         calibration = []
         for lvl in CAL_LEVELS:
-            q = conformal_q(cqr_scores, lvl)
+            q = conformal_q(scores, lvl)
             lo_l = np.minimum(qlo - q, pred)
             hi_l = np.maximum(qhi + q, pred)
             covered = (yval >= lo_l) & (yval <= hi_l)
@@ -75,6 +84,7 @@ class Candidate:
             })
 
         return {"pred": pred, "lo": lo, "hi": hi, "calibration": calibration,
+                "calibration_method": calibration_method,
                 "train_mean_pct_cap": float(np.mean(train[TARGET].to_numpy()))}
 
 
@@ -83,8 +93,7 @@ def v1_candidate() -> Candidate:
 
 
 def current_season_candidate() -> Candidate:
-    """Ablation baseline: v1 pipeline without the multi-season lag block. A real,
-    no-new-data candidate the harness can compare against v1."""
+    """Ablation baseline: v1 pipeline without the multi-season lag block."""
     lag = set(LAG_FEATURES)
     return Candidate("current_season", tuple(c for c in FEATURE_COLS if c not in lag))
 

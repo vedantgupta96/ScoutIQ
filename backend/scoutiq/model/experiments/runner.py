@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from scoutiq.model.train import SEED
+from scoutiq.model.spec import FINAL_HOLDOUT_SEASONS, SEED
 from scoutiq.model.experiments.candidates import Candidate, get_candidate
 from scoutiq.model.experiments.folds import Fold, fold_frames, rolling_origin_folds
 from scoutiq.model.experiments.gates import evaluate_gates, overall_decision
@@ -45,6 +45,7 @@ def run_candidate(df: pd.DataFrame, folds: list[Fold], candidate: Candidate, *, 
         per_season.append({
             "val_target": fold.val_target,
             "n_train": int(len(train)),
+            "calibration_method": out["calibration_method"],
             **evaluate_predictions(val, out["pred"], out["lo"], out["hi"],
                                    naive_pred=naive, calibration=out["calibration"],
                                    feature_cols=candidate.feature_cols),
@@ -57,15 +58,28 @@ def run_candidate(df: pd.DataFrame, folds: list[Fold], candidate: Candidate, *, 
         np.concatenate(pool_hi), naive_pred=np.concatenate(pool_naive),
         calibration=_weighted_calibration(per_season), feature_cols=candidate.feature_cols,
     ) if per_season else {}
+    if aggregate:
+        methods = sorted({s["calibration_method"] for s in per_season})
+        aggregate["calibration_method"] = methods[0] if len(methods) == 1 else "mixed"
 
     return {"candidate": candidate.name, "n_features": len(candidate.feature_cols),
             "per_season": per_season, "aggregate": aggregate}
 
 
 def run_evaluation(df: pd.DataFrame, *, baseline: str = "v1", candidate: str | None = None,
-                   min_train_seasons: int = 3, seed: int = SEED) -> dict:
-    target_seasons = sorted(df["next_season"].dropna().unique().tolist())
-    folds = rolling_origin_folds(target_seasons, min_train_seasons=min_train_seasons)
+                   min_train_seasons: int = 3, seed: int = SEED, mode: str = "develop",
+                   holdout_seasons: list[str] | None = None) -> dict:
+    holdout = list(FINAL_HOLDOUT_SEASONS if holdout_seasons is None else holdout_seasons)
+    all_targets = sorted(df["next_season"].dropna().unique().tolist())
+    reserved = [s for s in all_targets if s in holdout]
+
+    if mode == "final":
+        folds = [Fold(tuple(t for t in all_targets if t < s), s) for s in reserved
+                if sum(1 for t in all_targets if t < s) >= min_train_seasons]
+    else:
+        dev_targets = [s for s in all_targets if s not in reserved]
+        folds = rolling_origin_folds(dev_targets, min_train_seasons=min_train_seasons)
+
     baseline_run = run_candidate(df, folds, get_candidate(baseline), seed=seed)
     candidate_run = (run_candidate(df, folds, get_candidate(candidate), seed=seed)
                      if candidate and candidate != baseline else None)
@@ -74,7 +88,9 @@ def run_evaluation(df: pd.DataFrame, *, baseline: str = "v1", candidate: str | N
     return {
         "harness_version": HARNESS_VERSION,
         "seed": seed,
-        "dataset": {"n_rows": int(len(df)), "target_seasons": target_seasons,
+        "mode": mode,
+        "final_holdout_seasons": reserved,
+        "dataset": {"n_rows": int(len(df)), "target_seasons": all_targets,
                     "min_train_seasons": min_train_seasons},
         "folds": [{"val_target": f.val_target, "train_targets": list(f.train_targets)} for f in folds],
         "baseline": baseline_run,

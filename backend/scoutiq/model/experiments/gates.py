@@ -34,17 +34,21 @@ def evaluate_gates(baseline_run: dict, candidate_run: dict | None, folds, covera
     else:
         c = candidate_run["aggregate"]["decision_mae_pct_of_cap"]
         b = baseline_run["aggregate"]["decision_mae_pct_of_cap"]
-        persist = candidate_run["aggregate"]["segments"]["decision_point"].get("persistence_mae_pct")
+        dp = candidate_run["aggregate"]["segments"]["decision_point"]
+        persist = dp.get("persistence_mae_pct")
+        mean_ref = candidate_run["aggregate"]["references"]["mean_prediction_mae_pct"]
         if c is None or b is None:
-            gates.append({"id": "decision_mae_vs_v1",
-                          "description": "Candidate improves or meaningfully segments contract-decision MAE vs v1 and simple baselines.",
-                          "status": INSUFFICIENT, "detail": "Too few contract-decision rows to compare."})
+            status, detail = INSUFFICIENT, "Too few contract-decision rows to compare."
         else:
-            beats = (c <= b) and (persist is None or c <= persist)
-            gates.append({"id": "decision_mae_vs_v1",
-                          "description": "Candidate improves or meaningfully segments contract-decision MAE vs v1 and simple baselines.",
-                          "status": PASS if beats else FAIL,
-                          "detail": f"candidate {c} vs v1 {b}, persistence {persist} (% cap MAE at contract decisions)."})
+            beats_v1 = c < b
+            beats_mean = mean_ref is None or c < mean_ref
+            beats_persist = persist is None or c < persist
+            status = PASS if (beats_v1 and beats_mean and beats_persist) else FAIL
+            detail = (f"candidate {c} vs v1 {b}, mean-prediction {mean_ref}, persistence {persist} "
+                      f"(% cap MAE at contract decisions); strict improvement over all three required.")
+        gates.append({"id": "decision_mae_vs_v1",
+                      "description": "Candidate improves or meaningfully segments contract-decision MAE vs v1 and simple baselines.",
+                      "status": status, "detail": detail})
 
     cov = _decision_coverage(candidate_run or baseline_run)
     if cov is None:
@@ -77,10 +81,13 @@ def evaluate_gates(baseline_run: dict, candidate_run: dict | None, folds, covera
                   "detail": "Baseline/current-season candidates use no enrichment features; the ADR-0001 degrade path is exercised at production integration, not in this offline run."})
 
     gates.append({"id": "artifact_report_diff_and_decision",
-                  "description": "Run emits a baseline-vs-candidate comparison and an explicit promote / do-not-promote decision.",
-                  "status": PASS if candidate_run else INSUFFICIENT,
-                  "detail": ("Baseline-vs-candidate comparison and an explicit decision are written."
-                             if candidate_run else "Baseline-only run; no candidate comparison to diff.")})
+                  "description": "An artifact/report diff and an explicit promote / do-not-promote decision are produced for review.",
+                  "status": INSUFFICIENT,
+                  "detail": ("A baseline-vs-candidate metric comparison and an explicit decision are emitted, but a "
+                             "production model-artifact diff (weights/predictions vs the shipped model) is a "
+                             "separate promotion-time step this offline run does not produce."
+                             if candidate_run else
+                             "Baseline-only run; no candidate comparison or decision to diff.")})
     return gates
 
 

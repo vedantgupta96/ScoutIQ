@@ -8,7 +8,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from scoutiq.model.train import SEED
+from scoutiq.model.spec import SEED
 from scoutiq.model.experiments.candidates import CANDIDATES
 from scoutiq.model.experiments.report import write_reports
 from scoutiq.model.experiments.runner import run_evaluation
@@ -21,7 +21,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="python -m scoutiq.model.experiments.evaluate",
         description="Offline rolling-origin valuation backtests and promotion gates (issue #110). "
                     "Reuses the canonical Model-trust reporting contract; never writes production "
-                    "artifacts, production metrics, or published valuations.")
+                    "artifacts, production metrics, or published valuations. develop mode (default) "
+                    "reserves the final holdout seasons so they are never used as a tuning set.")
     p.add_argument("--baseline", default="v1", choices=sorted(CANDIDATES),
                    help="baseline candidate (default: v1).")
     p.add_argument("--candidate", default=None, choices=sorted(CANDIDATES),
@@ -29,6 +30,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--min-train-seasons", type=int, default=3,
                    help="minimum training target seasons before the first validation fold.")
     p.add_argument("--seed", type=int, default=SEED, help="random seed for deterministic folds/fits.")
+    p.add_argument("--mode", choices=["develop", "final"], default="develop",
+                   help="develop (default) reserves the final holdout seasons; final evaluates on them.")
     p.add_argument("--out", default=str(DEFAULT_OUT_DIR), help="output directory for JSON + Markdown reports.")
     return p
 
@@ -40,7 +43,8 @@ def main(argv=None) -> None:
 
     df = build_dataset()
     result = run_evaluation(df, baseline=args.baseline, candidate=args.candidate,
-                            min_train_seasons=args.min_train_seasons, seed=args.seed)
+                            min_train_seasons=args.min_train_seasons, seed=args.seed,
+                            mode=args.mode)
     json_path, md_path = write_reports(result, Path(args.out))
     print(f"wrote {json_path}")
     print(f"wrote {md_path}")

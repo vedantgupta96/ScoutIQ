@@ -16,14 +16,14 @@ def _season_row(label: str, s: dict) -> str:
     dp = s.get("segments", {}).get("decision_point", {})
     mid = s.get("segments", {}).get("mid_contract", {})
     return (f"| {label} | {_fmt(s.get('n'))} | {_fmt(s.get('mae_pct_of_cap'))} | "
-            f"{_fmt(s.get('r2'))} | {_fmt(s.get('decision_mae_pct_of_cap'))} | "
+            f"{_fmt(s.get('mae_usd'))} | {_fmt(s.get('r2'))} | {_fmt(s.get('decision_mae_pct_of_cap'))} | "
             f"{_fmt(dp.get('interval_80_coverage'))} | {_fmt(mid.get('persistence_mae_pct'))} |")
 
 
 def _candidate_section(title: str, run: dict) -> list[str]:
     lines = [f"## {title}: {run['candidate']}", "",
-             "| Season | n | MAE % | R² | Decision MAE % | DP 80% cov | Mid persistence % |",
-             "|---|---|---|---|---|---|---|"]
+             "| Season | n | MAE % | MAE $ | R² | Decision MAE % | DP 80% cov | Mid persistence % |",
+             "|---|---|---|---|---|---|---|---|"]
     for s in run["per_season"]:
         lines.append(_season_row(s["val_target"], s))
     if run.get("aggregate"):
@@ -57,6 +57,7 @@ def _to_markdown(result: dict) -> str:
         "# Rolling-origin valuation backtest",
         "",
         f"harness_version: `{result['harness_version']}` · seed: `{result['seed']}` · "
+        f"mode: `{result['mode']}` · reserved holdout: {result['final_holdout_seasons']} · "
         f"dataset n_rows: {dataset['n_rows']} · folds: {len(result['folds'])} · "
         f"decision: **{result['decision']}**",
         "",
@@ -87,6 +88,8 @@ def _to_markdown(result: dict) -> str:
         lines.append(f"| MAE % | {_fmt(b_agg.get('mae_pct_of_cap'))} | {_fmt(c_agg.get('mae_pct_of_cap'))} |")
         lines.append(f"| Decision MAE % | {_fmt(b_agg.get('decision_mae_pct_of_cap'))} | "
                      f"{_fmt(c_agg.get('decision_mae_pct_of_cap'))} |")
+        lines.append(f"| Decision MAE $ | {_fmt(b_agg.get('decision_mae_usd'))} | "
+                     f"{_fmt(c_agg.get('decision_mae_usd'))} |")
         lines.append(f"| DP 80% coverage | {_fmt(b_dp.get('interval_80_coverage'))} | "
                      f"{_fmt(c_dp.get('interval_80_coverage'))} |")
         lines.append("")
@@ -101,6 +104,7 @@ def _to_markdown(result: dict) -> str:
         f"- Mean-prediction MAE %: {_fmt(refs.get('mean_prediction_mae_pct'))}",
         f"- Prior-pay persistence: n_with_prior={_fmt(persistence.get('n_with_prior'))}, "
         f"persistence MAE%={_fmt(persistence.get('persistence_mae_pct'))}",
+        f"- Calibration method: {_fmt(subject_agg.get('calibration_method'))}",
         "",
         "## Cohorts (aggregate)",
         "",

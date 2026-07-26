@@ -14,25 +14,25 @@ from sklearn.metrics import mean_absolute_error, r2_score
 
 from scoutiq.model.features import TARGET, primary_position
 from scoutiq.model.reporting import build_segment, persistence_reference, segment_persistence_metrics
+from scoutiq.model.spec import MIN_R2_ROWS, MIN_SEGMENT_ROWS
 
-MIN_SEGMENT_ROWS = 5   # below this, model-quality metrics are insufficient; population/persistence still reported
-MIN_R2_ROWS = 30
 AGE_BANDS = [(0, 23, "<=23"), (24, 26, "24-26"), (27, 29, "27-29"), (30, 32, "30-32"), (33, 200, "33+")]
 
 
-def _model_metrics(y, pred, lo, hi) -> dict | None:
+def _model_metrics(y, pred, lo, hi, cap) -> dict | None:
     n = len(y)
     if n < MIN_SEGMENT_ROWS:
         return None
     return {
         "mae_pct_of_cap": round(mean_absolute_error(y, pred) * 100, 3),
+        "mae_usd": round(float(np.mean(np.abs(y - pred) * cap))),
         "r2": round(r2_score(y, pred), 3) if n >= MIN_R2_ROWS else None,
         "interval_80_coverage": round(float(np.mean((y >= lo) & (y <= hi))), 3),
     }
 
 
-def _segment(ref, mask, y, pred, lo, hi) -> dict:
-    mm = _model_metrics(y[mask], pred[mask], lo[mask], hi[mask]) if mask.any() else None
+def _segment(ref, mask, y, pred, lo, hi, cap) -> dict:
+    mm = _model_metrics(y[mask], pred[mask], lo[mask], hi[mask], cap[mask]) if mask.any() else None
     return build_segment(ref, mm)
 
 
@@ -51,16 +51,19 @@ def evaluate_predictions(val: pd.DataFrame, pred, lo, hi, *, naive_pred, calibra
     naive_pred = np.asarray(naive_pred, float)
     prior = val["prior_pct_cap"].to_numpy(dtype=float)
     decision = val["decision_point"].to_numpy(dtype=bool)
+    cap = val["target_cap"].to_numpy(dtype=float)
     n = len(y)
 
-    overall = _model_metrics(y, pred, lo, hi) or {}
+    overall = _model_metrics(y, pred, lo, hi, cap) or {}
     decision_mae = (round(mean_absolute_error(y[decision], pred[decision]) * 100, 3)
                     if decision.sum() >= MIN_SEGMENT_ROWS else None)
+    decision_mae_usd = (round(float(np.mean(np.abs(y[decision] - pred[decision]) * cap[decision])))
+                        if decision.sum() >= MIN_SEGMENT_ROWS else None)
 
     refs = segment_persistence_metrics(y, prior, decision)
     segments = {
-        "decision_point": _segment(refs["decision_point"], decision, y, pred, lo, hi),
-        "mid_contract": _segment(refs["mid_contract"], ~decision, y, pred, lo, hi),
+        "decision_point": _segment(refs["decision_point"], decision, y, pred, lo, hi, cap),
+        "mid_contract": _segment(refs["mid_contract"], ~decision, y, pred, lo, hi, cap),
     }
 
     all_mask = np.ones(n, dtype=bool)
@@ -74,14 +77,14 @@ def evaluate_predictions(val: pd.DataFrame, pred, lo, hi, *, naive_pred, calibra
     bands = np.array([_age_band(a) for a in val["age"].to_numpy(dtype=float)])
     for band in sorted(set(bands)):
         m = bands == band
-        cohorts["age_band"][band] = _segment(persistence_reference(y, prior, m), m, y, pred, lo, hi)
+        cohorts["age_band"][band] = _segment(persistence_reference(y, prior, m), m, y, pred, lo, hi, cap)
     if "position" in val.columns:
         positions = val["position"].map(primary_position).fillna("unknown").to_numpy()
     else:
         positions = np.array(["unknown"] * n)
     for pos in sorted(set(positions)):
         m = positions == pos
-        cohorts["position"][pos] = _segment(persistence_reference(y, prior, m), m, y, pred, lo, hi)
+        cohorts["position"][pos] = _segment(persistence_reference(y, prior, m), m, y, pred, lo, hi, cap)
 
     miss = {c: round(float(val[c].isna().mean()), 3) for c in feature_cols if c in val.columns}
 
@@ -89,8 +92,10 @@ def evaluate_predictions(val: pd.DataFrame, pred, lo, hi, *, naive_pred, calibra
         "n": n,
         "n_with_prior": persistence_all["n_with_prior"],
         "mae_pct_of_cap": overall.get("mae_pct_of_cap"),
+        "mae_usd": overall.get("mae_usd"),
         "r2": overall.get("r2"),
         "decision_mae_pct_of_cap": decision_mae,
+        "decision_mae_usd": decision_mae_usd,
         "segments": segments,
         "calibration": calibration,
         "references": {

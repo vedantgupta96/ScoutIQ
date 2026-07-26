@@ -24,15 +24,19 @@ import matplotlib.pyplot as plt  # noqa: E402
 from sklearn.ensemble import HistGradientBoostingRegressor  # noqa: E402
 from sklearn.inspection import permutation_importance  # noqa: E402
 from sklearn.metrics import mean_absolute_error, r2_score  # noqa: E402
-from sklearn.model_selection import StratifiedKFold, train_test_split  # noqa: E402
+from sklearn.model_selection import train_test_split  # noqa: E402
 
 from scoutiq.model.dataset import build_dataset  # noqa: E402
 from scoutiq.model.features import FEATURE_COLS, TARGET  # noqa: E402
 from scoutiq.model.reporting import build_segment, segment_persistence_metrics  # noqa: E402
+from scoutiq.model.spec import (  # noqa: E402
+    CAL_LEVELS, FINAL_HOLDOUT_SEASONS, HGB_PARAMS, MIN_R2_ROWS, MIN_SEGMENT_ROWS,
+    PRIMARY_ALPHA, SEED, conformal_q, decision_oof_cqr_scores,
+)
 
 ART = Path(__file__).parent / "artifacts"
 TRAIN_MAX_TARGET = "2023-24"          # train where next_season <= this (lexicographic works for YYYY-YY)
-TEST_SEASONS = ["2024-25", "2025-26"]  # 2025-26 targets are bridged contract cap hits (test-only, never trained)
+TEST_SEASONS = FINAL_HOLDOUT_SEASONS   # 2025-26 targets are bridged contract cap hits (test-only, never trained)
 MODEL_VERSION = "v1-gbm-cqr-lags-dpcal"
 
 
@@ -41,46 +45,6 @@ def _test_range_label() -> str:
     start = TEST_SEASONS[0].split("-")[0]
     end = TEST_SEASONS[-1].split("-")[1]
     return f"{start}-{end}"
-PRIMARY_ALPHA = 0.20                  # -> 80% prediction interval
-CAL_LEVELS = [0.50, 0.60, 0.70, 0.80, 0.90, 0.95]
-SEED = 42
-
-
-def conformal_q(resid: np.ndarray, level: float) -> float:
-    """Split-conformal quantile of |residual| for a target coverage `level`."""
-    n = len(resid)
-    k = min(np.ceil((n + 1) * level) / n, 1.0)
-    return float(np.quantile(resid, k, method="higher"))
-
-
-def decision_oof_cqr_scores(
-    train: pd.DataFrame, hgb_params: dict, n_splits: int = 5
-) -> np.ndarray:
-    """Cross-fitted CQR nonconformity scores for historical contract starts.
-
-    Each score comes from quantile models that did not train on that row. The
-    folds are stratified so all 51 known decision points contribute instead of
-    the 13 that happen to land in one holdout split.
-    """
-    decision = train["decision_point"].to_numpy(dtype=bool)
-    scores: list[np.ndarray] = []
-    folds = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=SEED)
-    for fit_idx, held_idx in folds.split(train, decision):
-        held_decision_idx = held_idx[decision[held_idx]]
-        if not len(held_decision_idx):
-            continue
-        Xfit = train.iloc[fit_idx][FEATURE_COLS]
-        yfit = train.iloc[fit_idx][TARGET].to_numpy()
-        Xheld = train.iloc[held_decision_idx][FEATURE_COLS]
-        yheld = train.iloc[held_decision_idx][TARGET].to_numpy()
-        lo_model = HistGradientBoostingRegressor(
-            loss="quantile", quantile=PRIMARY_ALPHA / 2, **hgb_params
-        ).fit(Xfit, yfit)
-        hi_model = HistGradientBoostingRegressor(
-            loss="quantile", quantile=1 - PRIMARY_ALPHA / 2, **hgb_params
-        ).fit(Xfit, yfit)
-        scores.append(np.maximum(lo_model.predict(Xheld) - yheld, yheld - hi_model.predict(Xheld)))
-    return np.concatenate(scores)
 
 
 def main() -> None:
@@ -96,10 +60,7 @@ def main() -> None:
     # proper-train / calibration split for conformal
     Xpt, Xcal, ypt, ycal = train_test_split(Xtr, ytr, test_size=0.25, random_state=SEED)
 
-    hgb_params = dict(
-        max_iter=500, learning_rate=0.05, max_leaf_nodes=31,
-        l2_regularization=1.0, random_state=SEED,
-    )
+    hgb_params = dict(HGB_PARAMS, random_state=SEED)
     decision_cqr_scores = decision_oof_cqr_scores(train, hgb_params)
     model = HistGradientBoostingRegressor(**hgb_params)
     model.fit(Xpt, ypt)
@@ -174,10 +135,10 @@ def main() -> None:
     dp = decision_test
     for name, mask in (("decision_point", dp), ("mid_contract", ~dp)):
         model_metrics = None
-        if mask.sum() >= 5:
+        if mask.sum() >= MIN_SEGMENT_ROWS:
             model_metrics = {
                 "mae_pct_of_cap": round(mean_absolute_error(yte[mask], pred[mask]) * 100, 3),
-                "r2": round(r2_score(yte[mask], pred[mask]), 3) if mask.sum() >= 30 else None,
+                "r2": round(r2_score(yte[mask], pred[mask]), 3) if mask.sum() >= MIN_R2_ROWS else None,
                 "interval_80_coverage": round(float(np.mean((yte[mask] >= lo[mask]) & (yte[mask] <= hi[mask]))), 3),
             }
         segments[name] = build_segment(persistence[name], model_metrics)
