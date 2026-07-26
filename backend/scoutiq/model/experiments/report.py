@@ -93,6 +93,8 @@ def _to_markdown(result: dict) -> str:
                      f"{_fmt(c_agg.get('decision_mae_usd'))} |")
         lines.append(f"| DP 80% coverage | {_fmt(b_dp.get('interval_80_coverage'))} | "
                      f"{_fmt(c_dp.get('interval_80_coverage'))} |")
+        lines.append(f"| DP 80% half-width % | {_fmt(b_dp.get('interval_80_half_width_pct'))} | "
+                     f"{_fmt(c_dp.get('interval_80_half_width_pct'))} |")
         lines.append("")
 
     subject = candidate_run if candidate_run else result["baseline"]
@@ -108,9 +110,15 @@ def _to_markdown(result: dict) -> str:
         f"- Calibration method: {_fmt(subject_agg.get('calibration_method'))}",
         "- The nominal-vs-empirical calibration curve is measured on contract-decision rows only.",
         "",
-        "## Cohorts (aggregate)",
+        "## Decision-point calibration (aggregate)",
         "",
+        "| Nominal | Empirical | Half-width % |",
+        "|---|---|---|",
     ]
+    for cal in subject_agg.get("calibration") or []:
+        lines.append(f"| {_fmt(cal.get('nominal'))} | {_fmt(cal.get('empirical'))} | "
+                     f"{_fmt(cal.get('half_width_pct'))} |")
+    lines += ["", "## Cohorts (aggregate)", ""]
     lines += _cohort_lines(subject_agg.get("cohorts", {}))
     lines.append("")
 

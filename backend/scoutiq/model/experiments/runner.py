@@ -70,6 +70,10 @@ def run_candidate(df: pd.DataFrame, folds: list[Fold], candidate: Candidate, *, 
 def run_evaluation(df: pd.DataFrame, *, baseline: str = "v1", candidate: str | None = None,
                    min_train_seasons: int = 3, seed: int = SEED, mode: str = "develop",
                    holdout_seasons: list[str] | None = None) -> dict:
+    if baseline != "v1":
+        raise ValueError(
+            f"promotion baseline must be 'v1' (production); got {baseline!r}. "
+            "The decision_mae_vs_v1 gate is only meaningful against the shipped v1 model.")
     holdout = list(FINAL_HOLDOUT_SEASONS if holdout_seasons is None else holdout_seasons)
     all_targets = sorted(df["next_season"].dropna().unique().tolist())
     reserved = [s for s in all_targets if s in holdout]

@@ -15,6 +15,8 @@ from scoutiq.model.experiments.runner import run_evaluation
 from scoutiq.model.features import FEATURE_COLS, POSITIONS, TARGET
 from scoutiq.model.reporting import segment_persistence_metrics
 
+_UNSET = object()
+
 
 def _season_labels(n: int) -> list[str]:
     return [f"20{10 + i:02d}-{11 + i:02d}" for i in range(n)]
@@ -167,6 +169,35 @@ def test_segments_match_segment_persistence_metrics():
     assert result["segments"]["mid_contract"]["n"] == 3
 
 
+def test_decision_persistence_population_mae_uses_usable_prior_rows():
+    # 6 contract-decision rows; 5 carry a usable prior salary, 1 does not. The last (no-prior)
+    # row is deliberately far off so the usable-prior MAE differs from the all-decision MAE.
+    y = np.array([0.20, 0.18, 0.22, 0.25, 0.15, 0.30])
+    prior = np.array([0.19, 0.17, 0.23, 0.24, 0.16, np.nan])
+    decision = np.array([True, True, True, True, True, True])
+    pred = np.array([0.205, 0.175, 0.225, 0.245, 0.155, 0.50])
+    val = pd.DataFrame({
+        TARGET: y, "prior_pct_cap": prior, "decision_point": decision,
+        "age": [25.0, 26.0, 27.0, 28.0, 29.0, 30.0],
+        "position": ["PG", "SG", "SF", "PF", "C", "PG"],
+        "target_cap": [130_000_000.0] * 6,
+    })
+    lo, hi = pred - 0.05, pred + 0.05
+    naive_pred = np.full(6, float(np.mean(y)))
+    calibration = [{"nominal": 0.8, "empirical": 0.8, "half_width_pct": 5.0}]
+
+    result = evaluate_predictions(val, pred, lo, hi, naive_pred=naive_pred,
+                                  calibration=calibration, feature_cols=("age",))
+
+    usable = ~np.isnan(prior)
+    expected_pop = round(float(np.mean(np.abs(y[usable] - pred[usable]))) * 100, 3)
+    assert result["decision_persistence_population_mae_pct"] == expected_pop
+    # Excludes the missing-prior decision row, so it differs from the all-decision MAE.
+    assert result["decision_persistence_population_mae_pct"] != result["decision_mae_pct_of_cap"]
+    # It is exactly the population persistence is defined on.
+    assert result["segments"]["decision_point"]["n_with_prior"] == int(usable.sum())
+
+
 def test_small_segment_keeps_population_and_persistence():
     rng = np.random.default_rng(3)
     n_mid, n_decision = 2, 6
@@ -294,13 +325,15 @@ def test_final_mode_validates_on_holdout(monkeypatch):
         assert all(t < fold["val_target"] for t in fold["train_targets"])
 
 
-def _minimal_run(candidate_name, decision_mae, mean_ref=None, persist=None,
+def _minimal_run(candidate_name, decision_mae, mean_ref=None, persist=None, persist_pop=_UNSET,
                  calibration_method="decision_point_oof", coverage=0.8):
+    pop = decision_mae if persist_pop is _UNSET else persist_pop
     return {
         "candidate": candidate_name,
         "aggregate": {
             "decision_mae_pct_of_cap": decision_mae,
             "decision_mean_prediction_mae_pct": mean_ref,
+            "decision_persistence_population_mae_pct": pop,
             "calibration_method": calibration_method,
             "segments": {"decision_point": {"persistence_mae_pct": persist, "interval_80_coverage": coverage}},
         },
@@ -310,9 +343,10 @@ def _minimal_run(candidate_name, decision_mae, mean_ref=None, persist=None,
 def test_gate_requires_strict_improvement():
     folds = [Fold(("2011-12",), "2012-13")]
 
-    def _status(c, b, mean, persist):
+    def _status(c, b, mean, persist, persist_pop=_UNSET):
         baseline_run = _minimal_run("v1", b)
-        candidate_run = _minimal_run("current_season", c, mean_ref=mean, persist=persist)
+        candidate_run = _minimal_run("current_season", c, mean_ref=mean, persist=persist,
+                                     persist_pop=persist_pop)
         gates = evaluate_gates(baseline_run, candidate_run, folds)
         return next(g for g in gates if g["id"] == "decision_mae_vs_v1")["status"]
 
@@ -321,6 +355,12 @@ def test_gate_requires_strict_improvement():
     assert _status(2.9, 3.0, mean=None, persist=4.0) == "insufficient_evidence"
     assert _status(2.9, 3.0, mean=2.5, persist=None) == "insufficient_evidence"
     assert _status(2.0, 3.0, mean=2.5, persist=4.0) == "pass"
+    # Persistence is compared on the usable-prior decision population, not all decision rows.
+    # All-decision candidate MAE (2.0) beats persistence (4.0), but on the usable-prior population
+    # the candidate (5.0) does not -- the gate must fail rather than pass on the wrong denominator.
+    assert _status(2.0, 3.0, mean=2.5, persist=4.0, persist_pop=5.0) == "fail"
+    # No usable-prior candidate MAE at all -> insufficient, even when all-decision MAE looks good.
+    assert _status(2.0, 3.0, mean=2.5, persist=4.0, persist_pop=None) == "insufficient_evidence"
 
 
 def test_coverage_gate_requires_production_calibration():
@@ -380,6 +420,12 @@ def test_cli_baseline_restricted_to_v1():
         build_parser().parse_args(["--baseline", "current_season"])
 
 
+def test_run_evaluation_rejects_non_v1_baseline():
+    df = build_synthetic_dataset(n_seasons=6, rows_per_season=10, seed=0)
+    with pytest.raises(ValueError):
+        run_evaluation(df, baseline="current_season", candidate="v1")
+
+
 def test_candidate_calibration_curve_is_decision_point(monkeypatch):
     monkeypatch.setitem(spec.HGB_PARAMS, "max_iter", 30)
     df = build_synthetic_dataset(n_seasons=6, rows_per_season=28, seed=0)
@@ -424,3 +470,16 @@ def test_dollar_mae_reported():
     assert "mae_usd" in dp and isinstance(dp["mae_usd"], (int, float))
     mid = result["segments"]["mid_contract"]
     assert "mae_usd" not in mid
+
+
+def test_markdown_reports_decision_interval_width(monkeypatch):
+    from scoutiq.model.experiments.report import _to_markdown
+
+    monkeypatch.setitem(spec.HGB_PARAMS, "max_iter", 30)
+    df = build_synthetic_dataset(n_seasons=6, rows_per_season=28, seed=0)
+    result = run_evaluation(df, candidate="current_season", seed=42)
+    md = _to_markdown(result)
+
+    assert "DP 80% half-width %" in md
+    assert "## Decision-point calibration (aggregate)" in md
+    assert "| Nominal | Empirical | Half-width % |" in md

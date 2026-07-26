@@ -12,9 +12,10 @@ INSUFFICIENT = "insufficient_evidence"
 
 
 DECISION_MAE_GATE_DESCRIPTION = (
-    "Candidate strictly improves contract-decision MAE against the baseline, the "
-    "decision-point mean-prediction baseline, and persistence — all on the "
-    "contract-decision population."
+    "Candidate strictly improves contract-decision MAE against the v1 baseline and the "
+    "decision-point mean-prediction baseline on all contract-decision rows, and against "
+    "prior-pay persistence on the contract-decision rows that carry a usable prior salary "
+    "(persistence's own eligible population, per #110)."
 )
 
 
@@ -39,16 +40,19 @@ def evaluate_gates(baseline_run: dict, candidate_run: dict | None, folds, covera
         b = baseline_run["aggregate"]["decision_mae_pct_of_cap"]
         mean_ref = agg.get("decision_mean_prediction_mae_pct")
         persist = agg["segments"]["decision_point"].get("persistence_mae_pct")
+        c_persist_pop = agg.get("decision_persistence_population_mae_pct")
         missing = [name for name, v in (("candidate decision MAE", c), ("baseline decision MAE", b),
-                   ("decision mean-prediction", mean_ref), ("decision persistence", persist)) if v is None]
+                   ("decision mean-prediction", mean_ref), ("decision persistence", persist),
+                   ("candidate decision MAE on usable-prior rows", c_persist_pop)) if v is None]
         if missing:
             status = INSUFFICIENT
             detail = f"insufficient contract-decision evidence (missing: {', '.join(missing)})."
         else:
-            status = PASS if (c < b and c < mean_ref and c < persist) else FAIL
-            detail = (f"candidate {c} vs {baseline_name} {b}, decision mean-prediction {mean_ref}, "
-                      f"decision persistence {persist} (% cap MAE on the contract-decision population; "
-                      f"strict improvement over all three required).")
+            status = PASS if (c < b and c < mean_ref and c_persist_pop < persist) else FAIL
+            detail = (f"candidate {c} vs {baseline_name} {b} and decision mean-prediction {mean_ref} "
+                      f"on all contract-decision rows; candidate {c_persist_pop} vs persistence {persist} "
+                      f"on contract-decision rows with usable prior pay "
+                      f"(% cap MAE; strict improvement over all three required).")
         gates.append({"id": "decision_mae_vs_v1",
                       "description": DECISION_MAE_GATE_DESCRIPTION,
                       "status": status, "detail": detail})

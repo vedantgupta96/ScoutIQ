@@ -60,6 +60,13 @@ def evaluate_predictions(val: pd.DataFrame, pred, lo, hi, *, naive_pred, calibra
     decision_mean_prediction_mae = (round(mean_absolute_error(y[decision], naive_pred[decision]) * 100, 3)
                                     if decision.sum() >= MIN_SEGMENT_ROWS else None)
 
+    # Candidate MAE on the exact population prior-pay persistence is defined for (contract-decision
+    # rows with a usable prior salary), so the promotion gate compares like-for-like per #110.
+    usable_prior_decision = decision & ~np.isnan(prior)
+    decision_persistence_pop_mae = (
+        round(mean_absolute_error(y[usable_prior_decision], pred[usable_prior_decision]) * 100, 3)
+        if usable_prior_decision.sum() >= MIN_SEGMENT_ROWS else None)
+
     refs = segment_persistence_metrics(y, prior, decision)
     segments = {
         "decision_point": _segment(refs["decision_point"], decision, y, pred, lo, hi, cap),
@@ -97,6 +104,7 @@ def evaluate_predictions(val: pd.DataFrame, pred, lo, hi, *, naive_pred, calibra
         "decision_mae_pct_of_cap": decision_mae,
         "decision_mae_usd": decision_mae_usd,
         "decision_mean_prediction_mae_pct": decision_mean_prediction_mae,
+        "decision_persistence_population_mae_pct": decision_persistence_pop_mae,
         "segments": segments,
         "calibration": calibration,
         "references": {
