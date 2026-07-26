@@ -23,8 +23,8 @@ def build_parser() -> argparse.ArgumentParser:
                     "Reuses the canonical Model-trust reporting contract; never writes production "
                     "artifacts, production metrics, or published valuations. develop mode (default) "
                     "reserves the final holdout seasons so they are never used as a tuning set.")
-    p.add_argument("--baseline", default="v1", choices=sorted(CANDIDATES),
-                   help="baseline candidate (default: v1).")
+    p.add_argument("--baseline", default="v1", choices=["v1"],
+                   help="promotion baseline (production v1).")
     p.add_argument("--candidate", default=None, choices=sorted(CANDIDATES),
                    help="optional candidate to compare against the baseline.")
     p.add_argument("--min-train-seasons", type=int, default=3,

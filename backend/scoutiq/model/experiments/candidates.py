@@ -71,16 +71,19 @@ class Candidate:
         lo = np.minimum(qlo - q80, pred)
         hi = np.maximum(qhi + q80, pred)
 
+        dmask = val["decision_point"].to_numpy(dtype=bool)
+        yv_d, qlo_d, qhi_d, pred_d = yval[dmask], qlo[dmask], qhi[dmask], pred[dmask]
+
         calibration = []
         for lvl in CAL_LEVELS:
             q = conformal_q(scores, lvl)
-            lo_l = np.minimum(qlo - q, pred)
-            hi_l = np.maximum(qhi + q, pred)
-            covered = (yval >= lo_l) & (yval <= hi_l)
+            lo_l = np.minimum(qlo_d - q, pred_d)
+            hi_l = np.maximum(qhi_d + q, pred_d)
+            covered = (yv_d >= lo_l) & (yv_d <= hi_l)
             calibration.append({
                 "nominal": lvl,
-                "empirical": round(float(np.mean(covered)), 3) if len(yval) else None,
-                "half_width_pct": round(float(np.mean((hi_l - lo_l) / 2)) * 100, 2) if len(yval) else None,
+                "empirical": round(float(np.mean(covered)), 3) if len(yv_d) else None,
+                "half_width_pct": round(float(np.mean((hi_l - lo_l) / 2)) * 100, 2) if len(yv_d) else None,
             })
 
         return {"pred": pred, "lo": lo, "hi": hi, "calibration": calibration,

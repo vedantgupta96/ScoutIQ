@@ -2,6 +2,7 @@ import json
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from scoutiq.model import spec
 from scoutiq.model.experiments import candidates
@@ -293,32 +294,105 @@ def test_final_mode_validates_on_holdout(monkeypatch):
         assert all(t < fold["val_target"] for t in fold["train_targets"])
 
 
-def _minimal_run(decision_mae, mean_ref=None, persist=None):
-    return {"aggregate": {
-        "decision_mae_pct_of_cap": decision_mae,
-        "references": {"mean_prediction_mae_pct": mean_ref},
-        "segments": {"decision_point": {"persistence_mae_pct": persist, "interval_80_coverage": 0.8}},
-    }}
+def _minimal_run(candidate_name, decision_mae, mean_ref=None, persist=None,
+                 calibration_method="decision_point_oof", coverage=0.8):
+    return {
+        "candidate": candidate_name,
+        "aggregate": {
+            "decision_mae_pct_of_cap": decision_mae,
+            "decision_mean_prediction_mae_pct": mean_ref,
+            "calibration_method": calibration_method,
+            "segments": {"decision_point": {"persistence_mae_pct": persist, "interval_80_coverage": coverage}},
+        },
+    }
 
 
 def test_gate_requires_strict_improvement():
     folds = [Fold(("2011-12",), "2012-13")]
 
-    equal_gates = evaluate_gates(_minimal_run(3.0), _minimal_run(3.0, mean_ref=5.0, persist=5.0), folds)
-    gate = next(g for g in equal_gates if g["id"] == "decision_mae_vs_v1")
-    assert gate["status"] == "fail"
+    def _status(c, b, mean, persist):
+        baseline_run = _minimal_run("v1", b)
+        candidate_run = _minimal_run("current_season", c, mean_ref=mean, persist=persist)
+        gates = evaluate_gates(baseline_run, candidate_run, folds)
+        return next(g for g in gates if g["id"] == "decision_mae_vs_v1")["status"]
 
-    worse_than_mean_gates = evaluate_gates(
-        _minimal_run(3.5), _minimal_run(3.0, mean_ref=2.9, persist=5.0), folds,
-    )
-    gate = next(g for g in worse_than_mean_gates if g["id"] == "decision_mae_vs_v1")
-    assert gate["status"] == "fail"
+    assert _status(3.0, 3.0, mean=2.5, persist=4.0) == "fail"
+    assert _status(2.9, 3.0, mean=2.5, persist=4.0) == "fail"
+    assert _status(2.9, 3.0, mean=None, persist=4.0) == "insufficient_evidence"
+    assert _status(2.9, 3.0, mean=2.5, persist=None) == "insufficient_evidence"
+    assert _status(2.0, 3.0, mean=2.5, persist=4.0) == "pass"
 
-    strict_improvement_gates = evaluate_gates(
-        _minimal_run(4.0), _minimal_run(3.0, mean_ref=3.5, persist=3.8), folds,
-    )
-    gate = next(g for g in strict_improvement_gates if g["id"] == "decision_mae_vs_v1")
-    assert gate["status"] == "pass"
+
+def test_coverage_gate_requires_production_calibration():
+    folds = [Fold(("2011-12",), "2012-13")]
+    baseline_run = _minimal_run("v1", 3.0, mean_ref=2.5, persist=4.0)
+
+    fallback_candidate = _minimal_run("current_season", 2.0, mean_ref=2.5, persist=4.0,
+                                      calibration_method="global_split_conformal", coverage=0.80)
+    gates_fallback = evaluate_gates(baseline_run, fallback_candidate, folds)
+    cov_gate = next(g for g in gates_fallback if g["id"] == "decision_interval_coverage")
+    assert cov_gate["status"] == "insufficient_evidence"
+
+    oof_candidate = _minimal_run("current_season", 2.0, mean_ref=2.5, persist=4.0,
+                                 calibration_method="decision_point_oof", coverage=0.80)
+    gates_oof = evaluate_gates(baseline_run, oof_candidate, folds)
+    cov_gate2 = next(g for g in gates_oof if g["id"] == "decision_interval_coverage")
+    assert cov_gate2["status"] == "pass"
+
+
+def test_decision_segment_reports_interval_width_and_dollars():
+    rng = np.random.default_rng(11)
+    n_mid, n_decision = 2, 6
+    n = n_mid + n_decision
+    decision = np.array([True] * n_decision + [False] * n_mid)
+    y = rng.uniform(0.05, 0.3, n)
+    prior = rng.uniform(0.05, 0.3, n)
+    prior[rng.random(n) < 0.3] = np.nan
+    val = pd.DataFrame({
+        TARGET: y,
+        "prior_pct_cap": prior,
+        "decision_point": decision,
+        "age": rng.uniform(20, 35, n),
+        "position": rng.choice(["PG", "SG", "SF", "PF", "C"], n),
+        "target_cap": rng.uniform(120_000_000, 145_000_000, n),
+    })
+    pred = y + rng.normal(0, 0.01, n)
+    lo, hi = pred - 0.05, pred + 0.05
+    naive_pred = np.full(n, float(np.mean(y)))
+    calibration = [{"nominal": 0.8, "empirical": 0.8, "half_width_pct": 5.0}]
+
+    result = evaluate_predictions(val, pred, lo, hi, naive_pred=naive_pred,
+                                  calibration=calibration, feature_cols=("age",))
+
+    dp = result["segments"]["decision_point"]
+    assert "interval_80_half_width_pct" in dp
+    assert "mae_usd" in dp
+    assert result["decision_mean_prediction_mae_pct"] is not None
+
+
+def test_cli_baseline_restricted_to_v1():
+    from scoutiq.model.experiments.evaluate import build_parser
+
+    args = build_parser().parse_args(["--baseline", "v1"])
+    assert args.baseline == "v1"
+
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["--baseline", "current_season"])
+
+
+def test_candidate_calibration_curve_is_decision_point(monkeypatch):
+    monkeypatch.setitem(spec.HGB_PARAMS, "max_iter", 30)
+    df = build_synthetic_dataset(n_seasons=6, rows_per_season=28, seed=0)
+    target_seasons = sorted(df["next_season"].unique())
+    folds = rolling_origin_folds(target_seasons, min_train_seasons=3)
+    train, val = fold_frames(df, folds[0])
+    val = val.copy()
+    val["decision_point"] = False
+
+    result = candidates.v1_candidate().fit_predict(train, val, seed=42)
+
+    assert result["calibration"]
+    assert all(c["empirical"] is None for c in result["calibration"])
 
 
 def test_dollar_mae_reported():

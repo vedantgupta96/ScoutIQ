@@ -80,7 +80,8 @@ def _to_markdown(result: dict) -> str:
     if candidate_run:
         lines += _candidate_section("Candidate", candidate_run)
         lines += ["## Comparison (aggregate)", "",
-                  "| Metric | v1 | candidate |", "|---|---|---|"]
+                  f"| Metric | {result['baseline']['candidate']} | {candidate_run['candidate']} |",
+                  "|---|---|---|"]
         b_agg = result["baseline"]["aggregate"]
         c_agg = candidate_run["aggregate"]
         b_dp = b_agg.get("segments", {}).get("decision_point", {})
@@ -105,6 +106,7 @@ def _to_markdown(result: dict) -> str:
         f"- Prior-pay persistence: n_with_prior={_fmt(persistence.get('n_with_prior'))}, "
         f"persistence MAE%={_fmt(persistence.get('persistence_mae_pct'))}",
         f"- Calibration method: {_fmt(subject_agg.get('calibration_method'))}",
+        "- The nominal-vs-empirical calibration curve is measured on contract-decision rows only.",
         "",
         "## Cohorts (aggregate)",
         "",

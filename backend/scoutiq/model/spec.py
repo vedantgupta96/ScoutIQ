@@ -11,6 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.model_selection import StratifiedKFold
 
 from scoutiq.model.features import FEATURE_COLS, TARGET
@@ -55,3 +56,15 @@ def decision_oof_cqr_scores(
         hi_model = HistGradientBoostingRegressor(loss="quantile", quantile=1 - PRIMARY_ALPHA / 2, **hgb_params).fit(Xfit, yfit)
         scores.append(np.maximum(lo_model.predict(Xheld) - yheld, yheld - hi_model.predict(Xheld)))
     return np.concatenate(scores) if scores else np.array([])
+
+
+def core_model_metrics(y_true, pred, lo, hi) -> dict:
+    """Shared segment model-quality metrics (mae % of cap, R^2, 80% coverage) used
+    by both the production trainer and the offline harness. The caller ensures the
+    group is large enough to score (>= MIN_SEGMENT_ROWS)."""
+    n = len(y_true)
+    return {
+        "mae_pct_of_cap": round(mean_absolute_error(y_true, pred) * 100, 3),
+        "r2": round(r2_score(y_true, pred), 3) if n >= MIN_R2_ROWS else None,
+        "interval_80_coverage": round(float(np.mean((y_true >= lo) & (y_true <= hi))), 3),
+    }

@@ -11,14 +11,16 @@ FAIL = "fail"
 INSUFFICIENT = "insufficient_evidence"
 
 
-def _decision_coverage(run: dict):
-    if not run or not run.get("aggregate"):
-        return None
-    return run["aggregate"]["segments"]["decision_point"].get("interval_80_coverage")
+DECISION_MAE_GATE_DESCRIPTION = (
+    "Candidate strictly improves contract-decision MAE against the baseline, the "
+    "decision-point mean-prediction baseline, and persistence — all on the "
+    "contract-decision population."
+)
 
 
 def evaluate_gates(baseline_run: dict, candidate_run: dict | None, folds, coverage_tol: float = 0.075) -> list[dict]:
     gates: list[dict] = []
+    baseline_name = baseline_run["candidate"]
 
     leak_ok = bool(folds) and all(f.val_target > max(f.train_targets) for f in folds)
     gates.append({"id": "no_leakage",
@@ -28,38 +30,49 @@ def evaluate_gates(baseline_run: dict, candidate_run: dict | None, folds, covera
 
     if candidate_run is None:
         gates.append({"id": "decision_mae_vs_v1",
-                      "description": "Candidate improves or meaningfully segments contract-decision MAE vs v1 and simple baselines.",
+                      "description": DECISION_MAE_GATE_DESCRIPTION,
                       "status": INSUFFICIENT,
                       "detail": "Baseline-only run; no candidate supplied to compare against v1."})
     else:
-        c = candidate_run["aggregate"]["decision_mae_pct_of_cap"]
+        agg = candidate_run["aggregate"]
+        c = agg["decision_mae_pct_of_cap"]
         b = baseline_run["aggregate"]["decision_mae_pct_of_cap"]
-        dp = candidate_run["aggregate"]["segments"]["decision_point"]
-        persist = dp.get("persistence_mae_pct")
-        mean_ref = candidate_run["aggregate"]["references"]["mean_prediction_mae_pct"]
-        if c is None or b is None:
-            status, detail = INSUFFICIENT, "Too few contract-decision rows to compare."
+        mean_ref = agg.get("decision_mean_prediction_mae_pct")
+        persist = agg["segments"]["decision_point"].get("persistence_mae_pct")
+        missing = [name for name, v in (("candidate decision MAE", c), ("baseline decision MAE", b),
+                   ("decision mean-prediction", mean_ref), ("decision persistence", persist)) if v is None]
+        if missing:
+            status = INSUFFICIENT
+            detail = f"insufficient contract-decision evidence (missing: {', '.join(missing)})."
         else:
-            beats_v1 = c < b
-            beats_mean = mean_ref is None or c < mean_ref
-            beats_persist = persist is None or c < persist
-            status = PASS if (beats_v1 and beats_mean and beats_persist) else FAIL
-            detail = (f"candidate {c} vs v1 {b}, mean-prediction {mean_ref}, persistence {persist} "
-                      f"(% cap MAE at contract decisions); strict improvement over all three required.")
+            status = PASS if (c < b and c < mean_ref and c < persist) else FAIL
+            detail = (f"candidate {c} vs {baseline_name} {b}, decision mean-prediction {mean_ref}, "
+                      f"decision persistence {persist} (% cap MAE on the contract-decision population; "
+                      f"strict improvement over all three required).")
         gates.append({"id": "decision_mae_vs_v1",
-                      "description": "Candidate improves or meaningfully segments contract-decision MAE vs v1 and simple baselines.",
+                      "description": DECISION_MAE_GATE_DESCRIPTION,
                       "status": status, "detail": detail})
 
-    cov = _decision_coverage(candidate_run or baseline_run)
+    subject = candidate_run or baseline_run
+    subj_agg = subject["aggregate"] if subject else {}
+    cov = subj_agg.get("segments", {}).get("decision_point", {}).get("interval_80_coverage") if subj_agg else None
+    method = subj_agg.get("calibration_method") if subj_agg else None
     if cov is None:
         gates.append({"id": "decision_interval_coverage",
                       "description": "Approximately nominal 80% interval coverage at contract decisions.",
                       "status": INSUFFICIENT, "detail": "Too few contract-decision rows to assess 80% coverage."})
+    elif method != "decision_point_oof":
+        gates.append({"id": "decision_interval_coverage",
+                      "description": "Approximately nominal 80% interval coverage at contract decisions.",
+                      "status": INSUFFICIENT,
+                      "detail": (f"decision-point coverage {cov} was measured under '{method}' "
+                                 f"calibration (fallback), not production decision-point OOF — not comparable to v1.")})
     else:
         gates.append({"id": "decision_interval_coverage",
                       "description": "Approximately nominal 80% interval coverage at contract decisions.",
                       "status": PASS if abs(cov - 0.80) <= coverage_tol else FAIL,
-                      "detail": f"decision-point 80% empirical coverage {cov} (target 0.80 ± {coverage_tol})."})
+                      "detail": (f"decision-point 80% empirical coverage {cov} (target 0.80 ± {coverage_tol}); "
+                                 f"decision-point OOF calibration.")})
 
     gates.append({"id": "cohort_reporting",
                   "description": "Sample size + calibration reported for age, position, contract-type, and data-coverage cohorts.",

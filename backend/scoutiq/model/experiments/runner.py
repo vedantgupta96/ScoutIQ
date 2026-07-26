@@ -24,11 +24,12 @@ def _weighted_calibration(per_season: list[dict]) -> list[dict]:
         den = 0
         for s in per_season:
             c = s["calibration"][i]
-            if c["empirical"] is None:
+            weight = s["segments"]["decision_point"]["n"]
+            if c["empirical"] is None or not weight:
                 continue
-            emp_num += c["empirical"] * s["n"]
-            wid_num += c["half_width_pct"] * s["n"]
-            den += s["n"]
+            emp_num += c["empirical"] * weight
+            wid_num += c["half_width_pct"] * weight
+            den += weight
         out.append({"nominal": lvl,
                     "empirical": round(emp_num / den, 3) if den else None,
                     "half_width_pct": round(wid_num / den, 2) if den else None})

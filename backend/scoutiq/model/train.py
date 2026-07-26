@@ -31,7 +31,7 @@ from scoutiq.model.features import FEATURE_COLS, TARGET  # noqa: E402
 from scoutiq.model.reporting import build_segment, segment_persistence_metrics  # noqa: E402
 from scoutiq.model.spec import (  # noqa: E402
     CAL_LEVELS, FINAL_HOLDOUT_SEASONS, HGB_PARAMS, MIN_R2_ROWS, MIN_SEGMENT_ROWS,
-    PRIMARY_ALPHA, SEED, conformal_q, decision_oof_cqr_scores,
+    PRIMARY_ALPHA, SEED, conformal_q, core_model_metrics, decision_oof_cqr_scores,
 )
 
 ART = Path(__file__).parent / "artifacts"
@@ -136,11 +136,7 @@ def main() -> None:
     for name, mask in (("decision_point", dp), ("mid_contract", ~dp)):
         model_metrics = None
         if mask.sum() >= MIN_SEGMENT_ROWS:
-            model_metrics = {
-                "mae_pct_of_cap": round(mean_absolute_error(yte[mask], pred[mask]) * 100, 3),
-                "r2": round(r2_score(yte[mask], pred[mask]), 3) if mask.sum() >= MIN_R2_ROWS else None,
-                "interval_80_coverage": round(float(np.mean((yte[mask] >= lo[mask]) & (yte[mask] <= hi[mask]))), 3),
-            }
+            model_metrics = core_model_metrics(yte[mask], pred[mask], lo[mask], hi[mask])
         segments[name] = build_segment(persistence[name], model_metrics)
 
     # permutation importance (explainability)

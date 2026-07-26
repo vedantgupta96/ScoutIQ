@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.metrics import mean_absolute_error
 
 from scoutiq.model.features import TARGET, primary_position
 from scoutiq.model.reporting import build_segment, persistence_reference, segment_persistence_metrics
-from scoutiq.model.spec import MIN_R2_ROWS, MIN_SEGMENT_ROWS
+from scoutiq.model.spec import MIN_SEGMENT_ROWS, core_model_metrics
 
 AGE_BANDS = [(0, 23, "<=23"), (24, 26, "24-26"), (27, 29, "27-29"), (30, 32, "30-32"), (33, 200, "33+")]
 
@@ -23,12 +23,10 @@ def _model_metrics(y, pred, lo, hi, cap) -> dict | None:
     n = len(y)
     if n < MIN_SEGMENT_ROWS:
         return None
-    return {
-        "mae_pct_of_cap": round(mean_absolute_error(y, pred) * 100, 3),
-        "mae_usd": round(float(np.mean(np.abs(y - pred) * cap))),
-        "r2": round(r2_score(y, pred), 3) if n >= MIN_R2_ROWS else None,
-        "interval_80_coverage": round(float(np.mean((y >= lo) & (y <= hi))), 3),
-    }
+    m = core_model_metrics(y, pred, lo, hi)
+    m["mae_usd"] = round(float(np.mean(np.abs(y - pred) * cap)))
+    m["interval_80_half_width_pct"] = round(float(np.mean((hi - lo) / 2)) * 100, 2)
+    return m
 
 
 def _segment(ref, mask, y, pred, lo, hi, cap) -> dict:
@@ -59,6 +57,8 @@ def evaluate_predictions(val: pd.DataFrame, pred, lo, hi, *, naive_pred, calibra
                     if decision.sum() >= MIN_SEGMENT_ROWS else None)
     decision_mae_usd = (round(float(np.mean(np.abs(y[decision] - pred[decision]) * cap[decision])))
                         if decision.sum() >= MIN_SEGMENT_ROWS else None)
+    decision_mean_prediction_mae = (round(mean_absolute_error(y[decision], naive_pred[decision]) * 100, 3)
+                                    if decision.sum() >= MIN_SEGMENT_ROWS else None)
 
     refs = segment_persistence_metrics(y, prior, decision)
     segments = {
@@ -96,6 +96,7 @@ def evaluate_predictions(val: pd.DataFrame, pred, lo, hi, *, naive_pred, calibra
         "r2": overall.get("r2"),
         "decision_mae_pct_of_cap": decision_mae,
         "decision_mae_usd": decision_mae_usd,
+        "decision_mean_prediction_mae_pct": decision_mean_prediction_mae,
         "segments": segments,
         "calibration": calibration,
         "references": {
