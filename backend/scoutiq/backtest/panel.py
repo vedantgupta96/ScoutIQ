@@ -7,12 +7,16 @@ Merges three existing tables into one player-season record — no new data:
 
 `actual_pct` is derived independently from salary ÷ cap (not from the valuation row) so the
 grading side never depends on the model.
+
+In-progress seasons beyond the completed baseline are excluded so partial production never
+grades a decision.
 """
 from __future__ import annotations
 
 from sqlalchemy import select
 
 from scoutiq.api.deps import DB
+from scoutiq.api.season import LATEST_SEASON
 from scoutiq.backtest.engine import Panel, SeasonStat, make_panel
 from scoutiq.models import CapConstants, Player, PlayerSalary, PlayerSeason, PlayerValuation
 
@@ -42,7 +46,7 @@ def build_panel(db: DB) -> Panel:
     players = {p.player_id: p for p in db.scalars(select(Player)).all()}
 
     stats: list[SeasonStat] = []
-    for ps in db.scalars(select(PlayerSeason)).all():
+    for ps in db.scalars(select(PlayerSeason).where(PlayerSeason.season <= LATEST_SEASON)).all():
         adv = ps.advanced or {}
         cap = caps.get(ps.season)
         salary = salaries.get((ps.player_id, ps.season))

@@ -8,7 +8,16 @@ from pydantic import BaseModel
 from sqlalchemy import desc, select
 
 from scoutiq.api.deps import DB
-from scoutiq.models import Contract, ContractYear, Player, PlayerSalary, PlayerSeason, Team
+from scoutiq.api.season import LATEST_SEASON
+from scoutiq.models import (
+    CURRENT_TEAM_NOT_ON_ROSTER_SUFFIX,
+    Contract,
+    ContractYear,
+    Player,
+    PlayerSalary,
+    PlayerSeason,
+    Team,
+)
 
 
 class TeamSummary(BaseModel):
@@ -39,6 +48,9 @@ def latest_stats_row(player_id: int, db: DB):
         select(PlayerSeason.season, Team)
         .outerjoin(Team, Team.team_id == PlayerSeason.team_id)
         .where(PlayerSeason.player_id == player_id)
+        # Bounded by the completed-season baseline so an in-progress season never becomes
+        # the default valuation season.
+        .where(PlayerSeason.season <= LATEST_SEASON)
         .order_by(desc(PlayerSeason.season))
         .limit(1)
     ).first()
@@ -56,7 +68,9 @@ def _player_summary_from_parts(
     if current_team_summary and latest_stats_team_summary and current_team_summary.team_id != latest_stats_team_summary.team_id:
         note = "Current roster team differs from latest loaded stats-season team."
     elif current_team_summary and latest_season is None:
-        note = "Current roster team is available, but no loaded stats season exists for this player."
+        note = "Current roster team is available, but no completed stats season is loaded for this player."
+    elif not current_team_summary and (player.current_team_source or "").endswith(CURRENT_TEAM_NOT_ON_ROSTER_SUFFIX):
+        note = "Not on a current NBA roster as of the last roster refresh; latest stats-season team is historical."
     elif latest_stats_team_summary and not current_team_summary:
         note = "Current roster team has not been loaded; latest stats-season team is historical."
 
@@ -86,6 +100,9 @@ def batched_summaries(players: list[Player], db: DB) -> dict[int, PlayerSummary]
             select(PlayerSeason.player_id, PlayerSeason.season, Team)
             .outerjoin(Team, Team.team_id == PlayerSeason.team_id)
             .where(PlayerSeason.player_id.in_(player_ids))
+            # Bounded by the completed-season baseline so an in-progress season never
+            # becomes the default valuation season.
+            .where(PlayerSeason.season <= LATEST_SEASON)
             .distinct(PlayerSeason.player_id)
             .order_by(PlayerSeason.player_id, desc(PlayerSeason.season))
         ).all()
