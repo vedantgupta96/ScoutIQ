@@ -1,6 +1,7 @@
 # Valuation season contract and market-value semantics
 
-Status: Proposed — 2026-07-26 (awaiting maintainer approval). Part of #106; resolves #108.
+Status: Proposed — 2026-07-26 (awaiting maintainer approval).
+Revised: 2026-11-14. Part of SCO-17; resolves SCO-19.
 Documentation-only: no production prediction, schema, or UI behavior changes in this
 decision.
 
@@ -74,16 +75,22 @@ schedules validation of its season-`t` interpretation against those market-reset
 - **Estimand:** the market pay a player should command at his *next genuine signing*.
   Unlike production-implied worth, this concept has an **observable label** — the pay the
   market actually sets at the signing.
-- **Target measure (the #108 choice #113 depends on):** the new contract's **average
-  annual value (AAV)**, expressed as a **percent of the cap in the contract's first paid
-  season**. AAV is the market's own one-number summary of a deal and smooths intra-contract
-  backloading; percent-of-cap at the first paid season keeps it on the product's
-  cross-season money unit. AAV does *not* by itself resolve guarantees, option years,
-  incentives, or contract length — each needs a deterministic inclusion rule and stays
-  separate context or a secondary outcome, never folded silently into the headline number.
-  First-year salary was considered and rejected as the primary target (more exposed to
-  cap-hold and structuring artifacts); it may serve as a robustness cross-check. #113
-  finalizes the estimator but must target AAV-percent-of-first-year-cap per this decision.
+- **Initial target measure (the SCO-24 experiment uses):** for standard free-agent
+  signings, the attributed **first-year salary**, expressed as a **percent of the first
+  paid season's cap known at signing**. It gives the first experiment a materially larger
+  usable population than exact terms: SCO-20 found 1,478 usable standard signings and 747
+  with no constraint identified (735 offseason), an upper bound rather than confirmed
+  open-market deals. This measure is not a claim about total contract value: first-year
+  salary remains exposed to deal structuring and cap-hold artifacts.
+- **Exact-terms robustness check:** exact terms cover 451 usable standard signings across
+  the full usable population, not necessarily the 747-row no-constraint-identified
+  headline population. Where both values are available, compare the result with **AAV as
+  a percent of that same cap** and report the overlapping matched-subset size. AAV smooths
+  intra-contract backloading but does not itself resolve guarantees, option years,
+  incentives, or contract length; none may be folded silently into either measure. The two
+  measures remain distinct and are never substituted for one another. This is a practical
+  coverage choice from the SCO-20 audit, not a settled validation of either label. SCO-36
+  still validates the latent production-implied-worth proxy.
 - **Distinct from ADR-0002 "projected market."** Projected market carries *today's* worth
   forward at the CBA cap escalator and is explicitly *not* a forward forecast.
   Next-contract market value *is* the forward market estimate ADR-0002 deferred as "a
@@ -100,7 +107,7 @@ the event's anchors can span several seasons:
 | contract-start season | 2025-26 | 2026-27 |
 | pay / target season | 2025-26 | 2026-27 |
 | cap denominator | 2025-26 cap — official as of the July signing | 2026-27 cap *as projected at the Oct-2024 signing* (official cap not yet set) |
-| target value | AAV as % of the 2025-26 cap | AAV as % of the 2026-27 cap |
+| target value | attributed first-year salary as % of the 2025-26 cap; exact AAV % only where both values are available, with the overlap reported | separate future extension design; exact AAV % of the 2026-27 cap is a secondary candidate, pending cap-projection history |
 | valuation / storage key | the signing event's stable identity (player + this decision) — never `(player, contract-start season)` | the extension event's identity, keyed to the Oct-2024 decision, not the 2026-27 start |
 
 The **cap denominator is fixed at the first-paid-season cap as known at signing** — the
@@ -112,15 +119,25 @@ begins": its market-setting event (Oct 2024) precedes its contract-start season 
 by two seasons, and the as-of date must respect the *signing*, or the label leaks
 2024-25/2025-26 production the team never had at the decision. Today's `decision_point`
 column ([`dataset.py:88`](../../backend/scoutiq/model/dataset.py#L88)) is only a
-**contract-start-season proxy** (`next_season ∈ contract.season_start`); #109 audits the
-true market events and their coverage, and #113 moves the target onto the signing/as-of
+**contract-start-season proxy** (`next_season ∈ contract.season_start`); SCO-20 audits the
+true market events and their coverage, and SCO-24 moves the target onto the signing/as-of
 anchors.
+
+### Audit evidence and scope boundary
+
+The [SCO-20 audit](https://github.com/vedantgupta96/ScoutIQ/pull/140) is pending merge and
+does not change this ADR's status. It found 174 extension events, of which 120 are usable,
+but treats them as their own `extension_rules` tier and excludes them from the initial
+training experiment until as-of cap-projection history exists. It also excludes 479
+signings with multi-team salaries (459 player-seasons). Of 211 otherwise-usable excluded signings, only two trade-only
+cases are plausible row-sum recoveries; the other 209 require unmeasured attribution of the
+signing team's salary row. Those gaps are not silently included in either target.
 
 ### Fair-value vs decision comparisons
 
 The same-season invariant governs the **fair-value surfaces** (player card, watchlist,
 team surplus). The **decision surfaces** compare a player's *current* worth to a *future*
-contractual figure. Until #113 ships next-contract market value, the worth side of those
+contractual figure. Until SCO-24 ships next-contract market value, the worth side of those
 comparisons is **concept-1 production-implied worth** (or ADR-0002's projected-market
 carry-forward) — *not* next-contract market value. These comparisons are legitimate but
 are **not value gaps**; each gets its own name:
@@ -131,7 +148,7 @@ are **not value gaps**; each gets its own name:
 - **projected-market carry-forward** — ADR-0002; worth carried forward at the cap escalator.
 
 None of these is the same-season value gap, and none is next-contract market value today.
-When #113 lands, concept 2 may supply the worth side of the decision comparisons, but only
+When SCO-24 lands, concept 2 may supply the worth side of the decision comparisons, but only
 as a named forecast — never silently relabelled.
 
 ## Does a value gap compare different seasons?
@@ -144,7 +161,7 @@ recalibrate the season-`t` interpretation; do not silently reinterpret).
 
 **Yes, deliberately and by name, for decision comparisons.** The decision surfaces use the
 four named comparisons above (extend-vs-final-year, option, expiring/FA, projected-market
-carry-forward). Each is a distinct quantity from the value gap and — until #113 — is built
+carry-forward). Each is a distinct quantity from the value gap and — until SCO-24 — is built
 from concept-1 worth or ADR-0002, not from next-contract market value.
 
 ## Alternatives considered
@@ -164,9 +181,9 @@ risk, label availability, and migration cost:
 - **Next-contract market value (chosen — decision concept, future target).** Highest
   decision usefulness for the extend/sign question; has an observable label (realized
   signing pay) but higher leakage risk (the as-of date must precede the signing, and
-  extensions sign before the contract starts); sparse label availability (only genuine
-  signings — #109 must audit coverage); highest migration cost (new target, event labels,
-  coverage). Owned by #113.
+  extensions sign before the contract starts); limited audited coverage (only genuine
+  signings — SCO-20 supplies the current evidence); highest migration cost (new target,
+  event labels, coverage). The initial standard-free-agent experiment is owned by SCO-24.
 
 ## Consistency with prior ADRs
 
@@ -174,7 +191,7 @@ risk, label availability, and migration cost:
   changes the degrade contract or adds a model dependency to contract-only surfaces.
 - **ADR-0002** (extension projected market is a carry-forward, not a forecast): intact.
   Projected market is *not* rebranded. Next-contract market value is a separate,
-  explicitly forward concept; if #113 lands a backtested forward estimate it may later
+  explicitly forward concept; if SCO-24 lands a backtested forward estimate it may later
   replace the carry-forward on the extension surface, but only as a named forecast with
   its own uncertainty story — never silently.
 
@@ -186,7 +203,7 @@ Nothing changes in this ticket. The migration will touch each surface below. "Fa
 
 | Surface | Files / route | Class | Disposition |
 | --- | --- | --- | --- |
-| Training / backtest | [`dataset.py`](../../backend/scoutiq/model/dataset.py), `model/train.py`, `model/experiments/` | — | Name `pct_cap_next` as the v1 market proxy and `decision_point` as a market-event proxy. Target move → follow-up ticket; #113 sets the contract target; #109 audits the event; #112 tests 3-yr feature history against the **frozen** v1 target (relative claims only) |
+| Training / backtest | [`dataset.py`](../../backend/scoutiq/model/dataset.py), `model/train.py`, `model/experiments/` | — | Name `pct_cap_next` as the v1 market proxy and `decision_point` as a market-event proxy. Target move → follow-up ticket; SCO-24 uses attributed first-year salary % cap for standard free-agent signings and compares exact AAV only on its reported overlapping subset; SCO-20 audits the event; SCO-23 tests 3-yr feature history against the **frozen** v1 target (relative claims only) |
 | Publishing + fallback | [`publish_valuations.py`](../../backend/scoutiq/model/publish_valuations.py), [`valuation.py`](../../backend/scoutiq/api/valuation.py) | — | Validate and recalibrate the season-`t` interpretation of the published signal |
 | Player card / watchlist | `app/players` | Fair-value | Same-season invariant; copy → "production-implied worth" |
 | Home movers | home dashboard (`app/page.tsx`), `app/league` | Fair-value | Ranks by value gap / worth change; must rank the *same-season* gap; label worth, not "market value" |
@@ -201,17 +218,19 @@ Nothing changes in this ticket. The migration will touch each surface below. "Fa
 | Offseason planner | [`offseason.py`](../../backend/scoutiq/api/offseason.py), `app/offseason` | Decision | Uses projected caps (`is_projected_cap`) and expiring money; forward comparisons named; projected market per ADR-0002 |
 | Decision queue | [`decision_queue.py`](../../backend/scoutiq/api/decision_queue.py) | Decision | Routes players to the named decision comparisons above; emits no same-season value gap |
 | Generated player rationale | player-rationale endpoint (`player_rationales` cache) | Reference/copy | Generated text must describe worth with the concept vocabulary (production-implied worth, same-season gap) and never conflate it with next-contract value or imply a forecast |
-| Model / backtest presentation | `app/model`, `model/train.py` report, [`model/experiments/report.py`](../../backend/scoutiq/model/experiments/report.py) | Reference/copy | Present the target as the v1 market proxy (training label season `t+1`) and decision-point segments per the anchors; no user-facing value gap; aligns with #110 |
+| Model / backtest presentation | `app/model`, `model/train.py` report, [`model/experiments/report.py`](../../backend/scoutiq/model/experiments/report.py) | Reference/copy | Present the target as the v1 market proxy (training label season `t+1`) and decision-point segments per the anchors; no user-facing value gap; aligns with SCO-21 |
 | Strategy backtest | `app/strategy`, backtest engine | Fair-value + Decision | Adopt the same-season invariant; name any forward comparison |
-| Trade Lab | `trade_assets.py`, trade backend, `app/trade-lab` | — | **Out of scope** — inventoried as a semantic dependency only; not modified (per #108) |
+| Trade Lab | `trade_assets.py`, trade backend, `app/trade-lab` | — | **Out of scope** — inventoried as a semantic dependency only; not modified (per SCO-19) |
 
 ## Migration checklist
 
-All items are *future* work; #108 ships none of them.
+All items are *future* work; SCO-19 ships none of them.
 
-1. **Model target & label.** The **target-label-validation ticket** (#132; drafted below;
-   distinct from #112 and #113) owns this. #113 sets the contract-decision target (AAV-percent-of-
-   first-year-cap, per the concept-2 contract); #109 audits the market event and its
+1. **Model target & label.** The **target-label-validation ticket** (SCO-36; drafted below;
+   distinct from SCO-23 and SCO-24) owns validation of the latent production-implied-worth
+   proxy. SCO-24 uses attributed first-year salary percent of first-paid-season cap for
+   its initial standard-free-agent experiment, with exact AAV percent of that cap only as
+   a robustness check on a separately reported overlap; SCO-20 audits the market event and its
    coverage; evolve `decision_point` from a contract-start-season proxy toward the signing
    date + as-of date.
 2. **Stored rows** (`player_valuations`). Recalibrate and re-publish once the target is
@@ -224,14 +243,14 @@ All items are *future* work; #108 ships none of them.
    under the validated target.
 5. **UI copy.** Audit labels across every surface in the inventory; keep "projected
    market" per ADR-0002 and the four decision-comparison names distinct from the value gap.
-6. **#112 (feature history) — conditional go.** #112 may proceed now against the current
+6. **SCO-23 (feature history) — conditional go.** SCO-23 may proceed now against the current
    v1 target held **frozen**, reporting the three-year-feature-history effect as a
    *relative* improvement only; it must not read its absolute error as validated season-`t`
-   worth. Reconcile its candidate/target definitions with this ADR and the merged #110
+   worth. Reconcile its candidate/target definitions with this ADR and the merged SCO-21
    harness, then relabel `ready-for-agent` on that basis. Moving the target is out of
-   #112's scope (see the follow-up ticket).
+   SCO-23's scope (see the follow-up ticket).
 
-### Follow-up ticket (filed as #132)
+### Follow-up ticket (filed as SCO-36)
 
 > **Title:** Validate and set the supervised label for production-implied worth
 >
@@ -250,20 +269,21 @@ All items are *future* work; #108 ships none of them.
 > **Scope:** Quantify how much `t+1` pay reflects a genuine market reset vs incumbent
 > stickiness (segment by `decision_point`). Measure the season-`t` signal's predictive
 > validity, rank-ordering, and calibration against realized decision-point pay. Decide
-> whether the supervised label should move onto the market-setting event (feeding #113's
-> AAV-percent-of-first-year-cap target) and how stored rows recalibrate. Owns the
-> **target** migration so #112 can hold the target fixed and #113 can set the contract
+> whether the supervised label should move onto the market-setting event (feeding SCO-24's
+> first-year-salary-percent-of-cap experiment and its exact-AAV robustness check) and how
+> stored rows recalibrate. Owns the **target** migration so SCO-23 can hold the target
+> fixed and SCO-24 can set the contract
 > target without confounding.
 >
-> **Out of scope:** feature-history changes (#112), the contract-decision target
-> experiment (#113), any production/schema/UI change.
+> **Out of scope:** feature-history changes (SCO-23), the contract-decision target
+> experiment (SCO-24), any production/schema/UI change.
 >
-> **Depends on:** ADR-0003 (acceptance), #109 (genuine-signing coverage), merged #110 harness.
+> **Depends on:** ADR-0003 (acceptance), SCO-20 (genuine-signing coverage), merged SCO-21 harness.
 > **Blocks:** interpreting the **existing v1 signal as absolute production-implied worth**,
-> and the target migration — **not** #113's own AAV error interpretation, and **not** #112's
+> and the target migration — **not** SCO-24's own first-year salary or exact-AAV error interpretation, and **not** SCO-23's
 > relative feature-history comparison, which may proceed against the frozen target.
 
 ## Scope guardrails
 
-No production prediction, schema, or UI behavior changes in #108. Trade Lab and trade
+No production prediction, schema, or UI behavior changes in SCO-19. Trade Lab and trade
 backend files are not modified.

@@ -23,7 +23,7 @@ _Avoid_: delta, surplus; comparing a value from one season to pay from another (
 The primary valuation concept: the fair-market value (% of cap) a player's season-`t` production implies, shown against his actual season-`t` pay. Performance season, valuation season, and pay season all coincide at `t`. It is a latent quantity — its supervised label is a separate choice, deliberately _not_ same-season realized salary — validated against observed market outcomes. See ADR-0003.
 
 **Next-contract market value**:
-The decision concept: the market pay a player should command at his next genuine signing, measured as the new contract's average annual value (% of the first paid season's cap). Keyed to the signing event, not a season. Distinct from projected market (ADR-0002), which carries today's worth forward and is _not_ a forecast. See ADR-0003.
+The decision concept: the market pay a player should command at his next genuine signing. The initial standard-free-agent-signing experiment measures it as the attributed first-year salary (% of the first paid season's cap known at signing); exact AAV (% of cap) is a separate robustness cross-check where terms are available. Keyed to the signing event, not a season. Extensions remain a separate future design. Distinct from projected market (ADR-0002), which carries today's worth forward and is _not_ a forecast. See ADR-0003.
 _Avoid_: projected market (that is the carry-forward, not a forward estimate)
 
 **Performance season**:
