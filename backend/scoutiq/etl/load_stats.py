@@ -64,8 +64,15 @@ def validate_season_frame(df: pd.DataFrame, season: str, *, min_players: int = D
         raise ValueError(f"{season}: duplicate PLAYER_ID rows in frame")
     if len(df) < min_players:
         raise ValueError(f"{season}: only {len(df)} player rows, fewer than the {min_players} minimum")
-    if "USG_PCT" not in df.columns or not df["USG_PCT"].notna().any():
+    if "USG_PCT" not in df.columns:
         raise ValueError(f"{season}: no USG_PCT values; the Advanced merge failed")
+    advanced = df[[c for c in ADV_KEYS if c in df.columns]]
+    unmatched = df.loc[advanced.isna().all(axis=1), "PLAYER_ID"]
+    if len(unmatched):
+        raise ValueError(
+            f"{season}: {len(unmatched)} of {len(df)} player rows have no nba.com Advanced values "
+            f"(first ids: {unmatched.head(10).tolist()}); the Advanced merge is incomplete"
+        )
 
 
 def player_season_upsert(rows: list[dict]):
