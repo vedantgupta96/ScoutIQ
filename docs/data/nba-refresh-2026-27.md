@@ -1,11 +1,12 @@
 # NBA data refresh for 2026-27 (SCO-49)
 
-**Status, 2026-11-14:** the refresh path is fixed and tested, but the refresh itself has not run.
-`stats.nba.com` refused every request from this machine, so no row was written. The database is
-exactly as the baseline below describes. The remaining steps are listed in order under
-[Remaining refresh steps](#remaining-refresh-steps).
+**Status, 2026-11-14:** the source-native ESPN proof collected 526 rostered players across all
+30 teams, with 463 validated season-total responses and 63 explicit HTTP 404 no-stat responses.
+It made no roster or stat database writes. The production refresh remains gated on deployment of
+the baseline protections in PR 149; 2025-26 remains the completed-season valuation baseline.
 
-2025-26 stays the completed-season valuation baseline. Nothing here retrains or promotes a model.
+The official 2026-27 cap row is loaded: $164.961M cap, $200.428M tax, $209.015M first apron and
+$221.686M second apron. Nothing here retrains or promotes a model.
 
 ## What the loader fixes change
 
@@ -78,11 +79,37 @@ first test of the loaders against 2026-27 data.
 | `nba._league_dash("2026-27", "Base")` (season stats) | read timeout at 25 s once and at 60 s twice |
 
 The connection and TLS handshake succeed; the server then refuses or stalls. That is an access
-control on the source, not a network fault here. ScoutIQ does not work around source access controls
-(no proxies, no browser impersonation), so the refresh waits for a network the source accepts or for
-a licensed feed.
+control on the NBA source, not a network fault here. ScoutIQ does not work around source access
+controls (no proxies, no browser impersonation), so the NBA-specific loaders below still wait for
+a network that source accepts or for a licensed feed. The cache-only ESPN collection described next
+is available, but is not yet consumed by a production loader.
 
-## Remaining refresh steps
+### Free ESPN source proof
+
+The public ESPN endpoints were reachable with ScoutIQ's ordinary user agent and a 15-second
+timeout: its team feed, each team roster for season 2027, and each rostered athlete's regular
+season total. The source-native snapshot records response URLs and original UTC fetch timestamps,
+supports a validated resume in the same season-specific output directory, and preserves invalid
+raw responses for audit rather than replacing them. ESPN's snapshot is roster-based, so it does
+not cover players already waived or otherwise off roster. Its advanced placeholders are not used;
+only exact box-score totals are retained for a later separately reviewed attribution/import step.
+
+Run the cache-only proof from `backend/` with a new empty directory (or resume its own directory):
+
+```sh
+.venv/bin/python -m scoutiq.etl.collect_espn_refresh \
+  --season 2026-27 \
+  --output-dir scoutiq/data/snapshots/espn-2026-27 \
+  --identity-evidence /path/to/verified-identity-evidence.json
+```
+
+`--identity-evidence` is optional. Its local JSON rows must provide `nba_id`, `name`, `dob`,
+`bbref_slug`, and `verified`; only a unique normalized-name plus date-of-birth match is reported,
+never assigned to production. An independent local diagnostic matched 408 roster identities, left
+118 unresolved, and found 372 matched identities among the validated stat responses. Those counts
+are diagnostic evidence, distinct from the collector's 526/463/63 source counts.
+
+## Remaining NBA-loader refresh steps
 
 Run from `backend/`, in this order. Steps 1 and 5 are read-only. Stop at the first failure; every
 loader below either writes a validated result in one transaction or writes nothing.
