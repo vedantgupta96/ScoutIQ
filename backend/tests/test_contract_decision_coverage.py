@@ -21,6 +21,7 @@ from scoutiq.sources import contract_events as ce
 from scoutiq.sources.contract_events import (
     DraftInfo,
     classify_transaction,
+    entry_combines_forms,
     league_year,
     parse_bbref_salary_rows,
     parse_bbref_transactions,
@@ -641,6 +642,64 @@ def test_other_form_signing_same_team_not_usable():
         assert rep_["dedup"]["other_form_signing_events_otherwise_usable"] == other_form_usable
 
 
+COMBINED_PHRASINGS = [
+    "Signed two 10-day contracts with the Miami Heat, then signed a contract for the rest of the season.",
+    "Signed a 10-day contract with the Utah Jazz, then signed a contract for the rest of the season.",
+]
+
+
+@pytest.mark.parametrize(
+    "text,kind,expected",
+    [
+        (COMBINED_PHRASINGS[0], "rest_of_season", True),
+        (COMBINED_PHRASINGS[1], "rest_of_season", True),
+        ("Signed a contract with the Owls.", "standard", False),
+        ("Signed a multi-year contract with the Owls.", "standard", False),
+        ("Signed a contract for the rest of the season with the Owls.", "rest_of_season", False),
+        ("Signed a 10-day contract with the Owls.", "ten_day", False),
+        ("Converted from a two-way contract to a regular contract by the Owls.", "conversion", False),
+        ("Signed a contract extension with the Owls.", "extension", False),
+    ],
+)
+def test_entry_combines_forms(text, kind, expected):
+    assert entry_combines_forms(text, kind) is expected
+
+
+def test_combined_phrasings_parse_as_rest_of_season():
+    for text in COMBINED_PHRASINGS:
+        assert classify_transaction(text) == "rest_of_season"
+    page = _page("pc01", [(date(2020, 2, 1), t) for t in COMBINED_PHRASINGS])
+    assert [(t.kind, t.team) for t in page.transactions] == [
+        ("rest_of_season", "Miami Heat"),
+        ("rest_of_season", "Utah Jazz"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "text,kind,date_,combined,usable",
+    [
+        ("Signed two 10-day contracts with the Owls, then signed a contract for the rest of the season.", "rest_of_season", date(2020, 2, 1), True, 0),
+        ("Signed a 10-day contract with the Owls, then signed a contract for the rest of the season.", "rest_of_season", date(2020, 2, 1), True, 0),
+        ("Converted from a two-way contract to a regular contract by the Owls.", "conversion", date(2020, 2, 1), True, 0),
+        ("Converted from a two-way contract to a regular contract by the Owls.", "conversion", date(2019, 7, 10), False, 1),
+    ],
+)
+def test_combined_entry_not_usable(text, kind, date_, combined, usable):
+    rows = [ce.SalaryRow("2019-20", "Owls", 5 * M)]
+    rep_ = build_report(_single_page_inputs([(date_, text)], rows))
+    row = _season_row(rep_["funnel_standard_form"]["by_season"], "2019-20")
+    assert (row["events"], row["unambiguous"], row["has_salary"], row["salary_single_team"]) == (1, 1, 1, 1)
+    assert row["no_other_form_signing"] == (0 if combined else 1)
+    assert row["usable"] == usable
+    dedup = rep_["dedup"]
+    assert dedup["other_form_signing_events"] == int(combined)
+    assert dedup["combined_entry_events"] == int(combined)
+    assert dedup["combined_entry_events_otherwise_usable"] == int(combined)
+    assert list(dedup["combined_entry_events_by_kind"]) == ["rest_of_season", "conversion", "standard"]
+    assert dedup["combined_entry_events_by_kind"][kind] == int(combined)
+    assert sum(dedup["combined_entry_events_by_kind"].values()) == int(combined)
+
+
 def test_per_team_salary_resolvable():
     owls = "Signed a contract with the Owls."
     foxes = "Signed a contract with the Foxes."
@@ -658,6 +717,8 @@ def test_per_team_salary_resolvable():
     assert resolvable(
         [(date(2019, 7, 10), owls), (date(2019, 7, 20), ten_day), (date(2019, 8, 1), foxes)], both_rows
     ) == (2, 1)
+    combined = "Signed two 10-day contracts with the Owls, then signed a contract for the rest of the season."
+    assert resolvable([(date(2020, 2, 1), combined), (date(2019, 7, 20), foxes)], both_rows) == (2, 1)
 
 
 def test_constraint_evidence(report):

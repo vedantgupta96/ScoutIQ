@@ -32,6 +32,7 @@ from scoutiq.sources.contract_events import (
     SalaryRow,
     SpotracContract,
     Transaction,
+    entry_combines_forms,
     event_form_class,
     league_year,
     normalize_person_name,
@@ -162,6 +163,7 @@ class DecisionEvent:
     text: str
     season_other_signings: int = 0
     season_other_form_signings: int = 0
+    entry_combines_forms: bool = False
     season_waivers: int = 0
     season_trades: int = 0
     next_kind: str | None = None
@@ -213,7 +215,11 @@ class DecisionEvent:
 
     @property
     def salary_single_decision(self) -> bool:
-        return not self.label_ambiguous and self.season_other_form_signings == 0
+        return (
+            not self.label_ambiguous
+            and self.season_other_form_signings == 0
+            and not self.entry_combines_forms
+        )
 
     @property
     def usable(self) -> bool:
@@ -556,6 +562,8 @@ def _build_events(inputs: ProbeInputs) -> tuple[list[DecisionEvent], dict]:
                         and league_year(o.date) == sly
                         and event_form_class(o.kind) not in ("standard_form", "extension")
                     ),
+                    entry_combines_forms=entry_combines_forms(t.text, t.kind)
+                    or (t.kind == "conversion" and signing_phase(t.date) == "in_season"),
                     season_waivers=sum(
                         1
                         for j, o in enumerate(dated)
@@ -753,7 +761,9 @@ def _funnel_counts(evs: list[DecisionEvent]) -> dict:
     return {
         "events": len(evs),
         "unambiguous": sum(1 for e in evs if not e.label_ambiguous),
-        "no_other_form_signing": sum(1 for e in evs if e.season_other_form_signings == 0),
+        "no_other_form_signing": sum(
+            1 for e in evs if e.season_other_form_signings == 0 and not e.entry_combines_forms
+        ),
         "has_salary": sum(1 for e in evs if e.has_salary),
         "salary_single_team": sum(1 for e in evs if e.has_salary and not e.salary_multi_team),
         "salary_multi_team": sum(1 for e in evs if e.salary_multi_team),
@@ -988,6 +998,7 @@ def build_report(
                 ev.team is not None
                 and sum(1 for r in rows if r.season == ev.first_paid_season and r.team == ev.team) == 1
                 and team_signings[(ev.player_id, ev.first_paid_season, ev.team)] == 1
+                and not ev.entry_combines_forms
             )
 
     multi_team = {
@@ -1165,11 +1176,22 @@ def build_report(
         and e.cap_ok
         and e.has_prior_bpm
     ]
-    other_form = [e for e in std if e.season_other_form_signings > 0]
+    other_form = [e for e in std if e.season_other_form_signings > 0 or e.entry_combines_forms]
     other_form_otherwise_usable = [
         e
         for e in other_form
         if not e.label_ambiguous
+        and e.has_salary
+        and not e.salary_multi_team
+        and e.cap_ok
+        and e.has_prior_bpm
+    ]
+    combined_entry = [e for e in std if e.entry_combines_forms]
+    combined_entry_otherwise_usable = [
+        e
+        for e in combined_entry
+        if e.season_other_form_signings == 0
+        and not e.label_ambiguous
         and e.has_salary
         and not e.salary_multi_team
         and e.cap_ok
@@ -1221,8 +1243,8 @@ def build_report(
                 "first_paid_season": "season label of the league year of signing; extensions resolve only via a linked Spotrac extension contract",
                 "performance_season": "last completed season as of the signing date (league_year - 1)",
                 "phase": "offseason = signed before that season's opening night (SEASON_OPENERS); in_season otherwise; Jul-Sep fallback when the opener is unknown",
-                "usable": "one standard signing in the player-season, no other signing of any form (two-way, 10-day, Exhibit, substitution) by the player in that league year because the stored season salary would combine the deals, stored first-year salary from a single-team season, cap present, prior-season BPM present",
-                "per_team_resolvable": "an ambiguous signing has one salary row for the signing team in that season and no other signing of any form with that team in that season",
+                "usable": "one standard signing in the player-season, no other signing of any form (two-way, 10-day, Exhibit, substitution) by the player in that league year, whether as a separate transaction row or described within the same entry (for example two 10-day contracts then a rest-of-season contract, or an in-season two-way conversion), because the stored season salary would combine the deals, stored first-year salary from a single-team season, cap present, prior-season BPM present",
+                "per_team_resolvable": "an ambiguous signing has one salary row for the signing team in that season and no other signing of any form with that team in that season, and the signing's own entry does not combine forms",
                 "guarantees": "option flags come from stored contract_years (current deals only); contract_years.is_guaranteed is derived as 'not an option year' by the loader and is NOT a guarantee measure; partial guarantees are measured only at contract level from Spotrac guarantee-at-signing vs total value",
                 "multi_team_recoverable": "an otherwise-usable multi-team signing counts as recoverable by summing per-team salary rows only when the season's extra rows are explained by trades alone: no other signing of any form, and no waiver, release or waiver claim, in that league year",
                 "tiers": "mechanical (rule-set pay), censored (max/near-minimum), extension_rules (negotiated but bounded by extension eligibility, length, raise and maximum rules), no_constraint_identified (no rule fired; NOT affirmatively market-set — RFA and exception status are mostly unknown), unclassified",
@@ -1261,6 +1283,12 @@ def build_report(
             "multi_team_salary_recoverable_by_row_sum": by_cause["trade_only"],
             "other_form_signing_events": len(other_form),
             "other_form_signing_events_otherwise_usable": len(other_form_otherwise_usable),
+            "combined_entry_events": len(combined_entry),
+            "combined_entry_events_by_kind": {
+                k: sum(1 for e in combined_entry if e.kind == k)
+                for k in ("rest_of_season", "conversion", "standard")
+            },
+            "combined_entry_events_otherwise_usable": len(combined_entry_otherwise_usable),
             "ambiguous_player_seasons": len(ambiguous_groups),
             "ambiguous_resolvable_by_per_team_salary": sum(
                 1 for v in ambiguous_groups.values() for e in v if e.per_team_salary_resolvable

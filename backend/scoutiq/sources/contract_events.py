@@ -153,6 +153,17 @@ def classify_transaction(text: str) -> str:
     return "other"
 
 
+_COMBINED_FORM_RE = re.compile(
+    r"then signed|\d+-day contract|two-way contract|exhibit|substitution contract"
+)
+
+
+def entry_combines_forms(text: str, kind: str) -> bool:
+    if kind not in ("standard", "rest_of_season"):
+        return False
+    return _COMBINED_FORM_RE.search(text.lower()) is not None
+
+
 _TEAM_STOP = r"(?:\.|;|,| from the | in the | to the | \()"
 _DEST_STOP = r"(?:\.|;|,| for | in | \()"
 
