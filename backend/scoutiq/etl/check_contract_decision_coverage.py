@@ -161,6 +161,7 @@ class DecisionEvent:
     event_key: str
     text: str
     season_other_signings: int = 0
+    season_other_form_signings: int = 0
     season_waivers: int = 0
     season_trades: int = 0
     next_kind: str | None = None
@@ -211,9 +212,13 @@ class DecisionEvent:
         return bool(p and (p.gp or 0) >= 20 and (p.minutes or 0) >= 500)
 
     @property
+    def salary_single_decision(self) -> bool:
+        return not self.label_ambiguous and self.season_other_form_signings == 0
+
+    @property
     def usable(self) -> bool:
         return (
-            not self.label_ambiguous
+            self.salary_single_decision
             and self.has_salary
             and not self.salary_multi_team
             and self.cap_ok
@@ -543,6 +548,14 @@ def _build_events(inputs: ProbeInputs) -> tuple[list[DecisionEvent], dict]:
                     season_other_signings=sum(
                         1 for j, o in enumerate(dated) if j != i and o.kind in SIGNING_KINDS and league_year(o.date) == sly
                     ),
+                    season_other_form_signings=sum(
+                        1
+                        for j, o in enumerate(dated)
+                        if j != i
+                        and o.kind in SIGNING_KINDS
+                        and league_year(o.date) == sly
+                        and event_form_class(o.kind) not in ("standard_form", "extension")
+                    ),
                     season_waivers=sum(
                         1
                         for j, o in enumerate(dated)
@@ -740,6 +753,7 @@ def _funnel_counts(evs: list[DecisionEvent]) -> dict:
     return {
         "events": len(evs),
         "unambiguous": sum(1 for e in evs if not e.label_ambiguous),
+        "no_other_form_signing": sum(1 for e in evs if e.season_other_form_signings == 0),
         "has_salary": sum(1 for e in evs if e.has_salary),
         "salary_single_team": sum(1 for e in evs if e.has_salary and not e.salary_multi_team),
         "salary_multi_team": sum(1 for e in evs if e.salary_multi_team),
@@ -961,12 +975,19 @@ def build_report(
             groups[(ev.player_id, ev.first_paid_season)].append(ev)
     page_by_slug = {p.slug: p for p in inputs.bbref_pages}
     ambiguous_groups = {k: v for k, v in groups.items() if len(v) >= 2}
+    team_signings = Counter(
+        (e.player_id, e.first_paid_season, e.team)
+        for e in events
+        if e.kind != "extension" and e.first_paid_season is not None
+    )
     for evs in ambiguous_groups.values():
         for ev in evs:
             ev.label_ambiguous = True
             rows = page_by_slug[ev.slug].salary_rows
             ev.per_team_salary_resolvable = (
-                sum(1 for r in rows if r.season == ev.first_paid_season and r.team == ev.team) == 1
+                ev.team is not None
+                and sum(1 for r in rows if r.season == ev.first_paid_season and r.team == ev.team) == 1
+                and team_signings[(ev.player_id, ev.first_paid_season, ev.team)] == 1
             )
 
     multi_team = {
@@ -1144,6 +1165,16 @@ def build_report(
         and e.cap_ok
         and e.has_prior_bpm
     ]
+    other_form = [e for e in std if e.season_other_form_signings > 0]
+    other_form_otherwise_usable = [
+        e
+        for e in other_form
+        if not e.label_ambiguous
+        and e.has_salary
+        and not e.salary_multi_team
+        and e.cap_ok
+        and e.has_prior_bpm
+    ]
     by_cause = {
         "other_signing_same_season": 0,
         "waiver_or_release_same_season": 0,
@@ -1190,7 +1221,8 @@ def build_report(
                 "first_paid_season": "season label of the league year of signing; extensions resolve only via a linked Spotrac extension contract",
                 "performance_season": "last completed season as of the signing date (league_year - 1)",
                 "phase": "offseason = signed before that season's opening night (SEASON_OPENERS); in_season otherwise; Jul-Sep fallback when the opener is unknown",
-                "usable": "one standard signing in the player-season, stored first-year salary from a single-team season, cap present, prior-season BPM present",
+                "usable": "one standard signing in the player-season, no other signing of any form (two-way, 10-day, Exhibit, substitution) by the player in that league year because the stored season salary would combine the deals, stored first-year salary from a single-team season, cap present, prior-season BPM present",
+                "per_team_resolvable": "an ambiguous signing has one salary row for the signing team in that season and no other signing of any form with that team in that season",
                 "guarantees": "option flags come from stored contract_years (current deals only); contract_years.is_guaranteed is derived as 'not an option year' by the loader and is NOT a guarantee measure; partial guarantees are measured only at contract level from Spotrac guarantee-at-signing vs total value",
                 "multi_team_recoverable": "an otherwise-usable multi-team signing counts as recoverable by summing per-team salary rows only when the season's extra rows are explained by trades alone: no other signing of any form, and no waiver, release or waiver claim, in that league year",
                 "tiers": "mechanical (rule-set pay), censored (max/near-minimum), extension_rules (negotiated but bounded by extension eligibility, length, raise and maximum rules), no_constraint_identified (no rule fired; NOT affirmatively market-set — RFA and exception status are mostly unknown), unclassified",
@@ -1227,6 +1259,8 @@ def build_report(
             "multi_team_salary_events_otherwise_usable": len(otherwise_usable),
             "multi_team_salary_otherwise_usable_by_cause": by_cause,
             "multi_team_salary_recoverable_by_row_sum": by_cause["trade_only"],
+            "other_form_signing_events": len(other_form),
+            "other_form_signing_events_otherwise_usable": len(other_form_otherwise_usable),
             "ambiguous_player_seasons": len(ambiguous_groups),
             "ambiguous_resolvable_by_per_team_salary": sum(
                 1 for v in ambiguous_groups.values() for e in v if e.per_team_salary_resolvable

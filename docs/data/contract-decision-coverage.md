@@ -1,9 +1,9 @@
 # Contract-decision data coverage audit (SCO-20)
 
-**Status:** spike complete. Measured on 2026-11-13 against the live database (read-only) and the local page caches. Revised after two rounds of code review: multi-team salary seasons are excluded and only trade-only cases are called recoverable; the unconstrained population is described as "no constraint identified", not market-set; extensions sit in their own rule-constrained tier.
+**Status:** spike complete. Measured on 2026-11-13 against the live database (read-only) and the local page caches. Revised after three rounds of code review: multi-team salary seasons are excluded and only trade-only cases are called recoverable; a signing that shares its league year with a two-way, 10-day, Exhibit or substitution deal is excluded because the season salary combines the deals; per-team recovery counts a salary row once; the unconstrained population is described as "no constraint identified", not market-set; extensions sit in their own rule-constrained tier.
 **Recommendation: proceed with limits.** Standard free-agent signings from 2013-14 to 2025-26 can be turned into a temporally honest decision dataset today. Exact AAV, guarantees, constraint status and extensions cannot be covered historically without a new source.
 
-Part of the Valuation v2 roadmap (SCO-17). Feeds SCO-24 and SCO-36. ADR-0003 (proposed, not yet on `main`) defines the two valuation concepts this audit serves. Migrated from GitHub #109.
+Part of the Valuation v2 roadmap (SCO-17). Feeds SCO-24 and SCO-36. ADR-0003 (proposed in PR #146, not yet on `main`) defines the two valuation concepts this audit serves. Migrated from GitHub #109.
 
 ## Summary
 
@@ -14,11 +14,11 @@ Part of the Valuation v2 roadmap (SCO-17). Feeds SCO-24 and SCO-36. ADR-0003 (pr
 | Can we recover years, total value, AAV and guarantees? | Only for 25% of standard signings, concentrated in recent seasons and in players still active in 2026. |
 | Can we separate market-set from constrained outcomes? | Only partly. Rookie-scale, two-way and short-form deals are identified reliably. Restricted free agency and cap exceptions are unknown for about three quarters of signings. |
 | Can outcomes be expressed in percent of cap without leakage? | Yes for standard signings (the first-season cap is set before signing). Not for extensions: the cap for the start season is unknown at signing and no cap-projection history is stored. |
-| How many usable rows remain? | 1,478 usable standard signings. 747 of them have no constraint identified (about 57 per season). 120 usable extensions, almost all from 2020-21 on. |
+| How many usable rows remain? | 1,350 usable standard signings. 743 of them have no constraint identified (about 57 per season). 120 usable extensions, almost all from 2020-21 on. |
 
 The stored `contracts` table cannot support this work on its own. It holds one current deal per player, so every standard signing through 2019-20 is missing from it.
 
-**What "no constraint identified" means.** A usable signing lands in this group when it is not a rookie-scale deal, not at or below 2.5% of cap, and not at a stored maximum. That is the absence of a detected constraint, not evidence of an open market. Where Spotrac data lets us check (260 of the 747), 94 were signed with a capped exception. Read 747 as an upper bound on market-set decisions.
+**What "no constraint identified" means.** A usable signing lands in this group when it is not a rookie-scale deal, not at or below 2.5% of cap, and not at a stored maximum. That is the absence of a detected constraint, not evidence of an open market. Where Spotrac data lets us check (260 of the 743), 94 were signed with a capped exception. Read 743 as an upper bound on market-set decisions.
 
 ## How to reproduce
 
@@ -88,35 +88,35 @@ Raw to joined, for the whole cache:
 | of which 10-day, Exhibit or substitution | 1,308 |
 | of which extensions (by signing season) | 174 |
 
-Standard-form signings (standard, rest-of-season, two-way conversion) by first paid season. Each join column is counted independently over `Events`. `Usable` requires all of: one standard signing in that player-season, a stored first-year salary from a single-team season, a cap, and prior-season BPM.
+Standard-form signings (standard, rest-of-season, two-way conversion) by first paid season. Each join column is counted independently over `Events`. `Usable` requires all of: one standard signing in that player-season, no signing of another form (two-way, 10-day, Exhibit, substitution) by the player in that league year, a stored first-year salary from a single-team season, a cap, and prior-season BPM.
 
-| Season | Events | One signing that season | Has salary | Salary from a single-team season | Has prior BPM | Usable | No constraint identified | of which offseason | Usable with exact terms |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2013-14 | 184 | 163 | 128 | 122 | 119 | 85 | 51 | 47 | 1 |
-| 2014-15 | 292 | 226 | 255 | 225 | 171 | 110 | 63 | 63 | 5 |
-| 2015-16 | 286 | 250 | 256 | 209 | 182 | 124 | 75 | 75 | 12 |
-| 2016-17 | 340 | 269 | 308 | 247 | 201 | 137 | 91 | 88 | 16 |
-| 2017-18 | 292 | 247 | 258 | 218 | 166 | 114 | 65 | 64 | 12 |
-| 2018-19 | 266 | 229 | 226 | 182 | 167 | 109 | 51 | 50 | 20 |
-| 2019-20 | 281 | 253 | 259 | 225 | 187 | 136 | 79 | 78 | 30 |
-| 2020-21 | 206 | 186 | 201 | 168 | 148 | 110 | 49 | 49 | 26 |
-| 2021-22 | 335 | 292 | 303 | 244 | 211 | 139 | 62 | 61 | 38 |
-| 2022-23 | 303 | 249 | 207 | 150 | 206 | 87 | 33 | 33 | 43 |
-| 2023-24 | 199 | 182 | 197 | 160 | 140 | 105 | 43 | 43 | 63 |
-| 2024-25 | 193 | 177 | 190 | 159 | 133 | 104 | 43 | 43 | 79 |
-| 2025-26 | 193 | 177 | 181 | 181 | 144 | 118 | 42 | 41 | 106 |
-| **Total** | **3,370** | **2,900** | **2,969** | **2,490** | **2,175** | **1,478** | **747** | **735** | **451** |
+| Season | Events | One signing that season | No other-form signing that season | Has salary | Salary from a single-team season | Has prior BPM | Usable | No constraint identified | of which offseason | Usable with exact terms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2013-14 | 184 | 163 | 158 | 128 | 122 | 119 | 81 | 49 | 46 | 1 |
+| 2014-15 | 292 | 226 | 235 | 255 | 225 | 171 | 106 | 63 | 63 | 5 |
+| 2015-16 | 286 | 250 | 247 | 256 | 209 | 182 | 120 | 75 | 75 | 12 |
+| 2016-17 | 340 | 269 | 287 | 308 | 247 | 201 | 136 | 91 | 88 | 16 |
+| 2017-18 | 292 | 247 | 228 | 258 | 218 | 166 | 107 | 65 | 64 | 12 |
+| 2018-19 | 266 | 229 | 209 | 226 | 182 | 167 | 100 | 51 | 50 | 20 |
+| 2019-20 | 281 | 253 | 238 | 259 | 225 | 187 | 128 | 79 | 78 | 29 |
+| 2020-21 | 206 | 186 | 165 | 201 | 168 | 148 | 94 | 49 | 49 | 26 |
+| 2021-22 | 335 | 292 | 205 | 303 | 244 | 211 | 116 | 62 | 61 | 35 |
+| 2022-23 | 303 | 249 | 235 | 207 | 150 | 206 | 82 | 32 | 32 | 43 |
+| 2023-24 | 199 | 182 | 157 | 197 | 160 | 140 | 92 | 43 | 43 | 59 |
+| 2024-25 | 193 | 177 | 147 | 190 | 159 | 133 | 94 | 43 | 43 | 73 |
+| 2025-26 | 193 | 177 | 149 | 181 | 181 | 144 | 94 | 41 | 41 | 87 |
+| **Total** | **3,370** | **2,900** | **2,660** | **2,969** | **2,490** | **2,175** | **1,350** | **743** | **733** | **418** |
 
-Join rates over the 3,370 events: 88% have a first-year salary, 74% have one from a single-team season, 100% a cap, 65% a prior-season row with BPM, 44% are usable, 22% are usable with no constraint identified.
+Join rates over the 3,370 events: 79% share their league year with no signing of another form, 88% have a first-year salary, 74% have one from a single-team season, 100% a cap, 65% a prior-season row with BPM, 40% are usable, 22% are usable with no constraint identified.
 
 Usable standard signings by cohort (no constraint identified in brackets):
 
-- **Age at the prior season:** 22 or younger 100 (30); 23-25 391 (169); 26-28 406 (241); 29-31 284 (173); 32 or older 297 (134).
-- **Position:** C 350 (186); PF 302 (159); PG 280 (144); SF 219 (94); SG 327 (164).
-- **Kind:** standard 1,391 (746); two-way conversion 66 (0); rest-of-season 21 (1).
-- **Timing:** offseason 1,328 (735); in-season 150 (12).
+- **Age at the prior season:** 22 or younger 72 (29); 23-25 328 (167); 26-28 376 (240); 29-31 279 (173); 32 or older 295 (134).
+- **Position:** C 339 (186); PF 270 (158); PG 257 (144); SF 197 (94); SG 287 (161).
+- **Kind:** standard 1,327 (743); two-way conversion 14 (0); rest-of-season 9 (0).
+- **Timing:** offseason 1,283 (733); in-season 67 (10).
 
-Among the 747 rows with no constraint identified, first-year pay has a median of 7.5% of cap (10th percentile 3.3%, 90th 20.5%), and 52% re-signed with the team they were already on.
+Among the 743 rows with no constraint identified, first-year pay has a median of 7.6% of cap (10th percentile 3.3%, 90th 20.4%), and 52% re-signed with the team they were already on.
 
 ### Why rows drop out
 
@@ -125,9 +125,12 @@ Among the 747 rows with no constraint identified, first-year pay has a median of
 | First-year salary | 401 | 321 were waived on or before opening night (training-camp deals); 16 have no salary table at all; 64 unexplained. |
 | Prior-season production | 1,194 | 995 had no earlier NBA season (rookies and first-time signees); 199 had a gap before signing. |
 | A single signing that season | 470 | Two or more standard signings by one player in one league year (228 player-seasons). |
+| No signing of another form that season | 710 | The player also signed a two-way, 10-day, Exhibit or substitution deal in that league year, so the one stored season salary combines the deals even when a single team paid it. 290 of these are also multi-signing seasons and 255 are multi-team seasons; 374 are in-season signings. |
 | Salary from a single-team season | 479 | The first paid season has two or more per-team salary rows, so the stored value is one team's row. 241 of these are also multi-signing seasons; 278 are in-season signings. |
 
-Of the 479 multi-team events, 211 pass every other condition. Storing a season total would not make them usable, because the total usually mixes more than one contract. By what else happened to the player in that league year:
+Of the 710 events with another-form signing, 128 pass every other condition, and the first two versions of this audit counted them as usable: 123 near-minimum, 4 with no constraint identified and 1 rookie scale; 52 are two-way conversions, where the season salary mixes two-way and standard pay.
+
+Of the 479 multi-team events, 211 pass every condition except the single-team salary; this count predates the other-form rule and still includes 69 events with another signing that season, shown in the first row below. Storing a season total would not make them usable, because the total usually mixes more than one contract. By what else happened to the player in that league year:
 
 | Cause of the extra salary rows | Otherwise-usable events | Is the row sum a valid label? |
 | --- | --- | --- |
@@ -138,7 +141,7 @@ Of the 479 multi-team events, 211 pass every other condition. Storing a season t
 
 Only the 2 trade-only events are recoverable by summing rows. For the rest, the candidate fix is to attribute the signing team's own salary row to the decision, which needs per-team rows stored and is not measured here.
 
-Training-camp deals are not separately labelled before 2017-18, when Exhibit contracts start appearing in the log. The probe flags 630 standard signings as suspected camp deals; 70 of them are usable.
+Training-camp deals are not separately labelled before 2017-18, when Exhibit contracts start appearing in the log. The probe flags 630 standard signings as suspected camp deals; 40 of them are usable.
 
 ## Missingness by required field
 
@@ -185,10 +188,10 @@ Each in-window event gets exactly one structure.
 | Mechanical | 10-day | 817 | - | Transaction text. |
 | Mechanical | Exhibit | 477 | - | Transaction text (2017-18 onward). |
 | Mechanical | Substitution | 14 | - | Transaction text. |
-| Mechanical | Rookie scale | 356 | 11 | First-round pick's first standard signing within three years of the draft. |
-| Censored | Near minimum | 1,673 | 695 | First-year pay at or below 2.5% of cap. A proxy: no minimum scale is stored. |
+| Mechanical | Rookie scale | 356 | 10 | First-round pick's first standard signing within three years of the draft. |
+| Censored | Near minimum | 1,673 | 572 | First-year pay at or below 2.5% of cap. A proxy: no minimum scale is stored. |
 | Censored | Maximum | 31 | 25 | First-year pay within 1.5% of a stored maximum, or above the 35% maximum. |
-| No constraint identified | Standard signing | 913 | 747 | No rule above fired. |
+| No constraint identified | Standard signing | 913 | 743 | No rule above fired. |
 | Extension rules | Rookie extension | 67 | - | First-round pick, extension signed three league years after the draft. Negotiated, but bounded by extension eligibility, length, raise and maximum rules. |
 | Extension rules | Veteran extension | 107 | - | Any other extension. Bounded by the same kinds of rule. |
 | Unclassified | No salary | 397 | - | Standard signing with no first-year salary. |
@@ -203,7 +206,7 @@ How well the rules agree with Spotrac, on standard signings where both exist:
 
 ### What the "no constraint identified" group contains
 
-Of the 747 usable rows, 260 link to a Spotrac contract that records how the deal was signed.
+Of the 743 usable rows, 260 link to a Spotrac contract that records how the deal was signed.
 
 | Signed using | Rows | Reading |
 | --- | --- | --- |
@@ -219,16 +222,16 @@ Of the 747 usable rows, 260 link to a Spotrac contract that records how the deal
 | Qualifying offer | 2 | Set by rule. |
 
 - **166 of 260 (64%) used an open mechanism; 94 (36%) used a capped exception** that the audit's rules cannot detect.
-- **Restricted free agency:** entering free-agent status is known for 227 of the 747, and 65 of those (29%) were restricted.
-- **The evidence is skewed to recent seasons.** No row in 2013-14 can be checked; in 2025-26, 40 of 42 can, and 21 of those 40 were capped.
-- **For the other 487 rows there is no evidence either way.**
+- **Restricted free agency:** entering free-agent status is known for 227 of the 743, and 65 of those (29%) were restricted.
+- **The evidence is skewed to recent seasons.** No row in 2013-14 can be checked; in 2025-26, 40 of 41 can, and 21 of those 40 were capped.
+- **For the other 483 rows there is no evidence either way.**
 
-If the checked rows are representative, roughly a third of the 747 were constrained in ways not visible historically. SCO-24 should carry the exception and restricted status as categories where known and report results on the open-mechanism subset as a sensitivity check.
+If the checked rows are representative, roughly a third of the 743 were constrained in ways not visible historically. SCO-24 should carry the exception and restricted status as categories where known and report results on the open-mechanism subset as a sensitivity check.
 
 ## Duplicates, amendments and extensions
 
 - **Duplicates.** 4 key collisions, all the same decision recorded twice: 3 with identical text and 1 where the same signing, team and date appears under two phrasings. They collapse to one and are counted separately by type.
-- **Several signings in one league year.** 470 standard signings fall in 228 player-seasons with two or more. The database holds one salary per player-season, so pay cannot be attributed to one decision and all 470 are excluded from `Usable`. Per-team salary rows on the cached page would resolve 313 of them.
+- **Several signings in one league year.** 470 standard signings fall in 228 player-seasons with two or more. The database holds one salary per player-season, so pay cannot be attributed to one decision and all 470 are excluded from `Usable`. Per-team salary rows on the cached page would resolve 125 of them: the signing team has exactly one salary row that season and the player signed no other deal of any form with that team that season. An earlier version of this report said 313; it counted two signings with the same team against one shared salary row.
 - **Extensions are separate decisions.** An extension is keyed to its own signing date and never counted as a new signing in the season it starts. Its first paid season comes only from a linked Spotrac extension block.
 - **Extension coverage is uneven.** 149 of 174 extension events resolve a start season; 120 are usable. By signing season the log holds 6, 9, 1, 0, 0, 1 events for 2014-15 to 2019-20, then 15 to 35 per season. Rookie-scale extensions were signed every autumn in those years, so the log is incomplete before 2020-21, not the market quiet.
 - **Amendments.** Neither source records renegotiations, buyouts or option decisions as dated amendments to a contract. Realized salary reflects them silently. First-year pay is the least exposed figure.
@@ -238,18 +241,18 @@ If the checked rows are representative, roughly a third of the 747 were constrai
 
 **Key.** `player_id : signing_date : kind : team`. It is stable across re-scrapes and independent of the contract's start season, which is what ADR-0003 requires. Including the team means two same-day signings with different teams stay separate decisions instead of collapsing. 6,223 raw events give 6,219 distinct keys.
 
-**Label.** ADR-0003 names AAV as a percent of the first paid season's cap. The data supports that exactly for only 451 usable standard signings (260 with no constraint identified), and coverage is skewed: 0 of 51 unconstrained rows in 2013-14 have exact terms, against 40 of 42 in 2025-26. Those rows are also survivors, since Spotrac pages exist only for players still in the league.
+**Label.** The first draft of ADR-0003 named AAV as a percent of the first paid season's cap. The data supports that exactly for only 418 usable standard signings (260 with no constraint identified), and coverage is skewed: 0 of 49 unconstrained rows in 2013-14 have exact terms, against 40 of 41 in 2025-26. Those rows are also survivors, since Spotrac pages exist only for players still in the league.
 
 First-year salary as a percent of the first paid season's cap is available for 2,969 signings, 2,490 of them from a single-team season. Where both labels exist, they agree closely:
 
 | Population | Median gap | Within 1 point of cap |
 | --- | --- | --- |
-| All usable with exact terms (451) | 0.27 points | 82% |
+| All usable with exact terms (418) | 0.26 points | 80% |
 | No constraint identified (260, all offseason) | 0.33 points | 75% |
 
 For comparison, v1's reported decision-point error is about 3.1 points of cap.
 
-**Proposed data contract for SCO-24:** first-year salary as a percent of cap is the primary label for offseason standard signings in single-team seasons; exact AAV percent of cap is a reported cross-check on the rows that have it; in-season signings are flagged because their first-year pay is prorated. This departs from ADR-0003, which treats first-year salary as the cross-check, so it needs a decision when the ADR is accepted.
+**Proposed data contract for SCO-24:** first-year salary as a percent of cap is the primary label for offseason standard signings in single-team seasons with no other signing of any form that league year; exact AAV percent of cap is a robustness check on the rows that have it, with the overlap size reported; in-season signings are flagged because their first-year pay is prorated. ADR-0003 as now proposed in PR #146 adopts the same split: attributed first-year salary as the initial target measure and exact AAV as the robustness check. The ADR is still a proposal, so the choice is settled only when it is accepted.
 
 ## Percent of cap and leakage
 
@@ -276,10 +279,10 @@ So about half the flagged starts are genuine same-season signings, and 85 are ex
 
 | Use | Recommended minimum | What the data supports |
 | --- | --- | --- |
-| Training a point model on unconstrained signings | 400 rows before the first evaluated fold | Cumulative rows reach 396 after 2018-19 and 475 after 2019-20, so rolling-origin evaluation can start at 2020-21 and gives six test seasons. |
-| Calibrating an 80% interval | 200 decisions, 400 preferred | At 200 the 95% band on measured coverage is about ±5.5 points; at 400, ±3.9. The current 51 gives ±11. The 747 rows allow cross-fitted calibration above this. |
-| Reporting error for a subgroup | 50 rows | Every position and age band clears this except 22-and-under (30), which should be merged with 23-25. |
-| Reporting coverage for a subgroup | 100 rows | Small forwards (94) fall just short. Single test seasons (33 to 91 rows) are too small; pool at least two seasons. |
+| Training a point model on unconstrained signings | 400 rows before the first evaluated fold | Cumulative rows reach 394 after 2018-19 and 473 after 2019-20, so rolling-origin evaluation can start at 2020-21 and gives six test seasons. |
+| Calibrating an 80% interval | 200 decisions, 400 preferred | At 200 the 95% band on measured coverage is about ±5.5 points; at 400, ±3.9. The current 51 gives ±11. The 743 rows allow cross-fitted calibration above this. |
+| Reporting error for a subgroup | 50 rows | Every position and age band clears this except 22-and-under (29), which should be merged with 23-25. |
+| Reporting coverage for a subgroup | 100 rows | Small forwards (94) fall just short. Single test seasons (32 to 91 rows) are too small; pool at least two seasons. |
 | Open-mechanism sensitivity check | Report, do not train | 166 rows with confirmed open mechanisms, 118 of them not known to be restricted. Enough for an error estimate, not for a model. |
 | Extensions as their own model | Not yet | 120 usable rows, 116 of them signed in 2020-21 to 2024-25. Enough to evaluate as a segment, not to train separately. |
 
@@ -300,14 +303,14 @@ So about half the flagged starts are genuine same-season signings, and 85 are ex
 Proceed now:
 
 1. Build SCO-24's decision dataset from standard free-agent signings, 2013-14 to 2025-26, keyed by `player_id : signing_date : kind : team`, with features as of the last completed season.
-2. Use the 747 usable rows with no constraint identified (735 offseason) as the evaluation population, with rookie-scale, near-minimum and maximum deals kept as labelled categories, never mixed in silently.
+2. Use the 743 usable rows with no constraint identified (733 offseason) as the evaluation population, with rookie-scale, near-minimum and maximum deals kept as labelled categories, never mixed in silently.
 3. Use this population for SCO-36's label validation; it is roughly 15 times the 51 contract starts available today.
 
 Limits to carry into those tickets:
 
-1. **Constraint status.** The 747 are not affirmatively market-set. About a third of the rows that can be checked used a capped exception, and restricted status is unknown for most. Report the open-mechanism subset alongside the headline.
-2. **Label.** Exact AAV covers a quarter of signings. Either accept first-year percent of cap as the primary label with AAV as a cross-check, or source historical contract terms first. This needs a decision against ADR-0003.
-3. **Multi-team seasons.** 479 signings are excluded because the stored salary is one team's row. 211 of them are otherwise usable, but only 2 can be recovered by summing rows; the others need the signing team's own row attributed to the decision.
+1. **Constraint status.** The 743 are not affirmatively market-set. About a third of the rows that can be checked used a capped exception, and restricted status is unknown for most. Report the open-mechanism subset alongside the headline.
+2. **Label.** Exact AAV covers a quarter of signings. ADR-0003 as proposed in PR #146 takes first-year percent of cap as the initial target measure with exact AAV as a robustness check. Sourcing historical contract terms first is the alternative, and stays open until the ADR is accepted.
+3. **Multi-team seasons.** 479 signings are excluded because the stored salary is one team's row. 211 of them are otherwise usable, but only 2 can be recovered by summing rows; the others need the signing team's own row attributed to the decision. Separately, 710 signings share a league year with a two-way, 10-day, Exhibit or substitution deal and are excluded because the season salary combines the deals; 128 of them pass every other condition.
 4. **Extensions.** Evaluate as a segment from 2020-21 only, and only once a cap-projection history exists; do not train on them.
 5. **Proxies.** The near-minimum and maximum rules are approximations. Treat their counts as approximate until a minimum-salary scale is stored.
 6. **Persistence.** Before SCO-24 trains on it, store decision events in a table so the dataset does not depend on a cache.

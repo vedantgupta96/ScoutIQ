@@ -406,6 +406,7 @@ def test_funnel_one_season(report):
         "season": "2019-20",
         "events": 5,
         "unambiguous": 3,
+        "no_other_form_signing": 5,
         "has_salary": 5,
         "salary_single_team": 3,
         "salary_multi_team": 2,
@@ -476,7 +477,7 @@ def test_ambiguity(report):
     assert dedup["multi_team_salary_recoverable_by_row_sum"] == 0
     assert sum(dedup["multi_team_salary_otherwise_usable_by_cause"].values()) == 0
     assert dedup["ambiguous_player_seasons"] == 1
-    assert dedup["ambiguous_resolvable_by_per_team_salary"] == 2
+    assert dedup["ambiguous_resolvable_by_per_team_salary"] == 0
     assert report["sources"]["bbref"]["multi_team_salary"] == {
         "db_equals_sum": 1,
         "db_equals_max_row": 0,
@@ -605,6 +606,58 @@ def test_multi_team_recoverability_causes():
         "unexplained",
     ]
     assert dedup["multi_team_salary_recoverable_by_row_sum"] == 1
+
+
+def _single_page_inputs(lines, rows, season="2019-20"):
+    base = _inputs()
+    page = _page("pz01", lines, salary_rows=rows)
+    return dataclasses.replace(
+        base,
+        bbref_pages=[page],
+        xref={"pz01": 41},
+        players={41: ("Player 41", None)},
+        spotrac_pages=[],
+        salaries={(41, season): 5 * M},
+        player_seasons={(41, "2018-19"): SeasonRow(25, 60, 1500.0, True)},
+        contracts=[],
+    )
+
+
+def test_other_form_signing_same_team_not_usable():
+    owls = "Signed a contract with the Owls."
+    rows = [ce.SalaryRow("2019-20", "Owls", 5 * M)]
+    cases = [
+        ([(date(2020, 1, 10), "Signed a 10-day contract with the Owls."), (date(2020, 2, 1), owls)], 0, 1, 1),
+        ([(date(2019, 7, 10), owls)], 1, 0, 0),
+        ([(date(2019, 7, 10), owls), (date(2019, 9, 1), "Signed a contract extension with the Owls.")], 1, 0, 0),
+    ]
+    for lines, usable, other_form, other_form_usable in cases:
+        rep_ = build_report(_single_page_inputs(lines, rows))
+        row = _season_row(rep_["funnel_standard_form"]["by_season"], "2019-20")
+        assert (row["events"], row["unambiguous"], row["has_salary"], row["salary_single_team"]) == (1, 1, 1, 1)
+        assert row["no_other_form_signing"] == 1 - other_form
+        assert row["usable"] == usable
+        assert rep_["dedup"]["other_form_signing_events"] == other_form
+        assert rep_["dedup"]["other_form_signing_events_otherwise_usable"] == other_form_usable
+
+
+def test_per_team_salary_resolvable():
+    owls = "Signed a contract with the Owls."
+    foxes = "Signed a contract with the Foxes."
+    ten_day = "Signed a 10-day contract with the Owls."
+
+    def resolvable(lines, rows):
+        dedup = build_report(_single_page_inputs(lines, rows))["dedup"]
+        return dedup["ambiguous_events"], dedup["ambiguous_resolvable_by_per_team_salary"]
+
+    both_rows = [ce.SalaryRow("2019-20", "Owls", 3 * M), ce.SalaryRow("2019-20", "Foxes", 2 * M)]
+    assert resolvable([(date(2019, 7, 10), owls), (date(2019, 7, 20), foxes)], both_rows) == (2, 2)
+    assert resolvable(
+        [(date(2019, 7, 10), owls), (date(2019, 7, 20), owls)], [ce.SalaryRow("2019-20", "Owls", 5 * M)]
+    ) == (2, 0)
+    assert resolvable(
+        [(date(2019, 7, 10), owls), (date(2019, 7, 20), ten_day), (date(2019, 8, 1), foxes)], both_rows
+    ) == (2, 1)
 
 
 def test_constraint_evidence(report):
