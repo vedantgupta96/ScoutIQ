@@ -78,12 +78,12 @@ schedules validation of its season-`t` interpretation against those market-reset
 - **Initial target measure (the SCO-24 experiment uses):** for standard free-agent
   signings, the attributed **first-year salary**, expressed as a **percent of the first
   paid season's cap known at signing**. It gives the first experiment a materially larger
-  usable population than exact terms: SCO-20 found 1,478 usable standard signings and 747
-  with no constraint identified (735 offseason), an upper bound rather than confirmed
+  usable population than exact terms: SCO-20 found 1,350 usable standard signings and 743
+  with no constraint identified (733 offseason), an upper bound rather than confirmed
   open-market deals. This measure is not a claim about total contract value: first-year
   salary remains exposed to deal structuring and cap-hold artifacts.
-- **Exact-terms robustness check:** exact terms cover 451 usable standard signings across
-  the full usable population, not necessarily the 747-row no-constraint-identified
+- **Exact-terms robustness check:** exact terms cover 418 usable standard signings across
+  the full usable population, not necessarily the 743-row no-constraint-identified
   headline population. Where both values are available, compare the result with **AAV as
   a percent of that same cap** and report the overlapping matched-subset size. AAV smooths
   intra-contract backloading but does not itself resolve guarantees, option years,
@@ -131,7 +131,9 @@ but treats them as their own `extension_rules` tier and excludes them from the i
 training experiment until as-of cap-projection history exists. It also excludes 479
 signings with multi-team salaries (459 player-seasons). Of 211 otherwise-usable excluded signings, only two trade-only
 cases are plausible row-sum recoveries; the other 209 require unmeasured attribution of the
-signing team's salary row. Those gaps are not silently included in either target.
+signing team's salary row. A further 710 signings share a league year with a two-way, 10-day,
+Exhibit or substitution deal and are excluded because the stored season salary combines the
+deals; 128 of them pass every other condition. Those gaps are not silently included in either target.
 
 ### Fair-value vs decision comparisons
 
