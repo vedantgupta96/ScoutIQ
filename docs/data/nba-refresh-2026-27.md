@@ -1,11 +1,12 @@
 # NBA data refresh for 2026-27 (SCO-49)
 
-**Status, 2026-11-14:** the refresh path is fixed and tested, but the refresh itself has not run.
-`stats.nba.com` refused every request from this machine, so no row was written. The database is
-exactly as the baseline below describes. The remaining steps are listed in order under
-[Remaining refresh steps](#remaining-refresh-steps).
+**Status, 2026-11-14:** the source-native ESPN proof collected 526 rostered players across all
+30 teams, with 463 validated season-total responses and 63 explicit HTTP 404 no-stat responses.
+It made no roster or stat database writes. The production refresh remains gated on deployment of
+the baseline protections in PR 149; 2025-26 remains the completed-season valuation baseline.
 
-2025-26 stays the completed-season valuation baseline. Nothing here retrains or promotes a model.
+The official 2026-27 cap row is loaded: $164.961M cap, $200.428M tax, $209.015M first apron and
+$221.686M second apron. Nothing here retrains or promotes a model.
 
 ## What the loader fixes change
 
@@ -78,11 +79,43 @@ first test of the loaders against 2026-27 data.
 | `nba._league_dash("2026-27", "Base")` (season stats) | read timeout at 25 s once and at 60 s twice |
 
 The connection and TLS handshake succeed; the server then refuses or stalls. That is an access
-control on the source, not a network fault here. ScoutIQ does not work around source access controls
-(no proxies, no browser impersonation), so the refresh waits for a network the source accepts or for
-a licensed feed.
+control on the NBA source, not a network fault here. ScoutIQ does not work around source access
+controls (no proxies, no browser impersonation), so the NBA-specific loaders below still wait for
+a network that source accepts or for a licensed feed. The cache-only ESPN collection described next
+is available, but is not yet consumed by a production loader.
 
-## Remaining refresh steps
+### Free ESPN source proof
+
+The public ESPN endpoints were reachable with ScoutIQ's ordinary user agent and a 15-second
+timeout: its team feed, each team roster for season 2027, and each rostered athlete's regular
+season total. The source-native snapshot records response URLs and original UTC fetch timestamps,
+supports a validated resume in the same season-specific output directory, and preserves invalid
+raw responses for audit rather than replacing them. ESPN's snapshot is roster-based, so it does
+not cover players already waived or otherwise off roster. Its advanced placeholders are not used;
+only exact box-score totals are retained for a later separately reviewed attribution/import step.
+
+Run the cache-only proof from `backend/` with a new empty directory (or resume its own directory):
+
+```sh
+.venv/bin/python -m scoutiq.etl.collect_espn_refresh \
+  --season 2026-27 \
+  --output-dir scoutiq/data/snapshots/espn-2026-27 \
+  --identity-evidence /path/to/verified-identity-evidence.json
+```
+
+`--identity-evidence` is optional. Its local JSON rows must provide `nba_id`, `name`, `dob`,
+`bbref_slug`, and `verified`; only a unique normalized-name plus date-of-birth match is reported,
+never assigned to production. An independent local diagnostic matched 408 roster identities, left
+118 unresolved, and found 372 matched identities among the validated stat responses. Those counts
+are diagnostic evidence, distinct from the collector's 526/463/63 source counts.
+
+A second run over a copy of the first run's directory confirmed the resume behaviour: all 494
+cached responses were reused with their original fetch timestamps, the 959 raw and normalized
+files were byte-identical afterwards, and the only network requests were the 63 athletes with no
+stat response, which returned HTTP 404 again. A 404 is not cached, so each resume re-checks those
+athletes.
+
+## Remaining NBA-loader refresh steps
 
 Run from `backend/`, in this order. Steps 1 and 5 are read-only. Stop at the first failure; every
 loader below either writes a validated result in one transaction or writes nothing.
@@ -141,8 +174,10 @@ loader below either writes a validated result in one transaction or writes nothi
      `rosters.newest_update` is the run time, and `rosters.not_on_roster_marked` equals the
      `departed` count from step 2;
    - `rosters.players` grows by the rookies and new signings;
-   - `player_valuations`, `player_salaries`, `contracts`, `cap_constants` and `raw_cache` are
-     unchanged.
+   - `player_valuations`, `player_salaries`, `contracts` and `raw_cache` are unchanged;
+   - `cap_constants` is unchanged against a snapshot taken after the 2026-27 cap row was loaded.
+     Against the `pre-refresh-20261114T0849Z` snapshot it shows that one added row: 15 seasons,
+     latest 2026-27.
 
 6. **Confirm the baseline held.** `GET /health` still reports `2025-26`, and a player profile with
    no `season` parameter still values the player on 2025-26.
@@ -163,7 +198,8 @@ These acceptance items are not addressed by the loader fixes.
 | Item | Why it waits |
 | --- | --- |
 | 2026-27 contracts and salaries | `load_contracts` replaces a player's stored contract outright, and `player_salaries` keeps one team's row for a multi-team season. Refreshing first would overwrite reliable history. SCO-44 covers the salary rows. |
-| 2026-27 cap, tax and apron figures | Not in `cap_constants`. They need the official figures, entered as data, not a projection. SCO-46 covers the reference tables. |
+| 2026-27 maximum salaries | The official cap, tax and apron figures are loaded. The three maximum-salary columns for 2026-27 use the existing 25/30/35% of cap approximation, not the exact CBA formulas. SCO-46 covers the reference tables. |
+| Importing the ESPN snapshot | The snapshot is cached evidence only. Writing its rosters or stats to production needs a reviewed loader, an identity decision for the 118 unresolved players, and the baseline protections from PR 149 deployed first. The collector keeps exact box-score totals only, so nba.com advanced metrics would stay empty for 2026-27. |
 | Basketball-Reference metrics for 2026-27 | Needs the permission decision and a cache policy that keeps the June 2026 pages. |
 | `CURRENT_SEASON` setting | Still 2025-26. It drives the free-agent class, the draft year and several loader defaults, so changing it is part of designing live-season behaviour. Pass `--season 2026-27` explicitly until then. |
 | Ingestion timestamps for stats | `player_seasons` has no timestamp column, so stats freshness is still reported as unknown. Adding one is a schema change. |

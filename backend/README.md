@@ -56,6 +56,9 @@ python -m scoutiq.etl.compare_rationale_cost --players 5 # cost: fusion vs multi
 uvicorn scoutiq.api.main:app --reload             # serve API at http://127.0.0.1:8000
 ```
 
+The 2026-27 cap row in `scoutiq/data/cap_constants_seed.csv` is sourced from the NBA's
+[2026-27 salary-cap announcement](https://www.nba.com/news/nba-salary-cap-2026-27-season).
+
 Do not run networked ETL (`load_stats`, `load_bbref`, `load_contracts`, `load_current_rosters`) as part of ordinary API testing.
 The tests below use fake sessions/dependency overrides and do not require a live database.
 Run `check_contract_coverage` after contract loads/bridges so high-usage current-season players do not silently
