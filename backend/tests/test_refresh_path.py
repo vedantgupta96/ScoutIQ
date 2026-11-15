@@ -149,10 +149,36 @@ def test_validate_season_frame_rejections_and_acceptance():
         ls.validate_season_frame(dup, "2025-26", min_players=1)
     with pytest.raises(ValueError, match="fewer than"):
         ls.validate_season_frame(good, "2025-26", min_players=6)
-    with pytest.raises(ValueError, match="USG_PCT"):
-        ls.validate_season_frame(_season_frame(5, usg=None), "2025-26", min_players=1)
+    with pytest.raises(ValueError, match="5 of 5 player rows have no nba.com Advanced values"):
+        ls.validate_season_frame(_season_frame(5, usg=None).drop(columns=["PIE"]), "2025-26", min_players=1)
     with pytest.raises(ValueError, match="USG_PCT"):
         ls.validate_season_frame(good.drop(columns=["USG_PCT"]), "2025-26", min_players=1)
+
+
+def _one_unmatched_frame():
+    frame = _season_frame(310)
+    frame.loc[frame["PLAYER_ID"] == 77, ["USG_PCT", "PIE"]] = float("nan")
+    return frame
+
+
+def test_validate_season_frame_rejects_a_player_with_no_advanced_values():
+    with pytest.raises(ValueError, match=r"1 of 310 player rows.*\[77\].*incomplete"):
+        ls.validate_season_frame(_one_unmatched_frame(), "2025-26")
+
+
+def test_validate_season_frame_accepts_partial_advanced_values():
+    frame = _season_frame(310)
+    frame["TS_PCT"] = 0.55
+    frame.loc[frame["PLAYER_ID"] == 77, ["USG_PCT", "PIE"]] = float("nan")
+    ls.validate_season_frame(frame, "2025-26")
+
+
+def test_load_season_with_unmatched_player_raises_before_opening_a_session(monkeypatch):
+    monkeypatch.setattr(nba, "fetch_season", lambda season: _one_unmatched_frame())
+    opened = _patch_session(monkeypatch, ls, RecordingSession())
+    with pytest.raises(ValueError, match="no nba.com Advanced values"):
+        ls.load_season("2025-26")
+    assert opened == []
 
 
 def test_load_season_with_bad_frame_raises_before_opening_a_session(monkeypatch):
@@ -169,15 +195,42 @@ def _feed_df(rows):
     return pd.DataFrame(rows, columns=["PERSON_ID", "DISPLAY_FIRST_LAST", "TEAM_ID", "ROSTERSTATUS"])
 
 
-def test_parse_roster_feed_filters_unrostered_and_teamless():
+def test_parse_roster_feed_filters_inactive_rows_silently():
     df = _feed_df([
         (1, "A One", 10, 1),
         (2, "B Two", 10, 0),
-        (3, "C Three", 0, 1),
+        (3, "C Three", 0, 0),
+        (5, "E Five", None, 0),
         (4, "D Four", 11, 1),
     ])
     rows, problems = lcr.parse_roster_feed(df)
     assert [r["player_id"] for r in rows] == [1, 4]
+    assert problems == []
+
+
+@pytest.mark.parametrize("row, missing", [
+    ((3, "C Three", 0, 1), "TEAM_ID"),
+    ((3, "C Three", None, 1), "TEAM_ID"),
+    ((3, None, 10, 1), "DISPLAY_FIRST_LAST"),
+    ((None, "C Three", 10, 1), "PERSON_ID"),
+])
+def test_parse_roster_feed_reports_incomplete_active_rows(row, missing):
+    rows, problems = lcr.parse_roster_feed(_feed_df([row]))
+    assert rows == []
+    assert len(problems) == 1 and problems[0].startswith("active roster row is missing") and missing in problems[0]
+
+
+@pytest.mark.parametrize("status", [float("nan"), "x", 2, True])
+def test_parse_roster_feed_reports_unreadable_status(status):
+    rows, problems = lcr.parse_roster_feed(_feed_df([(1, "A One", 10, status)]))
+    assert rows == []
+    assert len(problems) == 1 and "unreadable ROSTERSTATUS" in problems[0]
+
+
+@pytest.mark.parametrize("status", [1, 1.0, "1"])
+def test_parse_roster_feed_accepts_numeric_active_statuses(status):
+    rows, problems = lcr.parse_roster_feed(_feed_df([(1, "A One", 10, status)]))
+    assert [r["player_id"] for r in rows] == [1]
     assert problems == []
 
 
@@ -316,6 +369,19 @@ def test_incomplete_feed_raises_and_writes_nothing(monkeypatch):
     with pytest.raises(lcr.RosterCompletenessError) as err:
         lcr.load_current_rosters("2025-26", now=NOW)
     assert err.value.problems
+    assert session.writes() == []
+
+
+def test_active_row_with_missing_team_raises_and_writes_nothing(monkeypatch):
+    feed = _full_feed()
+    session = _setup_rosters(monkeypatch, feed, _existing_from(feed))
+    victim = feed[0]["player_id"]
+    full = _feed_frame(feed)
+    full.loc[full["PERSON_ID"] == victim, "TEAM_ID"] = float("nan")
+    monkeypatch.setattr(nba, "fetch_current_players", lambda season: full)
+    with pytest.raises(lcr.RosterCompletenessError) as err:
+        lcr.load_current_rosters("2025-26", now=NOW)
+    assert any("TEAM_ID" in p for p in err.value.problems)
     assert session.writes() == []
 
 

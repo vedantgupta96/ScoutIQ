@@ -86,6 +86,20 @@ class RosterPlan:
         }
 
 
+def _roster_status(value) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number == 1:
+        return 1
+    if number == 0:
+        return 0
+    return None
+
+
 def parse_roster_feed(df) -> tuple[list[dict], list[str]]:
     """Turn the CommonAllPlayers frame into rostered-player rows plus any problems."""
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
@@ -99,8 +113,21 @@ def parse_roster_feed(df) -> tuple[list[dict], list[str]]:
         player_id = clean(row.get("PERSON_ID"))
         team_id = clean(row.get("TEAM_ID"))
         name = clean(row.get("DISPLAY_FIRST_LAST"))
-        roster_status = clean(row.get("ROSTERSTATUS"))
-        if not player_id or not name or not team_id or str(roster_status) != "1":
+        raw_status = clean(row.get("ROSTERSTATUS"))
+        status = _roster_status(raw_status)
+        if status is None:
+            problems.append(f"roster row for player {player_id!r} has an unreadable ROSTERSTATUS {raw_status!r}")
+            continue
+        if status == 0:
+            continue
+        absent = [
+            column for column, value in (("PERSON_ID", player_id), ("DISPLAY_FIRST_LAST", name), ("TEAM_ID", team_id))
+            if not value
+        ]
+        if absent:
+            problems.append(
+                f"active roster row is missing {', '.join(absent)} (player {player_id!r}, name {name!r})"
+            )
             continue
         if player_id in seen:
             problems.append(f"player {player_id} appears on more than one roster row")
