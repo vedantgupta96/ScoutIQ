@@ -11,8 +11,9 @@ import re
 
 SEASON_RE = re.compile(r"^\d{4}-\d{2}$")
 
-# The most recent completed season for which we have full stats.
-# Update each offseason after the ETL runs for the new season.
+# The completed-season valuation baseline. Rows for a later, in-progress season may exist in
+# player_seasons and must not become a default valuation input until live-season behaviour
+# is deliberately designed (SCO-49).
 LATEST_SEASON = "2025-26"
 
 
@@ -47,3 +48,8 @@ def prev_season(season: str) -> str | None:
         return None
     y1 = int(season[:4])
     return f"{y1 - 1}-{str(y1 % 100).zfill(2)}"
+
+
+def is_completed_season(season: str) -> bool:
+    """True iff `season` is a valid label at or before the completed-season baseline (LATEST_SEASON)."""
+    return is_valid_season(season) and season <= LATEST_SEASON

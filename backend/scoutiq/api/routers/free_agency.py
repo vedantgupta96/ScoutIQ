@@ -196,6 +196,26 @@ def _latest_contract_per_player(db: DB) -> list[Contract]:
     ).all()
 
 
+def _latest_stats_rows_stmt(player_ids: list[int]):
+    return (
+        select(PlayerSeason)
+        .where(PlayerSeason.player_id.in_(player_ids))
+        # An in-progress season must not supply features or count as a completed season.
+        .where(PlayerSeason.season <= LATEST_SEASON)
+        .distinct(PlayerSeason.player_id)
+        .order_by(PlayerSeason.player_id, desc(PlayerSeason.season))
+    )
+
+
+def _seasons_played_stmt(player_ids: list[int]):
+    return (
+        select(PlayerSeason.player_id, func.count())
+        .where(PlayerSeason.player_id.in_(player_ids))
+        .where(PlayerSeason.season <= LATEST_SEASON)
+        .group_by(PlayerSeason.player_id)
+    )
+
+
 def _assemble_pool(
     db: DB, entering: str, *, type_filter: str | None, position: str | None
 ) -> list[_PoolEntry]:
@@ -242,19 +262,10 @@ def _assemble_pool(
     # Latest stats row (for features/age) and completed-season count (RFA heuristic), batched.
     latest_row_by_player: dict[int, PlayerSeason] = {
         row.player_id: row
-        for row in db.scalars(
-            select(PlayerSeason)
-            .where(PlayerSeason.player_id.in_(player_ids))
-            .distinct(PlayerSeason.player_id)
-            .order_by(PlayerSeason.player_id, desc(PlayerSeason.season))
-        ).all()
+        for row in db.scalars(_latest_stats_rows_stmt(player_ids)).all()
     }
     seasons_played_by_player: dict[int, int] = dict(
-        db.execute(
-            select(PlayerSeason.player_id, func.count())
-            .where(PlayerSeason.player_id.in_(player_ids))
-            .group_by(PlayerSeason.player_id)
-        ).all()
+        db.execute(_seasons_played_stmt(player_ids)).all()
     )
 
     pool: list[_PoolEntry] = []

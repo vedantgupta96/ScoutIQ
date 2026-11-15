@@ -4,7 +4,7 @@ Runs the valuation model once over every loaded player-season and upserts the re
 into `player_valuations`, so API reads become indexed SELECTs instead of per-request
 inference. Run after any ETL load or model retrain (model.train chains it by default):
 
-    python -m scoutiq.model.publish_valuations                 # all loaded seasons
+    python -m scoutiq.model.publish_valuations                 # all completed seasons
     python -m scoutiq.model.publish_valuations --season 2025-26
 
 Deterministic and idempotent: re-running with unchanged data/model rewrites identical
@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from scoutiq.api.season import LATEST_SEASON, is_completed_season
 from scoutiq.api.valuation import card_stats_from_features, valuation_verdict
 from scoutiq.db import get_session
 from scoutiq.model.predict import (
@@ -39,6 +40,10 @@ QUALIFIED_MIN_MINUTES = 600
 # which percentiles are withheld (mirrors the watchlist's annotation rules).
 PCTL_KEYS = ("gp", "mpg", "pts_pg", "reb_pg", "ast_pg", "bpm")
 PCTL_MIN_PEERS = 20
+
+
+class IncompleteSeasonError(ValueError):
+    """Requested a season beyond the completed-season valuation baseline."""
 
 
 def annotate_percentiles(stats_list: list[dict]) -> None:
@@ -165,12 +170,21 @@ def upsert_rows(db: Session, values: list[dict]) -> None:
 
 
 def publish(seasons: list[str] | None = None) -> int:
+    if seasons:
+        bad = [season for season in seasons if not is_completed_season(season)]
+        if bad:
+            raise IncompleteSeasonError(
+                f"refusing to publish valuations for {bad}: only completed seasons up to "
+                f"{LATEST_SEASON} are valuation baselines (SCO-49)"
+            )
     computed_at = datetime.now(timezone.utc)
     total = 0
     with get_session() as db:
         if not seasons:
             seasons = sorted(
-                db.scalars(select(PlayerSeason.season).distinct()).all()
+                season
+                for season in db.scalars(select(PlayerSeason.season).distinct()).all()
+                if is_completed_season(season)
             )
         for season in seasons:
             values = build_season_rows(db, season, computed_at)
@@ -184,10 +198,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Publish precomputed valuations to Postgres.")
     parser.add_argument(
         "--season", action="append", dest="seasons", metavar="YYYY-YY",
-        help="Season to publish (repeatable). Default: every season with loaded stats.",
+        help="Season to publish (repeatable). Default: every completed season with loaded stats.",
     )
     args = parser.parse_args()
-    total = publish(args.seasons)
+    try:
+        total = publish(args.seasons)
+    except IncompleteSeasonError as exc:
+        parser.error(str(exc))
     print(f"publish_valuations: upserted {total} rows")
 
 

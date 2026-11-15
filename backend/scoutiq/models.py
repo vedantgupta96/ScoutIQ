@@ -33,6 +33,11 @@ class Team(Base):
     division: Mapped[str | None] = mapped_column(String(32))
 
 
+# Suffix appended to players.current_team_source when a roster refresh found the player on no
+# current NBA roster and cleared current_team_id (see etl/load_current_rosters).
+CURRENT_TEAM_NOT_ON_ROSTER_SUFFIX = ":not_on_roster"
+
+
 class Player(Base):
     __tablename__ = "players"
 

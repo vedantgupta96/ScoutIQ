@@ -25,6 +25,7 @@ from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
 from scoutiq.api.deps import DB
+from scoutiq.api.season import LATEST_SEASON
 from scoutiq.models import (
     CapConstants,
     Contract,
@@ -138,6 +139,19 @@ def _player_seasons(db: Session) -> DatasetProvenance:
     season_count = db.scalar(select(func.count(distinct(PlayerSeason.season))))
     earliest = db.scalar(select(func.min(PlayerSeason.season)))
     latest = db.scalar(select(func.max(PlayerSeason.season)))
+    caveat = (
+        "record_count is rows in player_seasons (one per player-season); player_count is "
+        "distinct players with a stat row; season_count/earliest/latest span the seasons on "
+        "file. Advanced metrics merge nba.com Advanced with Basketball-Reference. "
+        "player_seasons has no per-row source column, so this label is descriptive, not a "
+        "grouped count. No ingestion timestamp is stored for this table, so freshness is "
+        "unknown, not assumed current."
+    )
+    if latest is not None and latest > LATEST_SEASON:
+        caveat += (
+            f" {latest} is an in-progress season: its rows are season-to-date and are excluded "
+            f"from default valuations, which stay on the completed {LATEST_SEASON} baseline."
+        )
     return DatasetProvenance(
         key=key,
         name=name,
@@ -147,14 +161,7 @@ def _player_seasons(db: Session) -> DatasetProvenance:
         season_count=season_count,
         earliest_season=earliest,
         latest_season=latest,
-        caveat=(
-            "record_count is rows in player_seasons (one per player-season); player_count is "
-            "distinct players with a stat row; season_count/earliest/latest span the seasons on "
-            "file. Advanced metrics merge nba.com Advanced with Basketball-Reference. "
-            "player_seasons has no per-row source column, so this label is descriptive, not a "
-            "grouped count. No ingestion timestamp is stored for this table, so freshness is "
-            "unknown, not assumed current."
-        ),
+        caveat=caveat,
     )
 
 
