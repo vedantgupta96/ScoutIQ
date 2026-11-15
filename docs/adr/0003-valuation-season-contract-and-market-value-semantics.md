@@ -129,9 +129,9 @@ The [SCO-20 audit](https://github.com/vedantgupta96/ScoutIQ/pull/140) is pending
 does not change this ADR's status. It found 174 extension events, of which 120 are usable,
 but treats them as their own `extension_rules` tier and excludes them from the initial
 training experiment until as-of cap-projection history exists. It also excludes 479
-signings with multi-team salaries (459 player-seasons). Of 211 otherwise-usable excluded signings, only two trade-only
-cases are plausible row-sum recoveries; the other 209 require unmeasured attribution of the
-signing team's salary row. A further 722 signings share a league year with a two-way, 10-day,
+signings with multi-team salaries (459 player-seasons). Of 211 otherwise-usable excluded signings, none is a valid
+row-sum recovery (the two trade-only cases each carry a salary row from an earlier team); all
+211 require unmeasured attribution of the signing team's salary row. A further 722 signings share a league year with a two-way, 10-day,
 Exhibit or substitution deal, logged separately or within the same transaction entry, and are
 excluded because the stored season salary combines the deals; 138 of them pass every other
 condition. Those gaps are not silently included in either target.
