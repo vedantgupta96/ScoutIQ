@@ -166,6 +166,7 @@ class DecisionEvent:
     entry_combines_forms: bool = False
     season_waivers: int = 0
     season_trades: int = 0
+    season_trade_destinations: tuple[str, ...] = ()
     next_kind: str | None = None
     next_date: date | None = None
     first_paid_season_source: str | None = None
@@ -571,6 +572,14 @@ def _build_events(inputs: ProbeInputs) -> tuple[list[DecisionEvent], dict]:
                     ),
                     season_trades=sum(
                         1 for j, o in enumerate(dated) if j != i and o.kind == "traded" and league_year(o.date) == sly
+                    ),
+                    season_trade_destinations=tuple(
+                        o.team
+                        for o in dated
+                        if o.kind == "traded"
+                        and league_year(o.date) == sly
+                        and o.date >= t.date
+                        and o.team is not None
                     ),
                     next_kind=dated[i + 1].kind if i + 1 < len(dated) else None,
                     next_date=dated[i + 1].date if i + 1 < len(dated) else None,
@@ -1203,15 +1212,22 @@ def build_report(
         "trade_only": 0,
         "unexplained": 0,
     }
+    trade_only: list[DecisionEvent] = []
     for e in otherwise_usable:
-        if e.season_other_signings > 0:
+        if e.season_other_signings > 0 or e.entry_combines_forms:
             by_cause["other_signing_same_season"] += 1
         elif e.season_waivers > 0:
             by_cause["waiver_or_release_same_season"] += 1
         elif e.season_trades > 0:
             by_cause["trade_only"] += 1
+            trade_only.append(e)
         else:
             by_cause["unexplained"] += 1
+    row_sum_recoverable = 0
+    for e in trade_only:
+        row_teams = {r.team for r in page_by_slug[e.slug].salary_rows if r.season == e.first_paid_season}
+        if e.team is not None and row_teams <= {e.team, *e.season_trade_destinations}:
+            row_sum_recoverable += 1
     unconstrained_linked = [e for e in usable_unconstrained if e.contract is not None]
     using = Counter(e.contract.signed_using or "(empty)" for e in unconstrained_linked)
     evidence = {
@@ -1246,7 +1262,7 @@ def build_report(
                 "usable": "one standard signing in the player-season, no other signing of any form (two-way, 10-day, Exhibit, substitution) by the player in that league year, whether as a separate transaction row or described within the same entry (for example two 10-day contracts then a rest-of-season contract, or an in-season two-way conversion), because the stored season salary would combine the deals, stored first-year salary from a single-team season, cap present, prior-season BPM present",
                 "per_team_resolvable": "an ambiguous signing has one salary row for the signing team in that season and no other signing of any form with that team in that season, and the signing's own entry does not combine forms",
                 "guarantees": "option flags come from stored contract_years (current deals only); contract_years.is_guaranteed is derived as 'not an option year' by the loader and is NOT a guarantee measure; partial guarantees are measured only at contract level from Spotrac guarantee-at-signing vs total value",
-                "multi_team_recoverable": "an otherwise-usable multi-team signing counts as recoverable by summing per-team salary rows only when the season's extra rows are explained by trades alone: no other signing of any form, and no waiver, release or waiver claim, in that league year",
+                "multi_team_recoverable": "an otherwise-usable multi-team signing counts as recoverable by summing per-team salary rows only when the season's extra rows are explained by trades alone: no other signing of any form, whether a separate transaction row or a deal of another form described within the signing's own entry, and no waiver, release or waiver claim, in that league year; every per-team salary row that season must also belong to the signing team or a team the player was traded to after the signing in that league year, since a row from any other team is pay from a different contract",
                 "tiers": "mechanical (rule-set pay), censored (max/near-minimum), extension_rules (negotiated but bounded by extension eligibility, length, raise and maximum rules), no_constraint_identified (no rule fired; NOT affirmatively market-set — RFA and exception status are mostly unknown), unclassified",
                 "spotrac_link_units": "link counts are per (player, first season, form class) group; event_only/contract_only are limited to players with a verified BBRef page and a matched Spotrac page",
             },
@@ -1280,7 +1296,8 @@ def build_report(
             "multi_team_salary_events": sum(1 for e in std if e.salary_multi_team),
             "multi_team_salary_events_otherwise_usable": len(otherwise_usable),
             "multi_team_salary_otherwise_usable_by_cause": by_cause,
-            "multi_team_salary_recoverable_by_row_sum": by_cause["trade_only"],
+            "multi_team_salary_recoverable_by_row_sum": row_sum_recoverable,
+            "multi_team_salary_trade_only_unrelated_team_row": len(trade_only) - row_sum_recoverable,
             "other_form_signing_events": len(other_form),
             "other_form_signing_events_otherwise_usable": len(other_form_otherwise_usable),
             "combined_entry_events": len(combined_entry),

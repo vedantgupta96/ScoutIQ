@@ -607,6 +607,80 @@ def test_multi_team_recoverability_causes():
         "unexplained",
     ]
     assert dedup["multi_team_salary_recoverable_by_row_sum"] == 1
+    assert dedup["multi_team_salary_trade_only_unrelated_team_row"] == 0
+
+
+@pytest.mark.parametrize(
+    "trade_date, rows",
+    [
+        (date(2019, 8, 1), [("Kites", 3 * M), ("Owls", 2 * M)]),
+        (date(2019, 7, 5), [("Owls", 3 * M), ("Foxes", 2 * M)]),
+    ],
+)
+def test_trade_only_with_unrelated_team_row_not_recoverable(trade_date, rows):
+    base = _inputs()
+    page = _page(
+        "pf01",
+        [
+            (date(2019, 7, 10), "Signed a contract with the Owls."),
+            (trade_date, "Traded by the Owls to the Foxes for Pat Placeholder."),
+        ],
+        salary_rows=[ce.SalaryRow("2019-20", team, amount) for team, amount in rows],
+    )
+    inputs = dataclasses.replace(
+        base,
+        bbref_pages=[page],
+        xref={"pf01": 61},
+        players={61: ("Player 61", None)},
+        spotrac_pages=[],
+        salaries={(61, "2019-20"): 5 * M},
+        player_seasons={(61, "2018-19"): SeasonRow(25, 60, 1500.0, True)},
+        contracts=[],
+    )
+    dedup = build_report(inputs)["dedup"]
+    assert dedup["multi_team_salary_otherwise_usable_by_cause"]["trade_only"] == 1
+    assert dedup["multi_team_salary_recoverable_by_row_sum"] == 0
+    assert dedup["multi_team_salary_trade_only_unrelated_team_row"] == 1
+
+
+@pytest.mark.parametrize(
+    "signing",
+    [
+        "Signed two 10-day contracts with the Owls, then signed a contract for the rest of the season.",
+        "Converted from a two-way contract to a regular contract by the Owls.",
+    ],
+)
+def test_combined_entry_then_trade_not_row_sum_recoverable(signing):
+    base = _inputs()
+    page = _page(
+        "pe01",
+        [
+            (date(2020, 1, 15), signing),
+            (date(2020, 2, 5), "Traded by the Owls to the Foxes for Pat Placeholder."),
+        ],
+        salary_rows=[ce.SalaryRow("2019-20", "Owls", 3 * M), ce.SalaryRow("2019-20", "Foxes", 2 * M)],
+    )
+    inputs = dataclasses.replace(
+        base,
+        bbref_pages=[page],
+        xref={"pe01": 51},
+        players={51: ("Player 51", None)},
+        spotrac_pages=[],
+        salaries={(51, "2019-20"): 5 * M},
+        player_seasons={(51, "2018-19"): SeasonRow(25, 60, 1500.0, True)},
+        contracts=[],
+    )
+    rep_ = build_report(inputs)
+    assert _season_row(rep_["funnel_standard_form"]["by_season"], "2019-20")["usable"] == 0
+    dedup = rep_["dedup"]
+    assert dedup["multi_team_salary_events_otherwise_usable"] == 1
+    assert dedup["multi_team_salary_otherwise_usable_by_cause"] == {
+        "other_signing_same_season": 1,
+        "waiver_or_release_same_season": 0,
+        "trade_only": 0,
+        "unexplained": 0,
+    }
+    assert dedup["multi_team_salary_recoverable_by_row_sum"] == 0
 
 
 def _single_page_inputs(lines, rows, season="2019-20"):

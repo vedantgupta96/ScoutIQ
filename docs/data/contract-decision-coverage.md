@@ -1,6 +1,6 @@
 # Contract-decision data coverage audit (SCO-20)
 
-**Status:** spike complete. Measured on 2026-11-13 against the live database (read-only) and the local page caches. Revised after four rounds of code review: multi-team salary seasons are excluded and only trade-only cases are called recoverable; a signing that shares its league year with a two-way, 10-day, Exhibit or substitution deal is excluded because the season salary combines the deals, whether the other deal is a separate transaction or described in the same entry; per-team recovery counts a salary row once; the unconstrained population is described as "no constraint identified", not market-set; extensions sit in their own rule-constrained tier.
+**Status:** spike complete. Measured on 2026-11-13 against the live database (read-only) and the local page caches. Revised after five rounds of code review: multi-team salary seasons are excluded, and none turns out to be recoverable by summing salary rows; a signing that shares its league year with a two-way, 10-day, Exhibit or substitution deal is excluded because the season salary combines the deals, whether the other deal is a separate transaction or described in the same entry; per-team recovery counts a salary row once; the unconstrained population is described as "no constraint identified", not market-set; extensions sit in their own rule-constrained tier.
 **Recommendation: proceed with limits.** Standard free-agent signings from 2013-14 to 2025-26 can be turned into a temporally honest decision dataset today. Exact AAV, guarantees, constraint status and extensions cannot be covered historically without a new source.
 
 Part of the Valuation v2 roadmap (SCO-17). Feeds SCO-24 and SCO-36. ADR-0003 (proposed in PR #146, not yet on `main`) defines the two valuation concepts this audit serves. Migrated from GitHub #109.
@@ -134,12 +134,12 @@ Of the 479 multi-team events, 211 pass every condition except the single-team sa
 
 | Cause of the extra salary rows | Otherwise-usable events | Is the row sum a valid label? |
 | --- | --- | --- |
-| Another signing of any form that season (two-way, 10-day, Exhibit, extension) | 69 | No: the total combines separate deals. |
+| Another signing of any form that season (two-way, 10-day, Exhibit, extension), as its own transaction or within the same entry | 70 | No: the total combines separate deals. |
 | A waiver, release or waiver claim that season | 120 | No: the total can include pay from a terminated deal. |
-| Trades only | 2 | Yes: one contract paid by two teams. |
-| Unexplained (no signing, waiver or trade logged that season) | 20 | Unknown. Possibly pay still owed by an earlier team. |
+| Trades only | 2 | Only if every salary row belongs to the signing team or a team the player was traded to afterwards. Neither event passes: each has a row from an earlier team. |
+| Unexplained (no signing, waiver or trade logged that season) | 19 | Unknown. Possibly pay still owed by an earlier team. |
 
-Only the 2 trade-only events are recoverable by summing rows. For the rest, the candidate fix is to attribute the signing team's own salary row to the decision, which needs per-team rows stored and is not measured here.
+No event is recoverable by summing rows. The 2 trade-only events were reported as recoverable in earlier versions of this audit, but in both the season's salary rows include a team that neither signed the player nor received him in the trade (signed with Houston and traded to Denver, rows from Sacramento and Houston; signed with the Clippers and traded to Houston, rows from Detroit and Houston). That row is pay still owed from an earlier contract, so the sum mixes two deals. For all 211, the candidate fix is to attribute the signing team's own salary row to the decision, which needs per-team rows stored and is not measured here.
 
 Training-camp deals are not separately labelled before 2017-18, when Exhibit contracts start appearing in the log. The probe flags 630 standard signings as suspected camp deals; 40 of them are usable.
 
@@ -310,7 +310,7 @@ Limits to carry into those tickets:
 
 1. **Constraint status.** The 743 are not affirmatively market-set. About a third of the rows that can be checked used a capped exception, and restricted status is unknown for most. Report the open-mechanism subset alongside the headline.
 2. **Label.** Exact AAV covers a quarter of signings. ADR-0003 as proposed in PR #146 takes first-year percent of cap as the initial target measure with exact AAV as a robustness check. Sourcing historical contract terms first is the alternative, and stays open until the ADR is accepted.
-3. **Multi-team seasons.** 479 signings are excluded because the stored salary is one team's row. 211 of them are otherwise usable, but only 2 can be recovered by summing rows; the others need the signing team's own row attributed to the decision. Separately, 722 signings share a league year with a two-way, 10-day, Exhibit or substitution deal and are excluded because the season salary combines the deals; 138 of them pass every other condition.
+3. **Multi-team seasons.** 479 signings are excluded because the stored salary is one team's row. 211 of them are otherwise usable, and none can be recovered by summing rows; they need the signing team's own row attributed to the decision. Separately, 722 signings share a league year with a two-way, 10-day, Exhibit or substitution deal and are excluded because the season salary combines the deals; 138 of them pass every other condition.
 4. **Extensions.** Evaluate as a segment from 2020-21 only, and only once a cap-projection history exists; do not train on them.
 5. **Proxies.** The near-minimum and maximum rules are approximations. Treat their counts as approximate until a minimum-salary scale is stored.
 6. **Persistence.** Before SCO-24 trains on it, store decision events in a table so the dataset does not depend on a cache.
