@@ -21,8 +21,17 @@ def _stats(athlete_id=1, gp=1, pct=50.0):
             "athlete": {"$ref": f"{base}/seasons/2027/athletes/{athlete_id}?lang=en"},
             "splits": {"id": "0", "type": "total", "categories": [{"stats": [
                 {"name": "gamesPlayed", "value": gp}, {"name": "minutes", "value": 12.0},
-                {"name": "points", "value": 4.0}, {"name": "fouls", "value": 2.0},
-                {"name": "fieldGoalPct", "value": pct}, {"name": "usageRate", "value": 0.0},
+                {"name": "points", "value": 8.0}, {"name": "totalRebounds", "value": 3.0},
+                {"name": "offensiveRebounds", "value": 1.0}, {"name": "defensiveRebounds", "value": 2.0},
+                {"name": "assists", "value": 2.0}, {"name": "steals", "value": 1.0},
+                {"name": "blocks", "value": 1.0}, {"name": "turnovers", "value": 1.0},
+                {"name": "fouls", "value": 2.0}, {"name": "gamesStarted", "value": 1.0},
+                {"name": "fieldGoalsMade", "value": 3.0}, {"name": "fieldGoalsAttempted", "value": 6.0},
+                {"name": "threePointFieldGoalsMade", "value": 1.0},
+                {"name": "threePointFieldGoalsAttempted", "value": 3.0},
+                {"name": "freeThrowsMade", "value": 1.0}, {"name": "freeThrowsAttempted", "value": 2.0},
+                {"name": "fieldGoalPct", "value": pct}, {"name": "threePointFieldGoalPct", "value": 33.0},
+                {"name": "freeThrowPct", "value": 50.0}, {"name": "usageRate", "value": 0.0},
                 {"name": "vorp", "value": 0.0}]}]}}
 
 
@@ -90,7 +99,11 @@ def test_roster_requires_team_identity_and_correct_season():
 
 def test_stat_total_uses_exact_values_and_excludes_advanced_placeholders():
     parsed = espn.parse_season_totals(_stats(), 1, "2026-27")
-    assert parsed["box"] == {"PTS": 4.0, "PF": 2.0, "FG_PCT": 0.5}
+    assert parsed["box"] == {
+        "PTS": 8.0, "REB": 3.0, "OREB": 1.0, "DREB": 2.0, "AST": 2.0, "STL": 1.0, "BLK": 1.0,
+        "TOV": 1.0, "PF": 2.0, "GS": 1.0, "FGM": 3.0, "FGA": 6.0, "FG3M": 1.0, "FG3A": 3.0,
+        "FTM": 1.0, "FTA": 2.0, "FG_PCT": 0.5, "FG3_PCT": 0.33, "FT_PCT": 0.5,
+    }
     assert "usageRate" not in parsed["box"] and "vorp" not in parsed["box"]
     with pytest.raises(espn.ESPNValidationError, match="percentage"):
         espn.parse_season_totals(_stats(pct=101), 1, "2026-27")
@@ -98,6 +111,23 @@ def test_stat_total_uses_exact_values_and_excludes_advanced_placeholders():
     wrong["splits"]["type"] = "average"
     with pytest.raises(espn.ESPNValidationError, match="total split"):
         espn.parse_season_totals(wrong, 1, "2026-27")
+
+
+def test_stat_total_without_box_score_fields_is_rejected():
+    payload = _stats()
+    payload["splits"]["categories"][0]["stats"] = [
+        {"name": "gamesPlayed", "value": 1}, {"name": "minutes", "value": 12.0},
+    ]
+    with pytest.raises(espn.ESPNValidationError, match="expected box-score fields"):
+        espn.parse_season_totals(payload, 1, "2026-27")
+
+
+def test_stat_total_missing_one_field_names_it():
+    payload = _stats()
+    stats = payload["splits"]["categories"][0]["stats"]
+    stats[:] = [stat for stat in stats if stat["name"] != "steals"]
+    with pytest.raises(espn.ESPNValidationError, match="expected box-score fields.*steals"):
+        espn.parse_season_totals(payload, 1, "2026-27")
 
 
 def test_zero_game_stat_is_explicit_not_a_played_stat():

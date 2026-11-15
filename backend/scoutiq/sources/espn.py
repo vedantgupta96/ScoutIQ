@@ -30,6 +30,7 @@ BOX_NAME_MAP = {
 PERCENT_NAME_MAP = {
     "fieldGoalPct": "FG_PCT", "threePointFieldGoalPct": "FG3_PCT", "freeThrowPct": "FT_PCT",
 }
+REQUIRED_STAT_NAMES = frozenset(BOX_NAME_MAP) | frozenset(PERCENT_NAME_MAP)
 
 
 class ESPNValidationError(ValueError):
@@ -174,21 +175,22 @@ def parse_season_totals(payload: dict[str, Any], athlete_id: int, season: str) -
     minutes = _numeric(values["minutes"], "minutes")
     if not gp.is_integer() or gp < 0 or minutes < 0:
         raise ESPNValidationError("gamesPlayed/minutes have invalid units")
-    box = {key: _numeric(values[name], name) for name, key in BOX_NAME_MAP.items() if name in values}
+    missing = REQUIRED_STAT_NAMES - values.keys()
+    if missing:
+        raise ESPNValidationError(f"statistics total lacks expected box-score fields: {sorted(missing)}")
+    box = {key: _numeric(values[name], name) for name, key in BOX_NAME_MAP.items()}
     for name, key in BOX_NAME_MAP.items():
-        if name in values and (box[key] < 0 or not box[key].is_integer()):
+        if box[key] < 0 or not box[key].is_integer():
             raise ESPNValidationError(f"count stat {name} has invalid units")
     for name, key in PERCENT_NAME_MAP.items():
-        if name not in values:
-            continue
         value = _numeric(values[name], name)
         if not 0 <= value <= 100:
             raise ESPNValidationError(f"percentage {name} is not percentage points")
         box[key] = value / 100
     if gp == 0 and (minutes != 0 or any(value != 0 for value in box.values())):
         raise ESPNValidationError("zero games played conflicts with positive production")
-    if {"PTS", "FGM", "FG3M", "FTM"} <= box.keys() and box["PTS"] != 2 * box["FGM"] + box["FG3M"] + box["FTM"]:
+    if box["PTS"] != 2 * box["FGM"] + box["FG3M"] + box["FTM"]:
         raise ESPNValidationError("points do not reconcile with made shots and free throws")
-    if {"REB", "OREB", "DREB"} <= box.keys() and box["REB"] != box["OREB"] + box["DREB"]:
+    if box["REB"] != box["OREB"] + box["DREB"]:
         raise ESPNValidationError("rebounds do not reconcile with offensive and defensive rebounds")
     return {"provider_id": athlete_id, "season": season, "gp": int(gp), "minutes": minutes, "box": box}
