@@ -991,12 +991,36 @@ export function getValuation(id: number, season?: string, signal?: AbortSignal):
   return apiFetch<ValuationResponse>(`/players/${id}/valuation${queryString({ season })}`, { signal });
 }
 
+export interface SeasonToDateStats {
+  gp: number;
+  mpg: number | null;
+  pts_pg: number | null;
+  reb_pg: number | null;
+  ast_pg: number | null;
+  ts_pct: number | null;
+}
+
+export interface PlayerSeasonToDate {
+  player_id: number;
+  season: string | null;
+  valuation_season: string;
+  stats: SeasonToDateStats | null;
+  team: TeamSummary | null;
+  source: string | null;
+  as_of_utc: string | null;
+  note: string;
+}
+
 export function getPlayerContract(id: number, signal?: AbortSignal): Promise<PlayerContractResponse> {
   return apiFetch<PlayerContractResponse>(`/players/${id}/contract`, { signal });
 }
 
 export function getPlayerExtension(id: number, signal?: AbortSignal): Promise<PlayerExtensionResponse> {
   return apiFetch<PlayerExtensionResponse>(`/players/${id}/extension`, { signal });
+}
+
+export function getPlayerSeasonToDate(id: number, signal?: AbortSignal): Promise<PlayerSeasonToDate> {
+  return apiFetch<PlayerSeasonToDate>(`/players/${id}/season-to-date`, { signal });
 }
 
 export function getSimilarPlayers(

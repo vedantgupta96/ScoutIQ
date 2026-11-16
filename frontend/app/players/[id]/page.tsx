@@ -22,6 +22,7 @@ import {
   getPlayerContract,
   getPlayerExtension,
   getPlayerRationale,
+  getPlayerSeasonToDate,
   getPlayerScoutRatings,
   getSimilarPlayers,
   getValuation,
@@ -30,6 +31,7 @@ import {
   PlayerExtensionResponse,
   PlayerRationaleResponse,
   PlayerScoutRatingsResponse,
+  PlayerSeasonToDate,
   PlayerScoutTraitRating,
   RationaleMode,
   SimilarPlayerResult,
@@ -738,7 +740,38 @@ function WorkspaceTabs({
   );
 }
 
-function ProductionRow({ features }: { features: Record<string, number> | null }) {
+function StatlineBlock({
+  eyebrow,
+  items,
+  note,
+}: {
+  eyebrow: string;
+  items: Array<{ value: string; label: string }>;
+  note?: string;
+}) {
+  return (
+    <div className="siq-production-line">
+      <span className="ds-eyebrow">{eyebrow}</span>
+      <div className="siq-statline siq-statline--brief">
+        {items.map(({ value, label }) => (
+          <span key={label} className="siq-statline__cell">
+            <span className="siq-statline__value ds-tnum">{value}</span>
+            <span className="siq-statline__label">{label}</span>
+          </span>
+        ))}
+      </div>
+      {note ? <p className="ds-note">{note}</p> : null}
+    </div>
+  );
+}
+
+function ProductionRow({
+  features,
+  season,
+}: {
+  features: Record<string, number> | null;
+  season?: string | null;
+}) {
   if (!features) return null;
   const gp = features.gp;
   const mpg = features.minutes != null && gp ? features.minutes / gp : null;
@@ -756,18 +789,37 @@ function ProductionRow({ features }: { features: Record<string, number> | null }
   if (items.length === 0) return null;
 
   return (
-    <div className="siq-production-line">
-      <span className="ds-eyebrow">Season production</span>
-      <div className="siq-statline siq-statline--brief">
-        {items.map(({ value, label }) => (
-          <span key={label} className="siq-statline__cell">
-            <span className="siq-statline__value ds-tnum">{value}</span>
-            <span className="siq-statline__label">{label}</span>
-          </span>
-        ))}
-      </div>
-    </div>
+    <StatlineBlock
+      eyebrow={season ? `${season} production · valuation basis` : 'Season production'}
+      items={items}
+    />
   );
+}
+
+function SeasonToDateRow({ data }: { data: PlayerSeasonToDate | null }) {
+  const stats = data?.stats;
+  if (!data || !stats) return null;
+
+  const items: Array<{ value: string; label: string }> = [{ value: String(stats.gp), label: 'gp' }];
+  if (stats.mpg != null) items.push({ value: stats.mpg.toFixed(1), label: 'mpg' });
+  if (stats.pts_pg != null) items.push({ value: stats.pts_pg.toFixed(1), label: 'pts' });
+  if (stats.reb_pg != null) items.push({ value: stats.reb_pg.toFixed(1), label: 'reb' });
+  if (stats.ast_pg != null) items.push({ value: stats.ast_pg.toFixed(1), label: 'ast' });
+  if (stats.ts_pct != null) items.push({ value: (stats.ts_pct * 100).toFixed(1), label: 'ts%' });
+
+  const asOf = data.as_of_utc
+    ? new Date(data.as_of_utc).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        timeZone: 'UTC',
+      })
+    : null;
+  const sourceLabel = data.source === 'espn' ? 'ESPN' : data.source === 'nba.com' ? 'NBA.com' : data.source;
+  const teamPart = data.team ? ` · ${data.team.abbreviation}` : '';
+  const note = `${asOf ? `As of ${asOf} · ` : ''}${sourceLabel ?? ''}${teamPart} · not used in the valuation`;
+
+  return <StatlineBlock eyebrow={`${data.season} season to date`} items={items} note={note} />;
 }
 
 function ContractSpark({ contract }: { contract: PlayerContractResponse | null }) {
@@ -944,7 +996,8 @@ function FrontOfficeRead({
           />
         </div>
         <ValueDrivers attribution={val.attribution} />
-        <ProductionRow features={val.features} />
+        <ProductionRow features={val.features} season={val.season} />
+        <SeasonToDateRow data={seasonToDate} />
         <ContractSpark contract={contract} />
       </Panel>
 
@@ -1245,6 +1298,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   const [contract, setContract] = useState<PlayerContractResponse | null>(null);
   const [contractError, setContractError] = useState<string | null>(null);
   const [extension, setExtension] = useState<PlayerExtensionResponse | null>(null);
+  const [seasonToDate, setSeasonToDate] = useState<PlayerSeasonToDate | null>(null);
   const [extensionError, setExtensionError] = useState<string | null>(null);
   const [similarMode, setSimilarMode] = useState<SimilarPlayersMode>('twins');
   const [similarMarket, setSimilarMarket] = useState<SimilarPlayersResponse | null>(null);
@@ -1277,6 +1331,15 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
     getPlayerExtension(playerId)
       .then(setExtension)
       .catch((e: unknown) => setExtensionError(e instanceof Error ? e.message : 'Failed to load extension read.'));
+  }, [playerId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setSeasonToDate(null);
+    getPlayerSeasonToDate(playerId, controller.signal)
+      .then(setSeasonToDate)
+      .catch(() => {});
+    return () => controller.abort();
   }, [playerId]);
 
   useEffect(() => {

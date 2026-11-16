@@ -13,8 +13,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from scoutiq.api import extension, rosters
 from scoutiq.api.deps import DB
-from scoutiq.api.rosters import PlayerSummary, _player_summary_from_parts, latest_stats_row
-from scoutiq.api.season import LATEST_SEASON, next_season
+from scoutiq.api.rosters import PlayerSummary, TeamSummary, _player_summary_from_parts, latest_stats_row
+from scoutiq.api.season import LATEST_SEASON, in_progress_season, next_season
 from scoutiq.api.valuation import (
     Valuation,
     value_player_detail,
@@ -29,6 +29,7 @@ from scoutiq.llm.player_ratings import (
     aggregate_player_scout_ratings,
     load_player_reports,
 )
+from scoutiq.model.predict import _as_float
 from scoutiq.model.similarity import (
     SIMILARITY_BASIS,
     SimilarityMode,
@@ -607,6 +608,88 @@ def get_player(player_id: int, db: DB = None):
         raise HTTPException(status_code=404, detail=f"Player {player_id} not found.")
 
     return _player_summary(player, db)
+
+
+class SeasonToDateStats(BaseModel):
+    gp: int
+    mpg: float | None
+    pts_pg: float | None
+    reb_pg: float | None
+    ast_pg: float | None
+    ts_pct: float | None
+
+
+class PlayerSeasonToDate(BaseModel):
+    player_id: int
+    season: str | None
+    valuation_season: str
+    stats: SeasonToDateStats | None
+    team: TeamSummary | None
+    source: str | None
+    as_of_utc: str | None
+    note: str
+
+
+def _per_game(total, gp: int) -> float | None:
+    value = _as_float(total)
+    return round(value / gp, 1) if value is not None else None
+
+
+@router.get("/{player_id}/season-to-date", response_model=PlayerSeasonToDate)
+def get_player_season_to_date(player_id: int, db: DB = None):
+    """Return in-progress-season totals as per-game stats; never feeds the valuation."""
+    player = db.get(Player, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail=f"Player {player_id} not found.")
+
+    season = in_progress_season()
+    row = db.scalars(
+        select(PlayerSeason)
+        .where(PlayerSeason.player_id == player_id, PlayerSeason.season == season)
+        .limit(1)
+    ).first()
+    if row is None or not row.gp:
+        return PlayerSeasonToDate(
+            player_id=player_id,
+            season=season,
+            valuation_season=LATEST_SEASON,
+            stats=None,
+            team=None,
+            source=None,
+            as_of_utc=None,
+            note=f"No {season} regular-season stats are on file for this player.",
+        )
+
+    box = row.box or {}
+    pts = _as_float(box.get("PTS"))
+    fga = _as_float(box.get("FGA"))
+    fta = _as_float(box.get("FTA"))
+    ts_pct = None
+    if pts is not None and fga is not None and fta is not None:
+        denominator = 2 * (fga + 0.44 * fta)
+        if denominator:
+            ts_pct = round(pts / denominator, 4)
+
+    return PlayerSeasonToDate(
+        player_id=player_id,
+        season=season,
+        valuation_season=LATEST_SEASON,
+        stats=SeasonToDateStats(
+            gp=row.gp,
+            mpg=_per_game(row.minutes, row.gp),
+            pts_pg=_per_game(box.get("PTS"), row.gp),
+            reb_pg=_per_game(box.get("REB"), row.gp),
+            ast_pg=_per_game(box.get("AST"), row.gp),
+            ts_pct=ts_pct,
+        ),
+        team=rosters.team_summary(db.get(Team, row.team_id)) if row.team_id else None,
+        source=row.source,
+        as_of_utc=row.source_fetched_at.isoformat() if row.source_fetched_at else None,
+        note=(
+            f"{season} is in progress: these are season-to-date totals and can trail the latest game day. "
+            f"Valuation stays on the completed {LATEST_SEASON} season."
+        ),
+    )
 
 
 @router.get("/{player_id}/contract", response_model=PlayerContractResponse)
