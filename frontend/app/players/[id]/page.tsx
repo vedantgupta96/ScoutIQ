@@ -925,6 +925,7 @@ function FrontOfficeRead({
   contract,
   similarMarket,
   scoutRatings,
+  seasonToDate,
 }: {
   val: ValuationResponse;
   valueUsd: number;
@@ -932,6 +933,7 @@ function FrontOfficeRead({
   contract: PlayerContractResponse | null;
   similarMarket: SimilarPlayersResponse | null;
   scoutRatings: PlayerScoutRatingsResponse | null;
+  seasonToDate: PlayerSeasonToDate | null;
 }) {
   const topMatch = similarMarket?.results[0];
   const gapTone = val.verdict_tone;
@@ -1424,6 +1426,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
                   contract={contract}
                   similarMarket={similarMarket}
                   scoutRatings={scoutRatings}
+                  seasonToDate={seasonToDate}
                 />
               )}
 
