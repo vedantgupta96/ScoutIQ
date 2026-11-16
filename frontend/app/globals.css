@@ -828,9 +828,9 @@ textarea::placeholder {
 
 .siq-decision-snapshot {
   display: grid;
-  grid-template-columns: repeat(3, minmax(112px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
-  min-width: 420px;
+  min-width: 0;
   padding: 12px 16px;
   border: 1px solid color-mix(in srgb, var(--team-primary) 14%, var(--border-subtle));
   border-radius: var(--radius-md);
@@ -2634,12 +2634,24 @@ textarea::placeholder {
   border-radius: 3px 0 0 3px;
 }
 
+@media (max-width: 1440px) {
+  .siq-decision-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .siq-decision-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 1180px) {  .siq-decision-hero,
   .siq-workspace-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .siq-decision-actions {
+    grid-column: auto;
     justify-content: flex-start;
     align-items: flex-start;
   }
