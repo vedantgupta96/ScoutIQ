@@ -130,7 +130,7 @@ Among the 743 rows with no constraint identified, first-year pay has a median of
 
 Of the 722 events, 138 pass every other condition, and the first two versions of this audit counted them as usable: 133 near-minimum, 4 with no constraint identified and 1 rookie scale; 62 are two-way conversions, where the season salary mixes two-way and standard pay. A conversion made in the offseason stays usable, because no two-way pay falls in the new season.
 
-Of the 479 multi-team events, 211 pass every condition except the single-team salary; this count predates the other-form rule and still includes 69 events with another signing that season, shown in the first row below. Storing a season total would not make them usable, because the total usually mixes more than one contract. By what else happened to the player in that league year:
+Of the 479 multi-team events, 211 pass every condition except the single-team salary; this count predates the other-form rule and still includes 70 events with another signing that season, shown in the first row below. Storing a season total would not make them usable, because the total usually mixes more than one contract. By what else happened to the player in that league year:
 
 | Cause of the extra salary rows | Otherwise-usable events | Is the row sum a valid label? |
 | --- | --- | --- |
