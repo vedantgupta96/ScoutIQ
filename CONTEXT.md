@@ -9,15 +9,40 @@ The model's finished assessment of one player for one season — a value with an
 _Avoid_: prediction, appraisal, estimate (a prediction is the raw model output; a valuation is the finished, pay-aware result)
 
 **Valuation target**:
-The (player, season) pair being valued. Which season to value is the asking surface's decision; everything after that is not.
+The subject being valued — a player at a given valuation season (production-implied worth), or a player at a given decision point (next-contract market value). Which to value is the asking surface's decision; everything after that is not.
 
 **Percent of cap**:
 The product's unit of money — salaries and valuations expressed as a share of that season's salary cap, so seasons are comparable.
 _Avoid_: raw dollars (display-only)
 
 **Value gap**:
-Model value minus actual pay, in percent of cap. Positive means underpaid.
-_Avoid_: delta, surplus
+Model value minus actual pay, in percent of cap, for one season — the value and the pay it is compared against are the _same_ season (the fair-value invariant; see ADR-0003). Positive means underpaid.
+_Avoid_: delta, surplus; comparing a value from one season to pay from another (that is a distinct, named decision comparison, not a value gap)
+
+**Production-implied worth**:
+The primary valuation concept: the fair-market value (% of cap) a player's season-`t` production implies, shown against his actual season-`t` pay. Performance season, valuation season, and pay season all coincide at `t`. It is a latent quantity — its supervised label is a separate choice, deliberately _not_ same-season realized salary — validated against observed market outcomes. See ADR-0003.
+
+**Next-contract market value**:
+The decision concept: the market pay a player should command at his next genuine signing. The initial standard-free-agent-signing experiment measures it as the attributed first-year salary (% of the first paid season's cap known at signing); exact AAV (% of cap) is a separate robustness cross-check where terms are available. Keyed to the signing event, not a season. Extensions remain a separate future design. Distinct from projected market (ADR-0002), which carries today's worth forward and is _not_ a forecast. See ADR-0003.
+_Avoid_: projected market (that is the carry-forward, not a forward estimate)
+
+**Performance season**:
+The season whose production is being valued (`t`).
+
+**Valuation season**:
+The season a valuation is _about_ and stored under. For production-implied worth it equals the performance season (`t`). Next-contract market value has no valuation season — it is keyed to the signing event; its pay season is the first paid season of the new contract.
+
+**Pay season**:
+The season whose actual pay a value is compared against. For the fair-value value gap it equals the performance season (`t`).
+
+**Training label season**:
+The season of the pay a model's supervised target is drawn from. It need not equal the valuation season; when it differs, that reinterpretation must be validated, not assumed. See ADR-0003.
+
+**Decision point**:
+A market-setting event at which a genuine new contract is agreed for a player — a market reset, distinct from the incumbent contract, identified by the signing itself rather than by a season. Anchored by its signing date, as-of date, contract-start season, and pay season. See ADR-0003.
+
+**As-of date**:
+The information cutoff for a valuation — the production known as of that point. For an ordinary production-implied valuation it is the end of the performance season; for a decision valuation it is at or before the signing. Nothing after it may enter the value.
 
 **Verdict**:
 The categorical read of a value gap: significant bargain, bargain, fair value, slight overpay, overpaid — softened to a warning variant when caution flags fire.
