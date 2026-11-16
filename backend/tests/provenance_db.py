@@ -30,7 +30,9 @@ _DDL = (
     CREATE TABLE player_seasons (
         id INTEGER PRIMARY KEY,
         player_id INTEGER,
-        season TEXT
+        season TEXT,
+        source TEXT,
+        source_fetched_at TIMESTAMP
     )
     """,
     """

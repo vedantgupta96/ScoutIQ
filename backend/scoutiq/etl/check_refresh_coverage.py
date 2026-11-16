@@ -58,7 +58,20 @@ def collect(conn) -> dict:
             "with_bbref_ws": ws,
             "with_nba_usg_pct": usg,
             "null_team": null_team,
+            "by_source": {},
+            "newest_source_fetched_at": None,
         }
+    for season, source, n, newest in _rows(
+        conn,
+        "SELECT season, source, count(*), max(source_fetched_at)"
+        " FROM player_seasons GROUP BY season, source ORDER BY season, source",
+    ):
+        entry = by_season[season]
+        entry["by_source"][source or "unstamped"] = n
+        if newest is not None and (
+            entry["newest_source_fetched_at"] is None or _iso(newest) > entry["newest_source_fetched_at"]
+        ):
+            entry["newest_source_fetched_at"] = _iso(newest)
 
     salary_by_season: dict[str, dict] = {}
     for season, source, n in _rows(
@@ -68,6 +81,13 @@ def collect(conn) -> dict:
         entry = salary_by_season.setdefault(season, {"rows": 0, "by_source": {}})
         entry["rows"] += n
         entry["by_source"][source] = n
+
+    external_id_by_source = {
+        source: n
+        for source, n in _rows(
+            conn, "SELECT source, count(*) FROM player_external_ids GROUP BY source ORDER BY source"
+        )
+    }
 
     team_counts = [
         n for (n,) in _rows(
@@ -96,6 +116,7 @@ def collect(conn) -> dict:
             "by_season": by_season,
             "seasons_beyond_baseline": [s for s in by_season if s > LATEST_SEASON],
         },
+        "external_ids": {"by_source": external_id_by_source},
         "player_salaries": {
             "rows": _scalar(conn, "SELECT count(*) FROM player_salaries"),
             "by_season": salary_by_season,

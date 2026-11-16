@@ -3,7 +3,8 @@
 Re-running a season merges instead of replacing: nba.com owns age/gp/minutes/box and its own
 keys inside `advanced` (ADV_KEYS); the Basketball-Reference keys that etl/load_bbref merged in
 (BPM/OBPM/DBPM/VORP/WS/WS48/PER) survive, and so does the historical `team_id` that
-etl/repair_team_history set once a row carries BBRef metrics. A frame that fails
+etl/repair_team_history set once a row carries BBRef metrics. Rows are stamped with
+`source` = "nba.com" and the fetch time in `source_fetched_at`. A frame that fails
 `validate_season_frame` is refused before any write.
 
 Usage:
@@ -14,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 
 import pandas as pd
 from sqlalchemy import Text, case, cast, func, literal_column, type_coerce
@@ -98,6 +100,8 @@ def player_season_upsert(rows: list[dict]):
             "minutes": stmt.excluded.minutes,
             "box": stmt.excluded.box,
             "advanced": merged_advanced,
+            "source": stmt.excluded.source,
+            "source_fetched_at": stmt.excluded.source_fetched_at,
             "team_id": case(
                 (PlayerSeason.advanced.has_any(array(BBREF_ADV_KEYS)), PlayerSeason.team_id),
                 else_=stmt.excluded.team_id,
@@ -108,6 +112,7 @@ def player_season_upsert(rows: list[dict]):
 
 def load_season(season: str, *, min_players: int = DEFAULT_MIN_PLAYERS) -> int:
     df = nba.fetch_season(season)
+    fetched_at = datetime.now(tz=timezone.utc)
     validate_season_frame(df, season, min_players=min_players)
 
     teams, players, seasons = {}, {}, []
@@ -127,6 +132,8 @@ def load_season(season: str, *, min_players: int = DEFAULT_MIN_PLAYERS) -> int:
                 "minutes": clean(row.get("MIN")),
                 "box": jsonify(row, BOX_KEYS),
                 "advanced": jsonify(row, ADV_KEYS),
+                "source": "nba.com",
+                "source_fetched_at": fetched_at,
             }
         )
 

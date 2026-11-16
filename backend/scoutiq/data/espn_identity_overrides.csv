@@ -1,0 +1,7 @@
+espn_id,nba_id,full_name,reason,reviewed_on
+4600663,1641744,Zach Edey,"Stored player with the same unique name, same team and a consistent nba.com age; Basketball-Reference and Wikidata both give 2002-05-14, ESPN gives 2002-03-14",2026-11-16
+4683860,1643595,Quadir Copeland,"Unique name in the nba_api player index and Wikidata under the same NBA id; birth date differs by 3 days (ESPN 2003-09-01, Wikidata 2003-09-04)",2026-11-16
+5105337,1643576,Maliq Brown,"Unique name in the nba_api player index and Wikidata under the same NBA id; birth date differs by 1 day (ESPN 2003-11-15, Wikidata 2003-11-16)",2026-11-16
+5176517,1642369,Michael Ajayi,"Unique name in the nba_api player index and Wikidata under the same NBA id; birth date differs by 1 month (ESPN 2003-05-23, Wikidata 2003-06-23)",2026-11-16
+5105462,1643563,Richie Saunders,"Wikidata gives the same name and exact birth date (2001-09-19) under this NBA id; signed after the 2026-10-21 nba_api index refresh so no second source lists him yet",2026-11-16
+4684443,1643572,Rafael Castro,"Wikidata gives the same name and exact birth date (2003-03-30) under this NBA id; signed after the 2026-10-21 nba_api index refresh so no second source lists him yet",2026-11-16

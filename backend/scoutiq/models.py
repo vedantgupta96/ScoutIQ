@@ -85,6 +85,25 @@ class PlayerSeason(Base):
     minutes: Mapped[float | None] = mapped_column(Numeric)
     box: Mapped[dict | None] = mapped_column(JSONB)        # nba.com Base box stats
     advanced: Mapped[dict | None] = mapped_column(JSONB)   # nba.com Advanced + BBRef BPM/VORP/WS/...
+    source: Mapped[str | None] = mapped_column(String(32))
+    source_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PlayerExternalId(Base):
+    """Provider id -> ScoutIQ player, with how the match was established."""
+    __tablename__ = "player_external_ids"
+    __table_args__ = (
+        UniqueConstraint("source", "external_id", name="uq_player_external_id_source_external"),
+        UniqueConstraint("source", "player_id", name="uq_player_external_id_source_player"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.player_id"), index=True, nullable=False)
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    match_basis: Mapped[str] = mapped_column(String(96), nullable=False)
+    evidence: Mapped[dict | None] = mapped_column(JSONB)
+    matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PlayerSalary(Base):
