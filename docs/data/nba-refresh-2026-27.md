@@ -166,7 +166,8 @@ One transaction: new `players` rows, current-team assignments stamped `espn.rost
 roster response's fetch time, cleared assignments for players on no roster, the ESPN id mapping, and
 `player_seasons` rows with `source = 'espn'` and `source_fetched_at` set to that player's stat
 response time. Stored names and `advanced` are never touched; ESPN rows carry box totals only.
-A 2026-27 row has no `team_id`: ESPN's totals are not split by team, so after a trade they would
+A cleared assignment is stamped with the oldest roster response time, because absence from every
+roster is only established as of the earliest roster fetch. A 2026-27 row has no `team_id`: ESPN's totals are not split by team, so after a trade they would
 credit one team with production from two. The current team lives on `players.current_team_id`.
 
 It refuses, writing nothing, when:
