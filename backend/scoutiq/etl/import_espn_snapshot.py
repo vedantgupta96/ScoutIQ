@@ -5,7 +5,11 @@ Reads a snapshot written by `collect_espn_refresh` plus the identity map written
 problems: new `players`, current-team assignments (departed players are cleared), the
 `player_external_ids` mapping, and `player_seasons` box totals stamped with their ESPN
 source and fetch time. Only an in-progress season after the `LATEST_SEASON` baseline is
-accepted, and existing nba.com rows are never overwritten.
+accepted, and existing nba.com rows are never overwritten. Season rows carry no team
+because ESPN season totals do not split by team, so the source does not establish one.
+Every response must be fresh, every roster athlete needs an explained stat outcome, and an
+older snapshot never overwrites newer stored data (checked in the plan and again in the
+write conditions).
 
 Usage:
     python -m scoutiq.etl.import_espn_snapshot --snapshot-dir DIR --dry-run --json plan.json
@@ -22,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from scoutiq.api.season import LATEST_SEASON, is_completed_season, is_valid_season
@@ -63,7 +67,7 @@ class ImportPlan:
     stat_updates: int = 0
     without_stats: list[dict] = field(default_factory=list)
     new_player_teams: dict[int, str] = field(default_factory=dict)
-    by_team: dict[str, dict[str, int]] = field(default_factory=dict)
+    by_roster_team: dict[str, dict[str, int]] = field(default_factory=dict)
     identity_by_basis: dict[str, int] = field(default_factory=dict)
     identity_overrides: list[dict] = field(default_factory=list)
     roster_times: list[str] = field(default_factory=list)
@@ -129,7 +133,7 @@ class ImportPlan:
                 "without_stats": list(self.without_stats),
                 "inserts": self.stat_inserts,
                 "updates": self.stat_updates,
-                "by_team": {k: dict(v) for k, v in sorted(self.by_team.items())},
+                "by_roster_team": {k: dict(v) for k, v in sorted(self.by_roster_team.items())},
                 "totals": totals,
                 "max_gp": max((r["gp"] for r in self.stat_rows), default=0),
             },
@@ -193,6 +197,25 @@ def load_snapshot(snapshot_dir: Path) -> dict:
     }
 
 
+def _try_time(value: Any) -> datetime | None:
+    try:
+        return _parse_time(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _older_problem(label: str, offenders: list[tuple[int, datetime, datetime]]) -> str:
+    first = offenders[0]
+    return (
+        f"{len(offenders)} {label} (first ids: {[o[0] for o in offenders[:10]]}); "
+        f"first offender snapshot time {first[1].isoformat()} is older than stored {first[2].isoformat()}"
+    )
+
+
 def _age_on(date_of_birth: str | None, on: datetime) -> int | None:
     if not date_of_birth:
         return None
@@ -207,10 +230,11 @@ def build_plan(
     season: str,
     existing_assignments: Iterable[tuple],
     stored_player_ids: Iterable[int],
-    existing_season_rows: dict[int, str | None],
+    existing_season_rows: dict[int, tuple[str | None, datetime | None]],
     existing_external_ids: dict[str, int],
     team_ids: set,
     now: datetime,
+    stored_team_times: dict[int, datetime] | None = None,
     max_departed_fraction: float = DEFAULT_MAX_DEPARTED_FRACTION,
     max_snapshot_age_hours: float = DEFAULT_MAX_SNAPSHOT_AGE_HOURS,
 ) -> ImportPlan:
@@ -277,16 +301,24 @@ def build_plan(
             f"(first ids: {sorted(conflicting_ids)[:10]})"
         )
 
-    plan.roster_times = sorted(snapshot["roster_fetched_at"].values())
-    plan.stat_times = sorted(entry["fetched_at_utc"] for entry in snapshot["stats"].values())
-    all_times = plan.roster_times + plan.stat_times
-    if all_times:
-        newest = max(all_times, key=_parse_time)
-        if _parse_time(newest) < now - timedelta(hours=max_snapshot_age_hours):
-            problems.append(
-                f"newest snapshot response {newest} is older than {max_snapshot_age_hours:g} hours "
-                f"before {now.isoformat()}"
-            )
+    roster_stamps = {t: (v, _try_time(v)) for t, v in snapshot["roster_fetched_at"].items()}
+    stat_stamps = {p: (e["fetched_at_utc"], _try_time(e["fetched_at_utc"])) for p, e in snapshot["stats"].items()}
+    bad_stamps = [k for k, (_, t) in roster_stamps.items() if t is None] + [
+        k for k, (_, t) in stat_stamps.items() if t is None
+    ]
+    if bad_stamps:
+        problems.append(f"{len(bad_stamps)} responses have a missing or unparseable fetched_at_utc")
+    plan.roster_times = sorted(v for v, t in roster_stamps.values() if t is not None)
+    plan.stat_times = sorted(v for v, t in stat_stamps.values() if t is not None)
+    cutoff = now - timedelta(hours=max_snapshot_age_hours)
+    stale_roster = [v for v in plan.roster_times if _parse_time(v) < cutoff]
+    stale_stats = [v for v in plan.stat_times if _parse_time(v) < cutoff]
+    if stale_roster or stale_stats:
+        oldest = min(stale_roster + stale_stats, key=_parse_time)
+        problems.append(
+            f"{len(stale_roster)} roster and {len(stale_stats)} stat responses are older than "
+            f"{max_snapshot_age_hours:g} hours before {now.isoformat()}; oldest is {oldest}"
+        )
 
     feed_rows = [
         {"player_id": identity["nba_id"], "full_name": identity["player_full_name"], "current_team_id": row["scoutiq_team_id"]}
@@ -307,19 +339,62 @@ def build_plan(
         _parse_time(max(plan.roster_times, key=_parse_time)) if plan.roster_times else None
     )
 
+    stat_ids, zero_ids = set(snapshot["stats"]), set(snapshot["none_played"])
+    missing_entries = list(manifest.get("missing_stats", []))
+    not_found = {e.get("provider_id") for e in missing_entries if e.get("status") == 404}
+    bad_status = [e.get("provider_id") for e in missing_entries if e.get("status") != 404]
+    if bad_status:
+        problems.append(f"{len(bad_status)} missing_stats entries are not HTTP 404 (first ids: {bad_status[:10]})")
+    stray = sorted(
+        e.get("provider_id") for e in missing_entries if e.get("provider_id") not in on_roster
+    )
+    if stray:
+        problems.append(f"{len(stray)} missing_stats entries are not on the roster (first ids: {stray[:10]})")
+    unexplained = [r["provider_id"] for r in roster if not ({r["provider_id"]} & (stat_ids | zero_ids | not_found))]
+    if unexplained:
+        problems.append(
+            f"{len(unexplained)} roster athletes have no stat response and no recorded 404 "
+            f"(first ids: {unexplained[:10]})"
+        )
+    doubled = [
+        r["provider_id"] for r in roster
+        if r["provider_id"] in not_found and r["provider_id"] in (stat_ids | zero_ids)
+    ]
+    if doubled:
+        problems.append(
+            f"{len(doubled)} roster athletes have both a stat response and a recorded 404 "
+            f"(first ids: {doubled[:10]})"
+        )
+    if counts:
+        for name, actual in (
+            ("roster_athletes", len(roster)),
+            ("validated_stats", len(stat_ids)),
+            ("missing_stats", sum(1 for e in missing_entries if e.get("status") == 404)),
+            ("none_played", len(zero_ids)),
+        ):
+            if counts.get(name) != actual:
+                problems.append(f"manifest counts.{name} is {counts.get(name)!r} but the snapshot has {actual}")
+
     stored = set(stored_player_ids)
-    missing_stats = {entry["provider_id"] for entry in manifest.get("missing_stats", [])}
-    none_played = set(snapshot["none_played"])
+    missing_stats = not_found
+    none_played = zero_ids
     non_espn: list[int] = []
+    older_assignments: list[tuple[int, datetime, datetime]] = []
+    older_stats: list[tuple[int, datetime, datetime]] = []
+    stored_times = {k: _aware(v) for k, v in (stored_team_times or {}).items()}
     for row, identity in athletes:
         nba_id = identity["nba_id"]
         team_time = snapshot["roster_fetched_at"].get(row["current_team_provider_id"])
+        assigned_at = _try_time(team_time) if team_time else None
+        stored_at = stored_times.get(nba_id)
+        if assigned_at is not None and stored_at is not None and assigned_at < stored_at:
+            older_assignments.append((nba_id, assigned_at, stored_at))
         plan.assignments.append({
             "player_id": nba_id,
             "full_name": identity["player_full_name"],
             "current_team_id": row["scoutiq_team_id"],
             "current_team_source": source,
-            "current_team_updated_at": _parse_time(team_time) if team_time else None,
+            "current_team_updated_at": assigned_at,
         })
         if identity["is_new_player"] and nba_id not in stored:
             plan.new_players.append({"player_id": nba_id, "full_name": identity["player_full_name"]})
@@ -342,7 +417,7 @@ def build_plan(
             },
             "matched_at": now,
         })
-        team = plan.by_team.setdefault(row["current_team_abbreviation"], {"rostered": 0, "with_stats": 0})
+        team = plan.by_roster_team.setdefault(row["current_team_abbreviation"], {"rostered": 0, "with_stats": 0})
         team["rostered"] += 1
         entry = snapshot["stats"].get(row["provider_id"])
         if entry is None:
@@ -360,12 +435,14 @@ def build_plan(
             })
             continue
         team["with_stats"] += 1
-        fetched = _parse_time(entry["fetched_at_utc"])
+        fetched = _try_time(entry["fetched_at_utc"])
+        if fetched is None:
+            continue
         parsed = entry["parsed"]
         plan.stat_rows.append({
             "player_id": nba_id,
             "season": season,
-            "team_id": row["scoutiq_team_id"],
+            "team_id": None,
             "age": _age_on(row["date_of_birth"], fetched),
             "gp": parsed["gp"],
             "minutes": parsed["minutes"],
@@ -375,8 +452,11 @@ def build_plan(
         })
         if nba_id in existing_season_rows:
             plan.stat_updates += 1
-            if existing_season_rows[nba_id] != SOURCE:
+            stored_source, stored_fetched = existing_season_rows[nba_id]
+            if stored_source != SOURCE:
                 non_espn.append(nba_id)
+            elif stored_fetched is not None and fetched < _aware(stored_fetched):
+                older_stats.append((nba_id, fetched, _aware(stored_fetched)))
         else:
             plan.stat_inserts += 1
     if non_espn:
@@ -384,6 +464,19 @@ def build_plan(
             f"{len(non_espn)} players already have a {season} player_seasons row from another source "
             f"(first ids: {sorted(non_espn)[:10]})"
         )
+    older_departed = [
+        (d["player_id"], plan.departed_updated_at, stored_times[d["player_id"]])
+        for d in plan.departed
+        if plan.departed_updated_at is not None
+        and d["player_id"] in stored_times
+        and stored_times[d["player_id"]] > plan.departed_updated_at
+    ]
+    if older_assignments:
+        problems.append(_older_problem("team assignments are older than stored current-team data", older_assignments))
+    if older_departed:
+        problems.append(_older_problem("departed-player clears are older than stored current-team data", older_departed))
+    if older_stats:
+        problems.append(_older_problem("stat rows are older than the stored ESPN row", older_stats))
     return plan
 
 
@@ -401,7 +494,13 @@ def espn_season_upsert(rows: list[dict]):
             "source": stmt.excluded.source,
             "source_fetched_at": stmt.excluded.source_fetched_at,
         },
-        where=PlayerSeason.source == SOURCE,
+        where=and_(
+            PlayerSeason.source == SOURCE,
+            or_(
+                PlayerSeason.source_fetched_at.is_(None),
+                PlayerSeason.source_fetched_at <= stmt.excluded.source_fetched_at,
+            ),
+        ),
     )
 
 
@@ -420,13 +519,21 @@ def apply_plan(session, plan: ImportPlan) -> None:
                     "current_team_source": stmt.excluded.current_team_source,
                     "current_team_updated_at": stmt.excluded.current_team_updated_at,
                 },
+                where=or_(
+                    Player.current_team_updated_at.is_(None),
+                    Player.current_team_updated_at <= stmt.excluded.current_team_updated_at,
+                ),
             )
         )
     if plan.departed:
+        clear = update(Player).where(Player.player_id.in_([d["player_id"] for d in plan.departed]))
+        if plan.departed_updated_at is not None:
+            clear = clear.where(or_(
+                Player.current_team_updated_at.is_(None),
+                Player.current_team_updated_at <= plan.departed_updated_at,
+            ))
         session.execute(
-            update(Player)
-            .where(Player.player_id.in_([d["player_id"] for d in plan.departed]))
-            .values(
+            clear.values(
                 current_team_id=None,
                 current_team_source=plan.source + CURRENT_TEAM_NOT_ON_ROSTER_SUFFIX,
                 current_team_updated_at=plan.departed_updated_at,
@@ -483,8 +590,15 @@ def run(
             ).all()
         ]
         existing_season_rows = {
-            player_id: source for player_id, source in session.execute(
-                select(PlayerSeason.player_id, PlayerSeason.source).where(PlayerSeason.season == season)
+            player_id: (source, fetched_at) for player_id, source, fetched_at in session.execute(
+                select(PlayerSeason.player_id, PlayerSeason.source, PlayerSeason.source_fetched_at)
+                .where(PlayerSeason.season == season)
+            ).all()
+        }
+        stored_team_times = {
+            player_id: updated_at for player_id, updated_at in session.execute(
+                select(Player.player_id, Player.current_team_updated_at)
+                .where(Player.current_team_updated_at.is_not(None))
             ).all()
         }
         stored_player_ids = [player_id for (player_id,) in session.execute(select(Player.player_id)).all()]
@@ -504,6 +618,7 @@ def run(
             existing_external_ids=existing_external_ids,
             team_ids=team_ids,
             now=now,
+            stored_team_times=stored_team_times,
             max_departed_fraction=max_departed_fraction,
             max_snapshot_age_hours=max_snapshot_age_hours,
         )
