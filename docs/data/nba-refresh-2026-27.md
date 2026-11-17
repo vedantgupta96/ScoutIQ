@@ -1,8 +1,8 @@
 # NBA data refresh for 2026-27 (SCO-49)
 
-**Status, 2026-11-16:** the 2026-27 rosters and season-to-date box totals are in production, imported
-from an ESPN snapshot fetched 2026-11-16 08:34 to 08:37 UTC: 526 rostered players on 30 teams, 465
-with a `player_seasons` row, 61 with no ESPN season-total record yet. 2025-26 remains the
+**Status, 2026-11-17:** the 2026-27 rosters and season-to-date box totals are in production, last
+imported from an ESPN snapshot fetched 2026-11-17 04:50 to 04:53 UTC: 525 rostered players on 30
+teams, 467 with a `player_seasons` row, 58 with no ESPN season-total record yet. 2025-26 remains the
 completed-season valuation baseline; no valuation, salary, contract or completed-season row changed.
 See "ESPN import" below for the procedure and the verified counts.
 
@@ -67,8 +67,8 @@ directory is git-ignored and exists only on the machine that ran the audit.
   unchanged and no departures. Fed the first 300 of them, it refused the refresh.
 - The coverage tool ran read-only against production and produced the table above.
 
-None of this exercised a live nba.com response. The first real run of steps 2 to 4 below is the
-first test of the loaders against 2026-27 data.
+None of this exercised a live nba.com response. The nba.com loaders have still not run against
+2026-27 data; the 2026-27 rows in production came from the ESPN import.
 
 ## Source access on 2026-11-14
 
@@ -93,9 +93,9 @@ season total. The source-native snapshot records response URLs and original UTC 
 supports a validated resume in the same season-specific output directory, and preserves invalid
 raw responses for audit rather than replacing them. ESPN's snapshot is roster-based, so it does
 not cover players already waived or otherwise off roster. Its advanced placeholders are not used;
-only exact box-score totals are retained for a later separately reviewed attribution/import step.
+only exact box-score totals are retained, and the ESPN import below is the only step that writes them.
 
-Run the cache-only proof from `backend/` with a new empty directory (or resume its own directory):
+Run the collector from `backend/` with a new empty directory (or resume its own directory):
 
 ```sh
 .venv/bin/python -m scoutiq.etl.collect_espn_refresh \
@@ -105,10 +105,10 @@ Run the cache-only proof from `backend/` with a new empty directory (or resume i
 ```
 
 `--identity-evidence` is optional. Its local JSON rows must provide `nba_id`, `name`, `dob`,
-`bbref_slug`, and `verified`; only a unique normalized-name plus date-of-birth match is reported,
-never assigned to production. An independent local diagnostic matched 408 roster identities, left
-118 unresolved, and found 372 matched identities among the validated stat responses. Those counts
-are diagnostic evidence, distinct from the collector's 526/463/63 source counts.
+`bbref_slug`, and `verified`; only a unique normalized-name plus date-of-birth match is reported.
+The collector's report is diagnostic: on 2026-11-14 it matched 408 roster identities and left 118
+unresolved. Production identities come from `resolve_espn_identity` (see "Identity" below), which
+resolved all 526.
 
 A second run over a copy of the first run's directory confirmed the resume behaviour: all 494
 cached responses were reused with their original fetch timestamps, the 959 raw and normalized
@@ -166,12 +166,21 @@ One transaction: new `players` rows, current-team assignments stamped `espn.rost
 roster response's fetch time, cleared assignments for players on no roster, the ESPN id mapping, and
 `player_seasons` rows with `source = 'espn'` and `source_fetched_at` set to that player's stat
 response time. Stored names and `advanced` are never touched; ESPN rows carry box totals only.
+A 2026-27 row has no `team_id`: ESPN's totals are not split by team, so after a trade they would
+credit one team with production from two. The current team lives on `players.current_team_id`.
 
-It refuses, writing nothing, when the season is at or before the 2025-26 baseline, the manifest has
-errors or fewer than 30 validated rosters, any raw stat response fails validation, any athlete is
-unresolved or an NBA id is claimed twice, a stored ESPN mapping disagrees, the newest response is
-more than 36 hours old, a row for that season already exists from another source, or the roster
-completeness gate fails.
+It refuses, writing nothing, when:
+
+- the season is at or before the 2025-26 baseline;
+- the manifest has errors, fewer than 30 validated rosters, or counts that do not match the files;
+- any raw stat response fails validation, or a rostered athlete has neither a stat response nor a
+  recorded 404;
+- any athlete is unresolved, an NBA id is claimed twice, or a stored ESPN mapping disagrees;
+- any roster or stat response is more than 36 hours old;
+- a stored assignment or stat row is newer than the snapshot's (an older snapshot never overwrites
+  newer data; the write statements repeat this check);
+- a row for that season already exists from another source;
+- the roster completeness gate fails.
 
 ### Stat coverage and the 404 responses
 
@@ -194,6 +203,11 @@ last game day. These players get no `player_seasons` row; a missing record is no
 | `player_seasons` | 7,411 | 7,876 (465 for 2026-27, all `espn`) |
 | `player_external_ids` | 0 | 526 |
 | Completed seasons, `player_salaries`, `contracts`, `player_valuations`, `cap_constants` | | unchanged |
+
+A second import on 2026-11-17 (snapshot fetched 04:50 to 04:53 UTC, 525 rostered) ran with the
+review fixes in place: 465 rows updated and 2 added (467 for 2026-27), `team_id` cleared on all of
+them, one more player marked not on a roster (90), 525 assignments. Fed the 2026-11-15 snapshot, the
+same importer refused it for stale responses and for older assignments, clears and stat rows.
 
 Until the valuation guard in this change is deployed, an explicit `?season=2026-27` valuation request
 still runs the model on partial-season rows. No page requests it; the guard makes it a 404.
@@ -286,4 +300,4 @@ These acceptance items are not addressed by the loader fixes.
 | Showing 2026-27 in the product | The rows are stored and labelled, but no page displays season-to-date stats yet. |
 | Basketball-Reference metrics for 2026-27 | Needs the permission decision and a cache policy that keeps the June 2026 pages. |
 | `CURRENT_SEASON` setting | Still 2025-26. It drives the free-agent class, the draft year and several loader defaults, so changing it is part of designing live-season behaviour. Pass `--season 2026-27` explicitly until then. |
-| Ingestion timestamps for stats | `player_seasons` has no timestamp column, so stats freshness is still reported as unknown. Adding one is a schema change. |
+| Ingestion timestamps for completed seasons | `player_seasons.source` and `source_fetched_at` exist and are set on every row loaded from now on. The 7,411 rows loaded earlier have neither, so their freshness is still reported as unknown. |

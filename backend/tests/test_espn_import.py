@@ -308,7 +308,10 @@ def _world(*, drop_stats=(), missing_404=(), none_played=()):
     manifest = {
         "season": "2026-27", "generated_at_utc": GENERATED, "errors": [],
         "missing_stats": [{"provider_id": p, "status": 404} for p in missing_404],
-        "counts": {"validated_roster_teams": 30},
+        "counts": {
+            "validated_roster_teams": 30, "roster_athletes": len(roster), "validated_stats": len(stats),
+            "missing_stats": len(missing_404), "none_played": len(none_played),
+        },
     }
     snapshot = {
         "manifest": manifest, "roster": roster,
@@ -344,7 +347,7 @@ def test_complete_plan_counts_and_stamps():
     kwargs["existing_assignments"] = [
         a for a in kwargs["existing_assignments"] if a[0] != 9_000_000 + new_pid and a[0] != 9_000_000 + 4000
     ] + [(7_777_777, "Gone Guy", 5), (9_000_000 + 5000, "Stored 5000", 1)]
-    kwargs["existing_season_rows"] = {9_000_000 + 6000: "espn"}
+    kwargs["existing_season_rows"] = {9_000_000 + 6000: ("espn", None)}
     plan = ie.build_plan(snapshot, identity, **kwargs)
     assert plan.problems == [] and plan.complete
     assert [p["player_id"] for p in plan.new_players] == [9_000_000 + new_pid]
@@ -361,7 +364,7 @@ def test_complete_plan_counts_and_stamps():
     row = plan.stat_rows[0]
     assert row["age"] == 26 and row["source"] == "espn" and "advanced" not in row
     assert row["source_fetched_at"] == datetime(2026, 11, 16, 1, tzinfo=timezone.utc)
-    assert row["team_id"] == 1 and row["gp"] == 5
+    assert row["team_id"] is None and row["gp"] == 5
     assignment = plan.assignments[0]
     assert assignment["current_team_updated_at"] == datetime(2026, 11, 16, 0, 30, tzinfo=timezone.utc)
     assert assignment["current_team_source"] == "espn.roster:2026-27"
@@ -371,7 +374,7 @@ def test_complete_plan_counts_and_stamps():
     report = plan.to_dict()
     json.dumps(report)
     assert report["stats"]["rostered"] == 390 and report["stats"]["with_stats"] == 387
-    assert report["stats"]["max_gp"] == 5 and report["stats"]["by_team"]["T01"] == {"rostered": 13, "with_stats": 11}
+    assert report["stats"]["max_gp"] == 5 and report["stats"]["by_roster_team"]["T01"] == {"rostered": 13, "with_stats": 11}
     assert report["roster"]["new_players"] == [{"full_name": "Stored 3000", "team": "T03"}]
     assert report["source_timestamps"]["stats_newest"] == FETCHED
 
@@ -429,16 +432,17 @@ def test_conflicting_existing_external_id():
     assert not _plan(existing_external_ids={"1000": 9_001_000}).problems
 
 
-def test_stale_snapshot_names_both_timestamps():
+def test_stale_snapshot_reports_counts_and_oldest():
     plan = _plan(now=NOW + timedelta(hours=48))
-    assert _has(plan, FETCHED) and _has(plan, (NOW + timedelta(hours=48)).isoformat())
+    assert _has(plan, "30 roster and 390 stat responses") and _has(plan, ROSTER_FETCHED)
+    assert _has(plan, (NOW + timedelta(hours=48)).isoformat())
     assert not _plan(now=NOW + timedelta(hours=48), max_snapshot_age_hours=100).problems
 
 
 def test_existing_non_espn_season_row_blocks():
-    plan = _plan(existing_season_rows={9_001_000: "nba.com", 9_001_001: None})
+    plan = _plan(existing_season_rows={9_001_000: ("nba.com", None), 9_001_001: (None, None)})
     assert _has(plan, "2 players already have")
-    assert not _plan(existing_season_rows={9_001_000: "espn"}).problems
+    assert not _plan(existing_season_rows={9_001_000: ("espn", None)}).problems
 
 
 def test_roster_completeness_problem_surfaces():
@@ -651,3 +655,100 @@ def test_alembic_revision_ids_fit_version_column():
     assert revisions
     assert all(len(revision) <= 32 for revision in revisions)
     assert revisions["0011_season_source_external_ids"] == "0010_player_two_way"
+
+
+def test_one_fresh_response_does_not_hide_stale_rest():
+    snapshot, identity, kwargs = _world()
+    for team in snapshot["roster_fetched_at"]:
+        snapshot["roster_fetched_at"][team] = "2026-11-01T00:00:00+00:00"
+    for pid, entry in snapshot["stats"].items():
+        entry["fetched_at_utc"] = "2026-11-01T00:00:00+00:00"
+    snapshot["stats"][1000]["fetched_at_utc"] = FETCHED
+    plan = ie.build_plan(snapshot, identity, **kwargs)
+    assert _has(plan, "30 roster and 389 stat responses")
+
+
+def test_bad_timestamps_are_problems():
+    snapshot, identity, kwargs = _world()
+    snapshot["stats"][1000]["fetched_at_utc"] = "not a time"
+    assert _has(ie.build_plan(snapshot, identity, **kwargs), "unparseable fetched_at_utc")
+    snapshot, identity, kwargs = _world()
+    snapshot["roster_fetched_at"][1] = None
+    assert _has(ie.build_plan(snapshot, identity, **kwargs), "unparseable fetched_at_utc")
+
+
+# ---------- stat outcomes and manifest reconciliation ----------
+
+def test_athletes_without_stat_outcome_are_refused():
+    snapshot, identity, kwargs = _world(drop_stats={1000, 1001})
+    snapshot["manifest"]["counts"]["validated_stats"] = 388
+    plan = ie.build_plan(snapshot, identity, **kwargs)
+    assert _has(plan, "2 roster athletes have no stat response and no recorded 404")
+
+
+def test_stat_response_with_404_entry_is_refused():
+    snapshot, identity, kwargs = _world()
+    snapshot["manifest"]["missing_stats"] = [{"provider_id": 1000, "status": 404}]
+    snapshot["manifest"]["counts"]["missing_stats"] = 1
+    assert _has(ie.build_plan(snapshot, identity, **kwargs), "both a stat response and a recorded 404")
+
+
+def test_non_404_and_off_roster_missing_entries_are_refused():
+    snapshot, identity, kwargs = _world(missing_404={1000})
+    snapshot["manifest"]["missing_stats"] = [{"provider_id": 1000, "status": 500}, {"provider_id": 5, "status": 404}]
+    plan = ie.build_plan(snapshot, identity, **kwargs)
+    assert _has(plan, "not HTTP 404") and _has(plan, "not on the roster")
+
+
+@pytest.mark.parametrize("name", ["roster_athletes", "validated_stats", "missing_stats", "none_played"])
+def test_manifest_count_mismatch_is_refused(name):
+    snapshot, identity, kwargs = _world()
+    snapshot["manifest"]["counts"][name] += 1
+    assert _has(ie.build_plan(snapshot, identity, **kwargs), f"manifest counts.{name}")
+
+
+# ---------- older snapshot never overwrites newer data ----------
+
+NEWER = datetime(2026, 11, 17, tzinfo=timezone.utc)
+ROSTER_AT = datetime(2026, 11, 16, 0, 30, tzinfo=timezone.utc)
+STAT_AT = datetime(2026, 11, 16, 1, tzinfo=timezone.utc)
+
+
+def test_older_assignment_is_refused_and_equal_is_accepted():
+    plan = _plan(stored_team_times={9_001_000: NEWER})
+    assert _has(plan, "1 team assignments are older than stored")
+    assert not _plan(stored_team_times={9_001_000: ROSTER_AT}).problems
+    assert not _plan(stored_team_times={9_001_000: ROSTER_AT.replace(tzinfo=None)}).problems
+
+
+def test_older_departed_clear_is_refused():
+    snapshot, identity, kwargs = _world()
+    kwargs["existing_assignments"] = kwargs["existing_assignments"] + [(7_777_777, "Gone Guy", 5)]
+    assert _plan((snapshot, identity, kwargs), stored_team_times={7_777_777: ROSTER_AT}).problems == []
+    plan = _plan((snapshot, identity, kwargs), stored_team_times={7_777_777: NEWER})
+    assert _has(plan, "1 departed-player clears are older")
+
+
+def test_older_stat_row_is_refused_and_equal_is_accepted():
+    plan = _plan(existing_season_rows={9_001_000: ("espn", NEWER)})
+    assert _has(plan, "1 stat rows are older than the stored ESPN row")
+    assert not _plan(existing_season_rows={9_001_000: ("espn", STAT_AT)}).problems
+
+
+def test_write_guards_reference_timestamp_columns():
+    snapshot, identity, kwargs = _world()
+    kwargs["existing_assignments"] = kwargs["existing_assignments"] + [(7_777_777, "Gone Guy", 5)]
+    plan = ie.build_plan(snapshot, identity, **kwargs)
+    assign, departed, _, seasons = _applied(plan).writes()
+    assert "players.current_team_updated_at <= excluded.current_team_updated_at" in _sql(assign)
+    assert "players.current_team_updated_at IS NULL" in _sql(assign)
+    assert "players.current_team_updated_at <=" in _sql(departed)
+    assert "player_seasons.source_fetched_at <= excluded.source_fetched_at" in _sql(seasons)
+    assert "player_seasons.source_fetched_at IS NULL" in _sql(seasons)
+
+
+def test_stat_rows_carry_no_team_but_upsert_still_sets_it():
+    plan = _plan()
+    assert all(row["team_id"] is None for row in plan.stat_rows)
+    assert "team_id = excluded.team_id" in _sql_set(ie.espn_season_upsert(plan.stat_rows))
+    assert "by_roster_team" in plan.to_dict()["stats"]
