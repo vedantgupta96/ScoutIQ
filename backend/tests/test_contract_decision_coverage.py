@@ -120,6 +120,34 @@ def test_team_extraction():
     assert _team("Signed a contract.") is None
 
 
+@pytest.mark.parametrize(
+    "text, from_team, team",
+    [
+        (
+            "Traded by the New Orleans Pelicans to the Los Angeles Clippers for Wesley Johnson.",
+            "New Orleans Pelicans",
+            "Los Angeles Clippers",
+        ),
+        (
+            "Traded by the Los Angeles Clippers with Eric Gordon, Chris Kaman to the New Orleans Hornets for Pat Placeholder.",
+            "Los Angeles Clippers",
+            "New Orleans Hornets",
+        ),
+        (
+            "As part of a 3-team trade, traded by the Boston Celtics (as a future 2013 2nd round draft pick) "
+            "with JaJuan Johnson to the Houston Rockets.",
+            "Boston Celtics",
+            "Houston Rockets",
+        ),
+        ("Waived by the Miami Heat.", None, "Miami Heat"),
+        ("Claimed on waivers by the Chicago Bulls from the Miami Heat.", None, "Chicago Bulls"),
+    ],
+)
+def test_traded_from_team_extraction(text, from_team, team):
+    t = parse_bbref_transactions(f'<p class="transaction "><strong>July 1, 2019</strong>: {text}</p>')[0]
+    assert (t.from_team, t.team) == (from_team, team)
+
+
 def test_parse_draft():
     assert parse_draft(
         "Drafted by the Miami Heat in the 1st round (14th pick) of the 2017 NBA Draft."
@@ -1027,6 +1055,7 @@ REASONS = [
     "multiple_signings_with_team",
     "entry_combines_forms",
     "earlier_termination_by_signing_team",
+    "earlier_service_with_signing_team",
     "earlier_release_team_unknown",
 ]
 
@@ -1139,7 +1168,9 @@ def test_attribution_resigned_same_team_is_unresolved_and_claim_is_not_a_termina
     claimed = _attribution(
         [(date(2019, 7, 5), "Claimed on waivers by the Owls."), (date(2019, 7, 10), OWLS_TXN)], [OWLS_ROW]
     )
-    assert (claimed["attributed"], claimed["unresolved"]) == (1, 0)
+    assert (claimed["attributed"], claimed["unresolved"]) == (0, 1)
+    assert claimed["unresolved_by_reason"]["earlier_service_with_signing_team"] == 1
+    assert claimed["unresolved_by_reason"]["earlier_termination_by_signing_team"] == 0
 
 
 def test_attribution_other_team_waiver_and_later_waiver_do_not_block():
@@ -1148,6 +1179,43 @@ def test_attribution_other_team_waiver_and_later_waiver_do_not_block():
     )
     later = _attribution([(date(2019, 7, 10), OWLS_TXN), (date(2019, 8, 1), "Waived by the Owls.")], [OWLS_ROW])
     assert other["attributed"] == later["attributed"] == 1
+
+
+TRADE_AWAY = "Traded by the Owls to the Foxes for Pat Placeholder."
+
+
+def _service_events(lines):
+    page = _page("pz01", lines, salary_rows=[OWLS_ROW])
+    events, _ = probe.build_events([page], {"pz01": 41})
+    return events
+
+
+def test_prior_service_traded_away_then_resigned_same_league_year_is_unresolved():
+    section = _attribution(
+        [(date(2019, 7, 5), TRADE_AWAY), (date(2019, 7, 10), OWLS_TXN)], [OWLS_ROW]
+    )
+    assert (section["attributed"], section["unresolved"]) == (0, 1)
+    assert section["unresolved_by_reason"]["earlier_service_with_signing_team"] == 1
+    events = _service_events([(date(2019, 7, 5), TRADE_AWAY), (date(2019, 7, 10), OWLS_TXN)])
+    assert events[0].prior_service_with_team == 1
+
+
+def test_prior_service_joined_by_trade_counts_but_previous_league_year_does_not():
+    joined = _service_events(
+        [(date(2019, 7, 5), "Traded by the Foxes to the Owls for Pat Placeholder."), (date(2019, 7, 10), OWLS_TXN)]
+    )
+    assert joined[0].prior_service_with_team == 1
+    previous_year = _attribution(
+        [(date(2018, 12, 5), TRADE_AWAY), (date(2019, 7, 10), OWLS_TXN)], [OWLS_ROW]
+    )
+    assert (previous_year["attributed"], previous_year["unresolved"]) == (1, 0)
+
+
+def test_prior_service_trade_between_other_teams_does_not_block():
+    other = "Traded by the Foxes to the Hawks for Pat Placeholder."
+    section = _attribution([(date(2019, 7, 5), other), (date(2019, 7, 10), OWLS_TXN)], [OWLS_ROW])
+    assert (section["attributed"], section["unresolved"]) == (1, 0)
+    assert _service_events([(date(2019, 7, 5), other), (date(2019, 7, 10), OWLS_TXN)])[0].prior_service_with_team == 0
 
 
 def test_build_events_is_public_and_counts_prior_terminations():
@@ -1161,6 +1229,6 @@ def test_build_events_is_public_and_counts_prior_terminations():
         ],
         [OWLS_ROW],
     )
-    events, _ = probe.build_events(inputs)
+    events, _ = probe.build_events(inputs.bbref_pages, inputs.xref)
     assert (events[0].prior_terminations_by_team, events[0].prior_releases_team_unknown) == (1, 1)
     assert events[0].attribution is None

@@ -22,23 +22,24 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from scoutiq.config import settings
-from scoutiq.etl.check_contract_decision_coverage import (
+from scoutiq.etl.contract_decision_events import (
     BbrefPage,
-    ProbeInputs,
-    _fetched_range,
     attribute_events,
     build_events,
-    load_cache,
-    render_text,
+    fetched_range,
+    load_bbref_pages,
+    render_report,
     set_in_window,
 )
 from scoutiq.etl.salary_attribution import ATTRIBUTED, RULE_VERSION, UNRESOLVED_REASONS
+from scoutiq.sources.contract_events import SalaryRow
 from scoutiq.sources.nba import team_id_for_abbreviation
 
 SOURCE = "bbref"
 CONFLICT_TEXT_CAP = 50
 
 TeamSalaryKey = tuple[int, str, str, str, int]
+SeasonEvidence = dict[tuple[int, str], list[tuple[TeamSalaryKey, SalaryRow]]]
 
 
 @dataclass
@@ -83,6 +84,17 @@ class LoadPlan:
     unresolved_by_reason: dict
     stored_team_salary_count: int
     stored_attribution_count: int
+    events_with_stored_only_evidence: int = 0
+
+
+def _keyed_page_rows(page: BbrefPage, pid: int) -> list[tuple[TeamSalaryKey, SalaryRow]]:
+    ordinals: Counter = Counter()
+    keyed: list[tuple[TeamSalaryKey, SalaryRow]] = []
+    for row in page.salary_rows:
+        ordinal = ordinals[(row.season, row.team)]
+        ordinals[(row.season, row.team)] += 1
+        keyed.append(((pid, row.season, SOURCE, row.team, ordinal), row))
+    return keyed
 
 
 def plan_team_salary_rows(
@@ -91,7 +103,7 @@ def plan_team_salary_rows(
     existing: dict[TeamSalaryKey, tuple[int, str | None, int]],
     team_id_for: Callable[[str | None], int | None],
 ) -> TeamSalaryPlan:
-    plan = TeamSalaryPlan(source_pages=len(pages), fetched_on=_fetched_range(pages))
+    plan = TeamSalaryPlan(source_pages=len(pages), fetched_on=fetched_range(pages))
     seen: set[TeamSalaryKey] = set()
     for page in pages:
         plan.source_rows += len(page.salary_rows)
@@ -101,11 +113,8 @@ def plan_team_salary_rows(
             plan.skipped_unverified_rows += len(page.salary_rows)
             continue
         fetched_on = date.fromisoformat(page.fetched_on) if page.fetched_on else None
-        ordinals: Counter = Counter()
-        for row in page.salary_rows:
-            ordinal = ordinals[(row.season, row.team)]
-            ordinals[(row.season, row.team)] += 1
-            key: TeamSalaryKey = (pid, row.season, SOURCE, row.team, ordinal)
+        for key, row in _keyed_page_rows(page, pid):
+            ordinal = key[4]
             seen.add(key)
             team_id = team_id_for(row.team_abbr)
             plan.planned_rows += 1
@@ -148,16 +157,42 @@ def plan_team_salary_rows(
     return plan
 
 
-def _row_key(ev) -> TeamSalaryKey | None:
-    if ev.attribution is None or ev.attribution.status != ATTRIBUTED:
-        return None
-    return (ev.player_id, ev.first_paid_season, SOURCE, ev.team, 0)
+def reconcile_season_evidence(
+    pages: list[BbrefPage],
+    xref: dict[str, int],
+    stored: dict[TeamSalaryKey, tuple[int, str | None, int]],
+    stored_not_in_source: list[TeamSalaryKey],
+) -> SeasonEvidence:
+    evidence: SeasonEvidence = {}
+    for page in pages:
+        pid = xref.get(page.slug)
+        if pid is None:
+            continue
+        for key, row in _keyed_page_rows(page, pid):
+            evidence.setdefault((key[0], key[1]), []).append((key, row))
+    for key in sorted(stored_not_in_source):
+        salary, team_abbr, _id = stored[key]
+        evidence.setdefault((key[0], key[1]), []).append((key, SalaryRow(key[1], key[3], salary, team_abbr)))
+    return evidence
+
+
+def attributed_row_keys(events: list, evidence: SeasonEvidence) -> dict[str, TeamSalaryKey]:
+    keys: dict[str, TeamSalaryKey] = {}
+    for ev in events:
+        att = ev.attribution
+        if att is not None and att.status == ATTRIBUTED:
+            keys[ev.event_key] = evidence[(ev.player_id, ev.first_paid_season)][att.row_index][0]
+    return keys
 
 
 def plan_attributions(
-    events: list, existing: dict[str, dict], fetched_on_by_slug: dict[str, str | None] | None = None
+    events: list,
+    existing: dict[str, dict],
+    fetched_on_by_slug: dict[str, str | None] | None = None,
+    row_keys: dict[str, TeamSalaryKey] | None = None,
 ) -> AttributionPlan:
     fetched = fetched_on_by_slug or {}
+    keys = row_keys or {}
     plan = AttributionPlan()
     produced: set[str] = set()
     for ev in events:
@@ -165,7 +200,7 @@ def plan_attributions(
         if att is None:
             continue
         produced.add(ev.event_key)
-        row_key = _row_key(ev)
+        row_key = keys.get(ev.event_key)
         item = {
             "event_key": ev.event_key,
             "player_id": ev.player_id,
@@ -276,28 +311,29 @@ def build_plan(
     pages: list[BbrefPage] | None = None,
 ) -> LoadPlan:
     if pages is None:
-        pages, _ = load_cache(raw_dir, limit_pages)
+        pages = load_bbref_pages(raw_dir, limit_pages)
     state = db_reader()
     team_salary_plan = plan_team_salary_rows(
         pages, state.xref, state.team_salaries, team_id_for_abbreviation
     )
-    inputs = ProbeInputs(
-        seasons=settings.seasons,
-        bbref_pages=pages,
-        spotrac_pages=[],
-        xref=state.xref,
-        players={},
-        salaries={},
-        caps={},
-        player_seasons={},
-        contracts=[],
-        inventory={},
+    evidence = reconcile_season_evidence(
+        pages, state.xref, state.team_salaries, team_salary_plan.stored_not_in_source
     )
-    events, _candidate = build_events(inputs)
+    stored_only = {(k[0], k[1]) for k in team_salary_plan.stored_not_in_source}
+    events, _candidate = build_events(pages, state.xref)
     set_in_window(events, settings.seasons[1:])
-    attribute_events(events, {p.slug: p for p in pages})
+    attribute_events(
+        events,
+        {p.slug: p for p in pages},
+        lambda ev: [row for _key, row in evidence.get((ev.player_id, ev.first_paid_season), [])],
+    )
     scoped = [e for e in events if e.in_window and e.attribution is not None]
-    attribution_plan = plan_attributions(scoped, state.attributions, {p.slug: p.fetched_on for p in pages})
+    attribution_plan = plan_attributions(
+        scoped,
+        state.attributions,
+        {p.slug: p.fetched_on for p in pages},
+        attributed_row_keys(scoped, evidence),
+    )
     by_status = Counter(e.attribution.status for e in scoped)
     by_reason = Counter(e.attribution.reason for e in scoped if e.attribution.status != ATTRIBUTED)
     return LoadPlan(
@@ -309,6 +345,9 @@ def build_plan(
         unresolved_by_reason={r: by_reason[r] for r in UNRESOLVED_REASONS},
         stored_team_salary_count=len(state.team_salaries),
         stored_attribution_count=len(state.attributions),
+        events_with_stored_only_evidence=sum(
+            1 for e in scoped if (e.player_id, e.first_paid_season) in stored_only
+        ),
     )
 
 
@@ -342,6 +381,7 @@ def plan_report(plan: LoadPlan, mode: str) -> dict:
             "to_update": len(at.to_update),
             "unchanged": len(at.unchanged),
             "orphaned": len(at.orphaned),
+            "events_with_stored_only_evidence": plan.events_with_stored_only_evidence,
         },
         "conflicts": ts.conflicts,
     }
@@ -441,13 +481,13 @@ def _print_report(report: dict, as_json: bool) -> None:
     if len(conflicts) > CONFLICT_TEXT_CAP:
         shown["conflicts_shown"] = f"first {CONFLICT_TEXT_CAP} of {len(conflicts)}"
     shown["conflicts"] = conflicts[:CONFLICT_TEXT_CAP]
-    print(render_text(shown))
+    print(render_report(shown))
 
 
 def main(argv: list[str] | None = None, db_reader: Callable[[], DbState] | None = None) -> int:
     args = _parser().parse_args(argv)
     raw_dir = args.raw_dir if args.raw_dir is not None else settings.RAW_DIR
-    pages, _ = load_cache(raw_dir, args.limit_pages)
+    pages = load_bbref_pages(raw_dir, args.limit_pages)
     if not pages:
         print(f"No Basketball-Reference pages found in {raw_dir}.", file=sys.stderr)
         return 1

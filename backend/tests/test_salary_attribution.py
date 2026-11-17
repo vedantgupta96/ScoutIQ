@@ -24,6 +24,7 @@ def _facts(**kw) -> SigningFacts:
         entry_combines_forms=False,
         team_signings_in_season=1,
         prior_terminations_by_team=0,
+        prior_service_with_team=0,
         prior_releases_team_unknown=0,
         in_season=False,
     )
@@ -68,6 +69,7 @@ def test_duplicate_same_team_rows_unresolved():
         (dict(team_signings_in_season=2), [OWLS], "multiple_signings_with_team"),
         (dict(entry_combines_forms=True), [OWLS], "entry_combines_forms"),
         (dict(prior_terminations_by_team=1), [OWLS], "earlier_termination_by_signing_team"),
+        (dict(prior_service_with_team=1), [OWLS], "earlier_service_with_signing_team"),
         (dict(prior_releases_team_unknown=1), [OWLS], "earlier_release_team_unknown"),
     ],
 )
@@ -86,6 +88,7 @@ def test_reason_constants_in_documented_order():
         "multiple_signings_with_team",
         "entry_combines_forms",
         "earlier_termination_by_signing_team",
+        "earlier_service_with_signing_team",
         "earlier_release_team_unknown",
     )
 
@@ -105,6 +108,12 @@ def test_precedence_first_match_wins():
     assert attribute_salary(_facts(prior_terminations_by_team=1, prior_releases_team_unknown=1), [OWLS]).reason == (
         "earlier_termination_by_signing_team"
     )
+    assert attribute_salary(
+        _facts(prior_service_with_team=1, prior_releases_team_unknown=1), [OWLS]
+    ).reason == "earlier_service_with_signing_team"
+    assert attribute_salary(
+        _facts(prior_terminations_by_team=1, prior_service_with_team=1), [OWLS]
+    ).reason == "earlier_termination_by_signing_team"
     assert attribute_salary(_facts(team=None, entry_combines_forms=True), []).reason == "signing_team_unknown"
     assert attribute_salary(_facts(team_signings_in_season=3), [FOXES]).reason == "no_row_for_signing_team"
 
@@ -126,6 +135,7 @@ def test_evidence_is_json_serializable_with_stable_keys():
         "signing_team_row_count",
         "team_signings_in_season",
         "prior_terminations_by_team",
+        "prior_service_with_team",
         "prior_releases_team_unknown",
         "in_season",
         "multi_team_season",

@@ -58,6 +58,7 @@ class Transaction:
     text: str
     kind: str
     team: str | None
+    from_team: str | None = None
 
 
 @dataclass(frozen=True)
@@ -182,6 +183,19 @@ def _extract_team(text: str, kind: str) -> str | None:
     return team or None
 
 
+_FROM_TEAM_RE = re.compile(r"traded by the (.*?)(?: \(| with | to the |$)", re.I)
+
+
+def _extract_from_team(text: str, kind: str) -> str | None:
+    if kind != "traded":
+        return None
+    m = _FROM_TEAM_RE.search(text)
+    if not m:
+        return None
+    team = m.group(1).strip()
+    return team or None
+
+
 _DRAFT_RE = re.compile(
     r"drafted by the .*? in the (\d+)(?:st|nd|rd|th) round"
     r"(?: \((\d+)(?:st|nd|rd|th) pick\))? of the (\d{4}) nba draft",
@@ -226,6 +240,7 @@ def parse_bbref_transactions(html: str) -> list[Transaction]:
                 text=text,
                 kind=kind,
                 team=_extract_team(text, kind),
+                from_team=_extract_from_team(text, kind),
             )
         )
     return out

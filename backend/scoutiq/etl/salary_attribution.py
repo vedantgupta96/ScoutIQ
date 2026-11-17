@@ -21,6 +21,7 @@ UNRESOLVED_REASONS = (
     "multiple_signings_with_team",
     "entry_combines_forms",
     "earlier_termination_by_signing_team",
+    "earlier_service_with_signing_team",
     "earlier_release_team_unknown",
 )
 
@@ -33,6 +34,7 @@ class SigningFacts:
     entry_combines_forms: bool
     team_signings_in_season: int
     prior_terminations_by_team: int
+    prior_service_with_team: int
     prior_releases_team_unknown: int
     in_season: bool
 
@@ -63,6 +65,8 @@ def attribute_salary(facts: SigningFacts, season_rows: Sequence[SalaryRow]) -> A
         reason = "entry_combines_forms"
     elif facts.prior_terminations_by_team > 0:
         reason = "earlier_termination_by_signing_team"
+    elif facts.prior_service_with_team > 0:
+        reason = "earlier_service_with_signing_team"
     elif facts.prior_releases_team_unknown > 0:
         reason = "earlier_release_team_unknown"
 
@@ -74,6 +78,7 @@ def attribute_salary(facts: SigningFacts, season_rows: Sequence[SalaryRow]) -> A
         "signing_team_row_count": len(team_rows),
         "team_signings_in_season": facts.team_signings_in_season,
         "prior_terminations_by_team": facts.prior_terminations_by_team,
+        "prior_service_with_team": facts.prior_service_with_team,
         "prior_releases_team_unknown": facts.prior_releases_team_unknown,
         "in_season": facts.in_season,
         "multi_team_season": len(season_rows) >= 2,

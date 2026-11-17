@@ -9,18 +9,25 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from scoutiq.etl import load_team_salaries as lts
-from scoutiq.etl.check_contract_decision_coverage import BbrefPage
+from scoutiq.etl.contract_decision_events import (
+    BbrefPage,
+    attribute_events,
+    build_events,
+    set_in_window,
+)
 from scoutiq.etl.load_team_salaries import (
     DbState,
     apply_plan,
+    attributed_row_keys,
     build_plan,
     main,
     plan_attributions,
     plan_report,
     plan_team_salary_rows,
     read_db_state,
+    reconcile_season_evidence,
 )
-from scoutiq.sources.contract_events import SalaryRow, parse_bbref_salary_rows
+from scoutiq.sources.contract_events import SalaryRow, parse_bbref_salary_rows, parse_bbref_transactions
 
 FIXTURES = Path(__file__).parent / "fixtures" / "contract_decisions"
 HTML = (FIXTURES / "bbref_team_salaries.html").read_text(encoding="utf-8")
@@ -102,50 +109,52 @@ def test_insert_unchanged_conflict_and_stored_not_in_source():
     assert changed not in inserted and base not in inserted
 
 
-def _events():
-    from scoutiq.etl.check_contract_decision_coverage import (
-        ProbeInputs,
-        attribute_events,
-        build_events,
-        set_in_window,
+def _txn_page(txns, rows, slug="fixpl01"):
+    html = "".join(
+        f'<p class="transaction "><strong>{d}</strong>: {t}</p>' for d, t in txns
     )
-    from scoutiq.config import settings
+    return BbrefPage(slug, parse_bbref_transactions(html), rows, "2026-01-02")
 
-    txn_html = "".join(
-        f'<p class="transaction "><strong>{d}</strong>: {t}</p>'
-        for d, t in (
+
+def _fixture_page():
+    return _txn_page(
+        (
             ("July 1, 2019", "Signed a multi-year contract with the Springfield Foxes."),
             ("July 5, 2022", "Signed a multi-year contract with the Riverton Owls."),
-        )
+        ),
+        parse_bbref_salary_rows(HTML),
     )
-    from scoutiq.sources.contract_events import parse_bbref_transactions
 
-    page = BbrefPage("fixpl01", parse_bbref_transactions(txn_html), parse_bbref_salary_rows(HTML), "2026-01-02")
-    inputs = ProbeInputs(
-        seasons=settings.seasons,
-        bbref_pages=[page],
-        spotrac_pages=[],
-        xref={"fixpl01": 7},
-        players={},
-        salaries={},
-        caps={},
-        player_seasons={},
-        contracts=[],
-        inventory={},
-    )
-    events, _ = build_events(inputs)
+
+def _evidence_events(pages, stored=None, xref=None):
+    from scoutiq.config import settings
+
+    xref = xref or {"fixpl01": 7}
+    stored = stored or {}
+    ts = plan_team_salary_rows(pages, xref, stored, team_id_for)
+    evidence = reconcile_season_evidence(pages, xref, stored, ts.stored_not_in_source)
+    events, _ = build_events(pages, xref)
     set_in_window(events, settings.seasons[1:])
-    attribute_events(events, {page.slug: page})
-    return events
+    attribute_events(
+        events,
+        {p.slug: p for p in pages},
+        lambda ev: [r for _k, r in evidence.get((ev.player_id, ev.first_paid_season), [])],
+    )
+    return events, evidence
+
+
+def _events():
+    events, evidence = _evidence_events([_fixture_page()])
+    return events, attributed_row_keys(events, evidence)
 
 
 def test_attribution_insert_update_unchanged_orphaned():
-    events = _events()
+    events, row_keys = _events()
     by_status = {e.attribution.status for e in events}
     assert by_status == {"attributed", "unresolved"}
     fetched = {"fixpl01": "2026-01-02"}
 
-    plan = plan_attributions(events, {}, fetched)
+    plan = plan_attributions(events, {}, fetched, row_keys)
     assert len(plan.to_insert) == 2 and not plan.to_update and not plan.unchanged and not plan.orphaned
     attributed = next(i for i in plan.to_insert if i["status"] == "attributed")
     assert attributed["salary"] == 2 * M
@@ -163,29 +172,96 @@ def test_attribution_insert_update_unchanged_orphaned():
         i["event_key"]: {k: i[k] for k in ("status", "reason", "salary", "rule_version", "row_key")}
         for i in plan.to_insert
     }
-    again = plan_attributions(events, stored, fetched)
+    again = plan_attributions(events, stored, fetched, row_keys)
     assert len(again.unchanged) == 2 and not again.to_insert and not again.to_update
 
     stored[attributed["event_key"]] = {**stored[attributed["event_key"]], "salary": 1}
     stored["7:2000-01-01:standard:gone"] = {
         "status": "unresolved", "reason": "x", "salary": None, "rule_version": "v1", "row_key": None
     }
-    changed = plan_attributions(events, stored, fetched)
+    changed = plan_attributions(events, stored, fetched, row_keys)
     assert [i["event_key"] for i in changed.to_update] == [attributed["event_key"]]
     assert changed.orphaned == ["7:2000-01-01:standard:gone"]
     assert len(changed.unchanged) == 1
 
     stored[attributed["event_key"]] = {**stored[attributed["event_key"]], "salary": 2 * M, "rule_version": "v0"}
-    assert [i["event_key"] for i in plan_attributions(events, stored, fetched).to_update] == [
+    assert [i["event_key"] for i in plan_attributions(events, stored, fetched, row_keys).to_update] == [
         attributed["event_key"]
     ]
 
 
+SIGN_TXN = (("July 1, 2019", "Signed a multi-year contract with the Springfield Foxes."),)
+FOX0 = (7, "2019-20", "bbref", "Springfield Foxes", 0)
+FOX1 = (7, "2019-20", "bbref", "Springfield Foxes", 1)
+OWL0 = (7, "2019-20", "bbref", "Riverton Owls", 0)
+FOX_ROW = SalaryRow("2019-20", "Springfield Foxes", 2 * M, "SPR")
+
+
+def _plan_with(rows, stored, attributions=None):
+    page = _txn_page(SIGN_TXN, rows)
+    return build_plan(
+        Path("."),
+        None,
+        lambda: DbState({"fixpl01": 7}, True, stored, attributions or {}),
+        pages=[page],
+    )
+
+
+def test_stored_second_row_for_signing_team_blocks_attribution():
+    stored = {FOX0: (2 * M, "SPR", 1), FOX1: (500_000, "SPR", 2)}
+    existing = {
+        "7:2019-07-01:standard:springfield-foxes": {
+            "status": "attributed",
+            "reason": None,
+            "salary": 2 * M,
+            "rule_version": "v1",
+            "row_key": FOX0,
+        }
+    }
+    plan = _plan_with([FOX_ROW], stored, existing)
+    assert plan.attributions_by_status == {"attributed": 0, "unresolved": 1}
+    assert plan.unresolved_by_reason["multiple_rows_for_signing_team"] == 1
+    assert plan.events_with_stored_only_evidence == 1
+    assert [(i["status"], i["reason"], i["row_key"]) for i in plan.attributions.to_update] == [
+        ("unresolved", "multiple_rows_for_signing_team", None)
+    ]
+    assert plan.team_salaries.stored_not_in_source == [FOX1]
+
+
+def test_stored_only_row_for_signing_team_attributes_when_cache_lost_season():
+    plan = _plan_with([], {FOX0: (2 * M, "SPR", 55)})
+    assert plan.attributions_by_status == {"attributed": 1, "unresolved": 0}
+    item = plan.attributions.to_insert[0]
+    assert (item["row_key"], item["salary"]) == (FOX0, 2 * M)
+    assert plan.events_with_stored_only_evidence == 1
+
+
+def test_stored_only_row_for_other_team_does_not_block_attribution():
+    plan = _plan_with([FOX_ROW], {FOX0: (2 * M, "SPR", 1), OWL0: (900_000, "RIV", 2)})
+    assert plan.attributions_by_status == {"attributed": 1, "unresolved": 0}
+    assert plan.attributions.to_insert[0]["row_key"] == FOX0
+    assert plan.events_with_stored_only_evidence == 1
+    assert plan_report(plan, "dry_run")["attributions"]["events_with_stored_only_evidence"] == 1
+
+
+def test_idempotent_replan_with_stored_only_rows():
+    stored = {FOX0: (2 * M, "SPR", 1), OWL0: (900_000, "RIV", 2)}
+    first = _plan_with([FOX_ROW], stored)
+    recorded = {
+        i["event_key"]: {k: i[k] for k in ("status", "reason", "salary", "rule_version", "row_key")}
+        for i in first.attributions.to_insert
+    }
+    again = _plan_with([FOX_ROW], stored, recorded)
+    assert (len(again.attributions.to_insert), len(again.attributions.to_update)) == (0, 0)
+    assert len(again.attributions.unchanged) == 1
+    assert (len(again.team_salaries.to_insert), len(again.team_salaries.conflicts)) == (0, 0)
+
+
 def test_idempotent_replan_against_in_memory_state():
     pages = [_page()]
-    events = _events()
+    events, row_keys = _events()
     ts = plan_team_salary_rows(pages, {"fixpl01": 7}, {}, team_id_for)
-    at = plan_attributions(events, {}, {"fixpl01": "2026-01-02"})
+    at = plan_attributions(events, {}, {"fixpl01": "2026-01-02"}, row_keys)
     existing = {
         (r["player_id"], r["season"], r["source"], r["team_name"], r["row_ordinal"]): (r["salary"], r["team_abbr"], n)
         for n, r in enumerate(ts.to_insert, 1)
@@ -195,7 +271,7 @@ def test_idempotent_replan_against_in_memory_state():
         for i in at.to_insert
     }
     ts2 = plan_team_salary_rows(pages, {"fixpl01": 7}, existing, team_id_for)
-    at2 = plan_attributions(events, stored, {"fixpl01": "2026-01-02"})
+    at2 = plan_attributions(events, stored, {"fixpl01": "2026-01-02"}, row_keys)
     assert (len(ts2.to_insert), len(ts2.conflicts), len(ts2.stored_not_in_source)) == (0, 0, 0)
     assert len(ts2.unchanged) == 5
     assert (len(at2.to_insert), len(at2.to_update), len(at2.orphaned)) == (0, 0, 0)
@@ -329,6 +405,40 @@ def test_end_to_end_apply_on_sqlite_is_idempotent(tmp_path):
     assert report["attributions"]["unresolved_by_reason"]["multiple_rows_for_signing_team"] == 1
 
 
+def test_apply_links_attribution_to_stored_only_row_on_sqlite():
+    engine = _sqlite_engine(with_tables=True)
+    now = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO player_team_salaries (id, player_id, season, team_name, team_abbr, row_ordinal, "
+                "salary, source, loaded_at) VALUES (55, 7, '2019-20', 'Springfield Foxes', 'SPR', 0, :s, "
+                "'bbref', :t)"
+            ),
+            {"s": 2 * M, "t": now.replace(tzinfo=None)},
+        )
+
+    def reader():
+        with engine.connect() as conn:
+            return read_db_state(conn)
+
+    page = _txn_page(SIGN_TXN, [])
+    plan = build_plan(Path("."), None, reader, pages=[page])
+    assert plan.team_salaries.to_insert == [] and plan.team_salaries.stored_not_in_source == [FOX0]
+    assert len(plan.attributions.to_insert) == 1
+    with Session(engine) as session:
+        apply_plan(session, plan, now)
+        session.commit()
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("select status, team_salary_id, salary from salary_decision_attributions")
+        ).one()
+    assert (row.status, row.team_salary_id, row.salary) == ("attributed", 55, 2 * M)
+    replan = build_plan(Path("."), None, reader, pages=[page])
+    assert len(replan.attributions.unchanged) == 1
+    assert (len(replan.attributions.to_insert), len(replan.attributions.to_update)) == (0, 0)
+
+
 def test_sqlite_state_without_tables_reports_not_present(tmp_path):
     engine = _sqlite_engine(with_tables=False)
     with engine.connect() as conn:
@@ -340,5 +450,5 @@ def test_sqlite_state_without_tables_reports_not_present(tmp_path):
 
 def test_loader_has_no_network_or_player_salaries_writes():
     src = Path(lts.__file__).read_text(encoding="utf-8")
-    for banned in ("import requests", "urllib", "httpx", "socket", "PlayerSalary"):
+    for banned in ("import requests", "urllib", "httpx", "socket", "PlayerSalary", "check_contract_decision_coverage"):
         assert banned not in src
