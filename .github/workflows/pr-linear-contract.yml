@@ -1,0 +1,15 @@
+name: PR Linear contract
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, ready_for_review, synchronize, converted_to_draft]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - run: python scripts/check_linear_pr.py "$GITHUB_EVENT_PATH"

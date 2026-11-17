@@ -1,13 +1,13 @@
-# Triage Labels
+# Triage labels
 
-The engineering skills use five canonical triage roles. This file maps those roles to the labels used in ScoutIQ’s GitHub issue tracker.
+| Label | Meaning |
+|---|---|
+| `needs-triage` | Maintainer evaluation required |
+| `needs-info` | Exact information required before work can continue |
+| `ready-for-agent` | Fully specified and eligible for an agent |
+| `ready-for-human` | Requires human implementation or decision |
+| `wontfix` | Will not be actioned |
 
-| Canonical role | GitHub label | Meaning |
-|---|---|---|
-| `needs-triage` | `needs-triage` | Maintainer needs to evaluate this issue |
-| `needs-info` | `needs-info` | Waiting for more information |
-| `ready-for-agent` | `ready-for-agent` | Fully specified and ready for an AFK agent |
-| `ready-for-human` | `ready-for-human` | Requires human implementation |
-| `wontfix` | `wontfix` | Will not be actioned |
+Cards waiting only on a native prerequisite may remain Backlog with `ready-for-agent`; they become eligible after the dependency recheck. Remove `ready-for-agent` for human or information blockage and apply the corresponding label. Cards with any other label in this table, except `ready-for-agent`, are ineligible for automatic pickup. `wayfinder:map` is never an executable pickup card.
 
-When a skill mentions a canonical role, use the corresponding GitHub label from this table.
+Use native Linear blockers rather than prose alone. A blocked card moves to Backlog with an exact comment and either `needs-info` or `ready-for-human`; it returns to Todo only after that need is resolved.
