@@ -42,6 +42,11 @@ def next_season(season: str) -> str | None:
     return f"{y1 + 1}-{str((y2 + 1) % 100).zfill(2)}"
 
 
+def in_progress_season() -> str | None:
+    """The season after the completed baseline; rows for it are season-to-date."""
+    return next_season(LATEST_SEASON)
+
+
 def prev_season(season: str) -> str | None:
     """The label for the season before `season`, or None if malformed. Inverse of next_season."""
     if not is_valid_season(season):
