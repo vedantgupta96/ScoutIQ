@@ -133,7 +133,16 @@ def _unavailable(key: str, name: str, error: Exception) -> DatasetProvenance:
 
 
 def _player_seasons(db: Session) -> DatasetProvenance:
-    key, name, source = "player_seasons", "Player seasons & statistics", "nba.com Advanced + Basketball-Reference"
+    key, name = "player_seasons", "Player seasons & statistics"
+    source = "nba.com Advanced + Basketball-Reference"
+    stamped = _grouped_source(db, PlayerSeason.source)
+    source_breakdown = [SourceBreakdown(source=value, count=count) for value, count in stamped]
+    if any(value == "espn" for value, _ in stamped):
+        source += "; ESPN box totals (season to date)"
+    unstamped = db.scalar(select(func.count()).select_from(PlayerSeason).where(PlayerSeason.source.is_(None)))
+    if unstamped:
+        source_breakdown.append(SourceBreakdown(source="unstamped", count=unstamped))
+    last_updated = db.scalar(select(func.max(PlayerSeason.source_fetched_at)))
     record_count = db.scalar(select(func.count()).select_from(PlayerSeason))
     player_count = db.scalar(select(func.count(distinct(PlayerSeason.player_id))))
     season_count = db.scalar(select(func.count(distinct(PlayerSeason.season))))
@@ -143,9 +152,9 @@ def _player_seasons(db: Session) -> DatasetProvenance:
         "record_count is rows in player_seasons (one per player-season); player_count is "
         "distinct players with a stat row; season_count/earliest/latest span the seasons on "
         "file. Advanced metrics merge nba.com Advanced with Basketball-Reference. "
-        "player_seasons has no per-row source column, so this label is descriptive, not a "
-        "grouped count. No ingestion timestamp is stored for this table, so freshness is "
-        "unknown, not assumed current."
+        "source_breakdown counts rows by player_seasons.source; 'unstamped' rows were loaded "
+        "before per-row stamping existed, so their freshness is unknown, not assumed current. "
+        "last_updated_utc is the newest player_seasons.source_fetched_at among stamped rows."
     )
     if latest is not None and latest > LATEST_SEASON:
         caveat += (
@@ -156,11 +165,14 @@ def _player_seasons(db: Session) -> DatasetProvenance:
         key=key,
         name=name,
         source=source,
+        source_breakdown=source_breakdown,
         record_count=record_count,
         player_count=player_count,
         season_count=season_count,
         earliest_season=earliest,
         latest_season=latest,
+        last_updated_utc=_iso(last_updated),
+        last_updated_basis="player_seasons.source_fetched_at" if last_updated is not None else None,
         caveat=caveat,
     )
 

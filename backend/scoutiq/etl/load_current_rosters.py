@@ -145,6 +145,7 @@ def plan_roster_refresh(
     season: str,
     max_departed_fraction: float = DEFAULT_MAX_DEPARTED_FRACTION,
     feed_problems: Iterable[str] = (),
+    source: str | None = None,
 ) -> RosterPlan:
     """Pure planning step: diff the feed against stored assignments and run the completeness gate."""
     existing_rows = list(existing)
@@ -201,7 +202,7 @@ def plan_roster_refresh(
 
     return RosterPlan(
         season=season,
-        source=f"{ROSTER_SOURCE_PREFIX}:{season}",
+        source=source or f"{ROSTER_SOURCE_PREFIX}:{season}",
         assignments=[
             {"player_id": r["player_id"], "full_name": r["full_name"], "current_team_id": r["current_team_id"]}
             for r in feed_rows

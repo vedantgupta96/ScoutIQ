@@ -206,7 +206,8 @@ def test_data_provenance_populated_db_reports_counts_seasons_sources_and_timesta
     # specifically, not for the absence of any digit anywhere in the label.
     for key in ("player_salaries", "contracts", "free_agent_rights", "rosters", "scout_reports"):
         assert not re.search(r"\(\d+\)", rows[key]["source"])
-    for key in ("player_seasons", "cap_constants", "two_way_status", "player_valuations"):
+    assert rows["player_seasons"]["source_breakdown"] == [{"source": "unstamped", "count": 3}]
+    for key in ("cap_constants", "two_way_status", "player_valuations"):
         assert rows[key]["source_breakdown"] == []
 
 
@@ -408,3 +409,32 @@ def test_data_provenance_never_leaks_report_bodies_or_evidence_text():
 
     for leaked in ('"source_text"', '"evidence_span"', '"citations"', '"stats"', '"features"'):
         assert leaked not in raw
+
+
+def test_player_seasons_without_stamped_rows_is_descriptive_and_unstamped():
+    db = make_session()
+    seed(db, table="player_seasons", rows=[
+        {"id": 1, "player_id": 1, "season": "2025-26", "source": None, "source_fetched_at": None},
+        {"id": 2, "player_id": 2, "season": "2025-26", "source": None, "source_fetched_at": None},
+    ])
+    ps = _by_key(_client(db).get("/data-provenance").json())["player_seasons"]
+    assert ps["source"] == "nba.com Advanced + Basketball-Reference"
+    assert ps["source_breakdown"] == [{"source": "unstamped", "count": 2}]
+    assert ps["last_updated_utc"] is None and ps["last_updated_basis"] is None
+    empty = _by_key(_client(make_session()).get("/data-provenance").json())["player_seasons"]
+    assert empty["source_breakdown"] == [] and empty["source"] == "nba.com Advanced + Basketball-Reference"
+
+
+def test_player_seasons_reports_espn_stamped_rows_beside_unstamped():
+    db = make_session()
+    seed(db, table="player_seasons", rows=[
+        {"id": 1, "player_id": 1, "season": "2025-26", "source": None, "source_fetched_at": None},
+        {"id": 2, "player_id": 2, "season": "2025-26", "source": None, "source_fetched_at": None},
+        {"id": 3, "player_id": 2, "season": "2026-27", "source": "espn", "source_fetched_at": _dt(2026, 11, 16, 1)},
+    ])
+    ps = _by_key(_client(db).get("/data-provenance").json())["player_seasons"]
+    assert ps["source"] == "nba.com Advanced + Basketball-Reference; ESPN box totals (season to date)"
+    assert ps["source_breakdown"] == [{"source": "espn", "count": 1}, {"source": "unstamped", "count": 2}]
+    assert ps["last_updated_utc"] == _dt(2026, 11, 16, 1).isoformat()
+    assert ps["last_updated_basis"] == "player_seasons.source_fetched_at"
+    assert "'unstamped' rows were loaded before per-row stamping" in ps["caveat"]

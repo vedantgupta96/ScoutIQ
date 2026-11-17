@@ -124,7 +124,8 @@ def test_load_season_is_idempotent_and_payload_carries_only_nba_keys(monkeypatch
         ls.load_season("2025-26", min_players=1)
         stmt = session.writes()[-1]
         compiled = stmt.compile(dialect=postgresql.dialect())
-        return str(compiled), compiled.params
+        params = {k: v for k, v in compiled.params.items() if not k.startswith("source_fetched_at")}
+        return str(compiled), params
 
     first, second = run_once(), run_once()
     assert first == second

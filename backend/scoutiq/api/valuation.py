@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from scoutiq.api.deps import DB
+from scoutiq.api.season import LATEST_SEASON, is_completed_season
 from scoutiq.model.predict import (
     attribute_prediction,
     build_features_from_season,
@@ -235,7 +236,7 @@ def _valuation_from_row(row: PlayerValuation, cap_row: CapConstants | None) -> V
 def value_players(db: DB, targets: Iterable[Target]) -> dict[Target, Valuation]:
     """Batch-value every (player_id, season) target: published rows first, one live
     model batch only for targets without a stored valuation."""
-    targets = list(dict.fromkeys(targets))
+    targets = [target for target in dict.fromkeys(targets) if is_completed_season(target[1])]
     if not targets:
         return {}
 
@@ -317,6 +318,10 @@ def value_player_detail(db: DB, player_id: int, season: str) -> tuple[Valuation,
     no loaded stats for this player and lets FileNotFoundError (missing model
     artifact) propagate to the caller.
     """
+    if not is_completed_season(season):
+        raise LookupError(
+            f"{season} is an in-progress season; valuations stay on the completed {LATEST_SEASON} baseline."
+        )
     stored_row = stored_valuations(
         db, [(player_id, season)], with_features=True
     ).get((player_id, season))
