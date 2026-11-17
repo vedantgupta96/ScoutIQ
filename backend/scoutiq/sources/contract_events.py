@@ -72,6 +72,7 @@ class SalaryRow:
     season: str
     team: str
     salary: int
+    team_abbr: str | None = None
 
 
 @dataclass(frozen=True)
@@ -236,6 +237,7 @@ _SEASON_CELL_RE = re.compile(r'<th[^>]*data-stat="season"[^>]*>(.*?)</th>', re.S
 _TEAM_CELL_RE = re.compile(r'<td[^>]*data-stat="team_name"[^>]*>(.*?)</td>', re.S)
 _SALARY_CELL_RE = re.compile(r'<td[^>]*data-stat="salary"[^>]*>(.*?)</td>', re.S)
 _SEASON_RE = re.compile(r"^\d{4}-\d{2}$")
+_TEAM_ABBR_RE = re.compile(r'href="/teams/([A-Z0-9]+)/\d{4}\.html"')
 
 
 def parse_bbref_salary_rows(html: str) -> list[SalaryRow]:
@@ -252,7 +254,15 @@ def parse_bbref_salary_rows(html: str) -> list[SalaryRow]:
         digits = re.sub(r"\D", "", _clean(sal.group(1)))
         if not _SEASON_RE.match(season) or not digits:
             continue
-        out.append(SalaryRow(season=season, team=_clean(t.group(1)), salary=int(digits)))
+        abbr = _TEAM_ABBR_RE.search(t.group(1))
+        out.append(
+            SalaryRow(
+                season=season,
+                team=_clean(t.group(1)),
+                salary=int(digits),
+                team_abbr=abbr.group(1) if abbr else None,
+            )
+        )
     return out
 
 

@@ -22,9 +22,19 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from math import ceil
 from pathlib import Path
+from statistics import median
 
 from scoutiq.config import settings
+from scoutiq.etl.salary_attribution import (
+    ATTRIBUTED,
+    RULE_VERSION,
+    UNRESOLVED_REASONS,
+    Attribution,
+    SigningFacts,
+    attribute_salary,
+)
 from scoutiq.model.features import primary_position
 from scoutiq.sources.contract_events import (
     SEASON_OPENERS,
@@ -188,6 +198,9 @@ class DecisionEvent:
     in_window: bool = False
     order: int = 0
     salary_multi_team: bool = False
+    prior_terminations_by_team: int = 0
+    prior_releases_team_unknown: int = 0
+    attribution: Attribution | None = None
 
     @property
     def has_terms(self) -> bool:
@@ -518,7 +531,7 @@ def _team_slug(team: str | None) -> str:
     return re.sub(r"[^a-z0-9]+", "-", team.lower()).strip("-") or "unknown"
 
 
-def _build_events(inputs: ProbeInputs) -> tuple[list[DecisionEvent], dict]:
+def build_events(inputs: ProbeInputs) -> tuple[list[DecisionEvent], dict]:
     raw: list[DecisionEvent] = []
     for page in inputs.bbref_pages:
         pid = inputs.xref.get(page.slug)
@@ -581,6 +594,19 @@ def _build_events(inputs: ProbeInputs) -> tuple[list[DecisionEvent], dict]:
                         and o.date >= t.date
                         and o.team is not None
                     ),
+                    prior_terminations_by_team=sum(
+                        1
+                        for o in dated
+                        if o.kind == "waived"
+                        and o.team == t.team
+                        and league_year(o.date) == sly
+                        and o.date < t.date
+                    ),
+                    prior_releases_team_unknown=sum(
+                        1
+                        for o in dated
+                        if o.kind == "released" and league_year(o.date) == sly and o.date < t.date
+                    ),
                     next_kind=dated[i + 1].kind if i + 1 < len(dated) else None,
                     next_date=dated[i + 1].date if i + 1 < len(dated) else None,
                     first_paid_season=None if t.kind == "extension" else signing_season,
@@ -613,6 +639,43 @@ def _build_events(inputs: ProbeInputs) -> tuple[list[DecisionEvent], dict]:
         "duplicates_text_variant": variant,
     }
     return events, candidate
+
+
+def set_in_window(events: list[DecisionEvent], window: list[str]) -> None:
+    for ev in events:
+        if ev.kind == "extension":
+            ev.in_window = ev.signing_season in window
+        else:
+            ev.in_window = ev.first_paid_season in window
+
+
+def _team_signings(events: list[DecisionEvent]) -> Counter:
+    return Counter(
+        (e.player_id, e.first_paid_season, e.team)
+        for e in events
+        if e.kind != "extension" and e.first_paid_season is not None
+    )
+
+
+def attribute_events(events: list[DecisionEvent], pages_by_slug: dict[str, BbrefPage]) -> None:
+    team_signings = _team_signings(events)
+    for ev in events:
+        if ev.kind == "extension" or ev.form_class != "standard_form" or ev.first_paid_season is None:
+            continue
+        rows = [r for r in pages_by_slug[ev.slug].salary_rows if r.season == ev.first_paid_season]
+        ev.attribution = attribute_salary(
+            SigningFacts(
+                event_key=ev.event_key,
+                team=ev.team,
+                first_paid_season=ev.first_paid_season,
+                entry_combines_forms=ev.entry_combines_forms,
+                team_signings_in_season=team_signings[(ev.player_id, ev.first_paid_season, ev.team)],
+                prior_terminations_by_team=ev.prior_terminations_by_team,
+                prior_releases_team_unknown=ev.prior_releases_team_unknown,
+                in_season=ev.phase == "in_season",
+            ),
+            rows,
+        )
 
 
 def _link_spotrac(
@@ -974,19 +1037,103 @@ def _multi_team_salary(inputs: ProbeInputs) -> dict:
     return out
 
 
+def _is_attributed(e: DecisionEvent) -> bool:
+    return e.attribution is not None and e.attribution.status == ATTRIBUTED
+
+
+def _reason_counts(evs: list[DecisionEvent]) -> dict:
+    counts = Counter(e.attribution.reason for e in evs if e.attribution is not None and not _is_attributed(e))
+    return {r: counts[r] for r in UNRESOLVED_REASONS}
+
+
+def _v1_label_effect(inputs: ProbeInputs) -> dict:
+    stored_differs = 0
+    seasons = 0
+    gaps: list[float] = []
+    for page in inputs.bbref_pages:
+        pid = inputs.xref.get(page.slug)
+        if pid is None:
+            continue
+        by_season: dict[str, list[int]] = defaultdict(list)
+        for r in page.salary_rows:
+            by_season[r.season].append(r.salary)
+        for season, vals in by_season.items():
+            stored = inputs.salaries.get((pid, season))
+            if len(vals) < 2 or stored is None:
+                continue
+            seasons += 1
+            if stored != sum(vals):
+                stored_differs += 1
+            cap = inputs.caps.get(season)
+            if cap is not None and cap.salary_cap:
+                gaps.append((sum(vals) - stored) / cap.salary_cap * 100)
+    ordered = sorted(gaps)
+    return {
+        "player_seasons": seasons,
+        "stored_differs_from_row_sum": stored_differs,
+        "gap_pct_of_cap": {
+            "n": len(ordered),
+            "median": round(median(ordered), 2) if ordered else None,
+            "p90": round(ordered[ceil(0.9 * len(ordered)) - 1], 2) if ordered else None,
+            "over_1_point": sum(1 for g in ordered if g > 1.0),
+        },
+        "note": "row sum is shown only to size the gap; it is not a valid season label when rows mix contracts",
+    }
+
+
+def _attribution_section(
+    inputs: ProbeInputs, std: list[DecisionEvent], otherwise_usable: list[DecisionEvent]
+) -> dict:
+    attributed = [e for e in std if _is_attributed(e)]
+    ambiguous = [e for e in std if e.label_ambiguous]
+    multi = [e for e in std if e.salary_multi_team]
+    other_form = [e for e in std if e.season_other_form_signings > 0 or e.entry_combines_forms]
+    usable = [e for e in std if e.usable]
+    usable_not_attributed = [e for e in usable if not _is_attributed(e)]
+    with_attribution = [e for e in attributed if e.cap_ok and e.has_prior_bpm]
+    return {
+        "rule_version": RULE_VERSION,
+        "events": len(std),
+        "attributed": len(attributed),
+        "unresolved": len(std) - len(attributed),
+        "unresolved_by_reason": _reason_counts(std),
+        "ambiguous_signings": {
+            "events": len(ambiguous),
+            "attributed": sum(1 for e in ambiguous if _is_attributed(e)),
+            "previously_reported_resolvable": sum(1 for e in ambiguous if e.per_team_salary_resolvable),
+        },
+        "multi_team_salary": {
+            "events": len(multi),
+            "attributed": sum(1 for e in multi if _is_attributed(e)),
+            "otherwise_usable": len(otherwise_usable),
+            "otherwise_usable_attributed": sum(1 for e in otherwise_usable if _is_attributed(e)),
+        },
+        "other_form_excluded": {
+            "events": len(other_form),
+            "attributed": sum(1 for e in other_form if _is_attributed(e)),
+        },
+        "usable_today": len(usable),
+        "usable_with_attribution": len(with_attribution),
+        "newly_usable": sum(1 for e in with_attribution if not e.usable),
+        "usable_today_not_attributed": len(usable_not_attributed),
+        "usable_today_not_attributed_by_reason": _reason_counts(usable_not_attributed),
+        "usable_and_attributed_salary_differs": sum(
+            1 for e in usable if _is_attributed(e) and e.attribution.salary != e.first_year_salary
+        ),
+        "in_season_attributed": sum(1 for e in attributed if e.phase == "in_season"),
+        "v1_label_effect": _v1_label_effect(inputs),
+    }
+
+
 def build_report(
     inputs: ProbeInputs, *, min_proxy_pct: float = 0.025, max_tolerance: float = 0.015
 ) -> dict:
     window = inputs.seasons[1:]
-    events, candidate = _build_events(inputs)
+    events, candidate = build_events(inputs)
     raw_events = candidate["n_events"]
     duplicates = raw_events - len(events)
 
-    for ev in events:
-        if ev.kind == "extension":
-            ev.in_window = ev.signing_season in window
-        else:
-            ev.in_window = ev.first_paid_season in window
+    set_in_window(events, window)
 
     groups: dict[tuple, list[DecisionEvent]] = defaultdict(list)
     for ev in events:
@@ -994,11 +1141,8 @@ def build_report(
             groups[(ev.player_id, ev.first_paid_season)].append(ev)
     page_by_slug = {p.slug: p for p in inputs.bbref_pages}
     ambiguous_groups = {k: v for k, v in groups.items() if len(v) >= 2}
-    team_signings = Counter(
-        (e.player_id, e.first_paid_season, e.team)
-        for e in events
-        if e.kind != "extension" and e.first_paid_season is not None
-    )
+    team_signings = _team_signings(events)
+    attribute_events(events, page_by_slug)
     for evs in ambiguous_groups.values():
         for ev in evs:
             ev.label_ambiguous = True
@@ -1322,6 +1466,7 @@ def build_report(
             "events_without_stored_contract": without_stored,
         },
         "candidate_key": candidate,
+        "per_team_attribution": _attribution_section(inputs, std, otherwise_usable),
     }
 
 

@@ -12,9 +12,9 @@ Design choices:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -116,6 +116,55 @@ class PlayerSalary(Base):
     season: Mapped[str] = mapped_column(String(7), index=True)
     salary: Mapped[int | None] = mapped_column(BigInteger)  # dollars
     source: Mapped[str] = mapped_column(String(32), default="bbref")
+
+
+class PlayerTeamSalary(Base):
+    """One source salary row per team obligation, kept verbatim. Never a season total: several rows per
+    team-season are possible and each is distinct evidence."""
+    __tablename__ = "player_team_salaries"
+    __table_args__ = (
+        UniqueConstraint(
+            "player_id", "season", "source", "team_name", "row_ordinal", name="uq_player_team_salary_row"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.player_id"), index=True, nullable=False)
+    season: Mapped[str] = mapped_column(String(7), index=True, nullable=False)
+    team_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    team_abbr: Mapped[str | None] = mapped_column(String(8))
+    team_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("teams.team_id"))
+    row_ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    salary: Mapped[int] = mapped_column(BigInteger, nullable=False)  # dollars
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_ref: Mapped[str | None] = mapped_column(String(128))
+    source_fetched_on: Mapped[date | None] = mapped_column(Date)
+    loaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SalaryDecisionAttribution(Base):
+    """Which source salary row, if any, can be attributed to a contract decision, with the rule and
+    evidence behind the call. Unresolved decisions are stored with the reason they stayed unresolved."""
+    __tablename__ = "salary_decision_attributions"
+    __table_args__ = (UniqueConstraint("event_key", name="uq_salary_decision_attribution_event"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.player_id"), index=True, nullable=False)
+    signing_date: Mapped[date] = mapped_column(Date, nullable=False)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    team_name: Mapped[str | None] = mapped_column(String(64))
+    first_paid_season: Mapped[str] = mapped_column(String(7), index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)  # attributed | unresolved
+    reason: Mapped[str | None] = mapped_column(String(48))
+    team_salary_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("player_team_salaries.id"))
+    salary: Mapped[int | None] = mapped_column(BigInteger)
+    rule_version: Mapped[str] = mapped_column(String(16), nullable=False)
+    evidence: Mapped[dict | None] = mapped_column(JSONB)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_ref: Mapped[str | None] = mapped_column(String(128))
+    source_fetched_on: Mapped[date | None] = mapped_column(Date)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class CapConstants(Base):
