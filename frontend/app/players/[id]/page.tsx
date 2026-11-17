@@ -743,11 +743,11 @@ function WorkspaceTabs({
 function StatlineBlock({
   eyebrow,
   items,
-  note,
+  notes,
 }: {
   eyebrow: string;
   items: Array<{ value: string; label: string }>;
-  note?: string;
+  notes?: string[];
 }) {
   return (
     <div className="siq-production-line">
@@ -760,7 +760,9 @@ function StatlineBlock({
           </span>
         ))}
       </div>
-      {note ? <p className="ds-note">{note}</p> : null}
+      {notes?.map((note) => (
+        <p key={note} className="ds-note">{note}</p>
+      ))}
     </div>
   );
 }
@@ -807,8 +809,8 @@ function SeasonToDateRow({ data }: { data: PlayerSeasonToDate | null }) {
   if (stats.ast_pg != null) items.push({ value: stats.ast_pg.toFixed(1), label: 'ast' });
   if (stats.ts_pct != null) items.push({ value: (stats.ts_pct * 100).toFixed(1), label: 'ts%' });
 
-  const asOf = data.as_of_utc
-    ? new Date(data.as_of_utc).toLocaleDateString('en-US', {
+  const fetched = data.fetched_at_utc
+    ? new Date(data.fetched_at_utc).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
@@ -816,10 +818,10 @@ function SeasonToDateRow({ data }: { data: PlayerSeasonToDate | null }) {
       })
     : null;
   const sourceLabel = data.source === 'espn' ? 'ESPN' : data.source === 'nba.com' ? 'NBA.com' : data.source;
-  const teamPart = data.team ? ` · ${data.team.abbreviation}` : '';
-  const note = `${asOf ? `As of ${asOf} · ` : ''}${sourceLabel ?? ''}${teamPart} · not used in the valuation`;
+  const fetchedLine = [fetched ? `Fetched ${fetched}` : null, sourceLabel].filter(Boolean).join(' · ');
+  const notes = [...(fetchedLine ? [fetchedLine] : []), data.note];
 
-  return <StatlineBlock eyebrow={`${data.season} season to date`} items={items} note={note} />;
+  return <StatlineBlock eyebrow={`${data.season} season to date`} items={items} notes={notes} />;
 }
 
 function ContractSpark({ contract }: { contract: PlayerContractResponse | null }) {

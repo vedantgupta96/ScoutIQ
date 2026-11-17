@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from scoutiq.api import extension, rosters
 from scoutiq.api.deps import DB
-from scoutiq.api.rosters import PlayerSummary, TeamSummary, _player_summary_from_parts, latest_stats_row
+from scoutiq.api.rosters import PlayerSummary, _player_summary_from_parts, latest_stats_row
 from scoutiq.api.season import LATEST_SEASON, in_progress_season, next_season
 from scoutiq.api.valuation import (
     Valuation,
@@ -624,9 +624,8 @@ class PlayerSeasonToDate(BaseModel):
     season: str | None
     valuation_season: str
     stats: SeasonToDateStats | None
-    team: TeamSummary | None
     source: str | None
-    as_of_utc: str | None
+    fetched_at_utc: str | None
     note: str
 
 
@@ -654,9 +653,8 @@ def get_player_season_to_date(player_id: int, db: DB = None):
             season=season,
             valuation_season=LATEST_SEASON,
             stats=None,
-            team=None,
             source=None,
-            as_of_utc=None,
+            fetched_at_utc=None,
             note=f"No {season} regular-season stats are on file for this player.",
         )
 
@@ -682,9 +680,8 @@ def get_player_season_to_date(player_id: int, db: DB = None):
             ast_pg=_per_game(box.get("AST"), row.gp),
             ts_pct=ts_pct,
         ),
-        team=rosters.team_summary(db.get(Team, row.team_id)) if row.team_id else None,
         source=row.source,
-        as_of_utc=row.source_fetched_at.isoformat() if row.source_fetched_at else None,
+        fetched_at_utc=row.source_fetched_at.isoformat() if row.source_fetched_at else None,
         note=(
             f"{season} is in progress: these are season-to-date totals and can trail the latest game day. "
             f"Valuation stays on the completed {LATEST_SEASON} season."

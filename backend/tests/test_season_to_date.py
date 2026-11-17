@@ -66,9 +66,8 @@ def test_season_to_date_per_game_values():
         "ast_pg": 4.1,
         "ts_pct": round(220 / (2 * (160 + 0.44 * 50)), 4),
     }
-    assert body["team"]["abbreviation"] == "ORL"
     assert body["source"] == "espn"
-    assert body["as_of_utc"] == FETCHED_AT.isoformat()
+    assert body["fetched_at_utc"] == FETCHED_AT.isoformat()
     assert "in progress" in body["note"]
     assert LATEST_SEASON in body["note"]
 
@@ -79,9 +78,8 @@ def test_season_to_date_without_row_has_no_stats():
     body = client.get(f"/players/{PLAYER_ID}/season-to-date").json()
 
     assert body["stats"] is None
-    assert body["team"] is None
     assert body["source"] is None
-    assert body["as_of_utc"] is None
+    assert body["fetched_at_utc"] is None
     assert body["note"] == "No 2026-27 regular-season stats are on file for this player."
 
 

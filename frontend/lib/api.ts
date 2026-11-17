@@ -1005,9 +1005,8 @@ export interface PlayerSeasonToDate {
   season: string | null;
   valuation_season: string;
   stats: SeasonToDateStats | null;
-  team: TeamSummary | null;
   source: string | null;
-  as_of_utc: string | null;
+  fetched_at_utc: string | null;
   note: string;
 }
 
