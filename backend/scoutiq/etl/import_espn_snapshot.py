@@ -336,7 +336,9 @@ def build_plan(
     plan.departed, plan.moved = roster_plan.departed, roster_plan.moved
     plan.added, plan.unchanged = roster_plan.added, roster_plan.unchanged
     plan.departed_updated_at = (
-        _parse_time(max(plan.roster_times, key=_parse_time)) if plan.roster_times else None
+        _parse_time(min(plan.roster_times, key=_parse_time))
+        if plan.roster_times and all(t is not None for _, t in roster_stamps.values())
+        else None
     )
 
     stat_ids, zero_ids = set(snapshot["stats"]), set(snapshot["none_played"])
@@ -525,15 +527,15 @@ def apply_plan(session, plan: ImportPlan) -> None:
                 ),
             )
         )
-    if plan.departed:
-        clear = update(Player).where(Player.player_id.in_([d["player_id"] for d in plan.departed]))
-        if plan.departed_updated_at is not None:
-            clear = clear.where(or_(
+    if plan.departed and plan.departed_updated_at is not None:
+        session.execute(
+            update(Player)
+            .where(Player.player_id.in_([d["player_id"] for d in plan.departed]))
+            .where(or_(
                 Player.current_team_updated_at.is_(None),
                 Player.current_team_updated_at <= plan.departed_updated_at,
             ))
-        session.execute(
-            clear.values(
+            .values(
                 current_team_id=None,
                 current_team_source=plan.source + CURRENT_TEAM_NOT_ON_ROSTER_SUFFIX,
                 current_team_updated_at=plan.departed_updated_at,

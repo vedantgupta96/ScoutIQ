@@ -752,3 +752,32 @@ def test_stat_rows_carry_no_team_but_upsert_still_sets_it():
     assert all(row["team_id"] is None for row in plan.stat_rows)
     assert "team_id = excluded.team_id" in _sql_set(ie.espn_season_upsert(plan.stat_rows))
     assert "by_roster_team" in plan.to_dict()["stats"]
+
+
+def test_departed_clear_is_bounded_by_oldest_roster_time():
+    snapshot, identity, kwargs = _world()
+    snapshot["roster_fetched_at"][1] = "2026-11-16T00:00:00+00:00"
+    snapshot["roster_fetched_at"][2] = "2026-11-16T02:00:00+00:00"
+    oldest = datetime(2026, 11, 16, 0, tzinfo=timezone.utc)
+    kwargs["existing_assignments"] = kwargs["existing_assignments"] + [(7_777_777, "Gone Guy", 1)]
+
+    refused = ie.build_plan(snapshot, identity, **{**kwargs, "stored_team_times": {7_777_777: oldest + timedelta(hours=1)}})
+    assert _has(refused, "1 departed-player clears are older")
+
+    older = ie.build_plan(snapshot, identity, **{**kwargs, "stored_team_times": {7_777_777: oldest - timedelta(hours=1)}})
+    assert older.problems == [] and older.departed_updated_at == oldest
+
+    equal = ie.build_plan(snapshot, identity, **{**kwargs, "stored_team_times": {7_777_777: oldest}})
+    assert equal.problems == []
+
+    clear = [s for s in _applied(older).writes() if isinstance(s, Update)][0]
+    assert oldest in clear.compile(dialect=postgresql.dialect()).params.values()
+
+
+def test_departed_updated_at_is_none_when_any_roster_time_is_bad_and_no_clear_is_issued():
+    snapshot, identity, kwargs = _world()
+    snapshot["roster_fetched_at"][1] = "garbage"
+    kwargs["existing_assignments"] = kwargs["existing_assignments"] + [(7_777_777, "Gone Guy", 1)]
+    plan = ie.build_plan(snapshot, identity, **kwargs)
+    assert plan.departed_updated_at is None and plan.departed and not plan.complete
+    assert not [s for s in _applied(plan).writes() if isinstance(s, Update)]
