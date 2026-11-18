@@ -34,6 +34,16 @@ function formatApiError(detail: unknown, fallback: string): string {
 const GET_CACHE_TTL_MS = 5 * 60 * 1000;
 const getCache = new Map<string, { expires: number; data: unknown }>();
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body && !headers.has('Content-Type')) {
@@ -48,7 +58,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     const detail = typeof body === 'object' && body != null && 'detail' in body
       ? (body as { detail: unknown }).detail
       : null;
-    throw new Error(formatApiError(detail, res.statusText));
+    throw new ApiError(formatApiError(detail, res.statusText), res.status);
   }
   return res.json() as Promise<T>;
 }

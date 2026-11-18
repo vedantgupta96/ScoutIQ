@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PlayerContractResponse, ValuationResponse } from '@/lib/api';
 import {
+  contractCoverageNote,
   contractHeading,
   contractStatusNote,
   extensionWindow,
@@ -47,7 +48,9 @@ describe('LeBron case: prior-team pay and an expired contract', () => {
 
   it('presents the contract as history with no extension window', () => {
     expect(contractHeading(expiredContract)).toBe('Contract history');
-    expect(contractStatusNote(expiredContract)).toBe('Ended 2025-26 · no 2026-27 contract on file');
+    expect(contractStatusNote(expiredContract)).toBe(
+      'Ended 2025-26 · no 2026-27 contract on file · spotrac, fetched 2026-06-08',
+    );
     expect(extensionWindow(expiredContract)).toEqual({
       value: '—',
       sub: 'Ended 2025-26 · no 2026-27 contract on file',
@@ -71,6 +74,7 @@ describe('contract covering the current season', () => {
   it('keeps the current heading and extension window', () => {
     expect(contractHeading(currentContract)).toBe('Current contract');
     expect(contractStatusNote(currentContract)).toBe('Covers 2026-27 · spotrac, fetched 2026-06-08');
+    expect(contractCoverageNote(currentContract)).toBe('Covers 2026-27');
     expect(extensionWindow(currentContract)).toEqual({ value: '2028-29', sub: 'First season after listed deal' });
   });
 
@@ -85,19 +89,23 @@ describe('missing and degenerate contracts', () => {
     expect(extensionWindow(undefined)).toEqual({ value: '—', sub: 'Contract data loading' });
   });
 
-  it('reports no contract on file when the contract request failed', () => {
-    expect(extensionWindow(null, true)).toEqual({ value: '—', sub: 'No contract on file' });
+  it('distinguishes loading, missing and unavailable contract states', () => {
+    expect(extensionWindow(null, 'loading')).toEqual({ value: '—', sub: 'Contract data loading' });
+    expect(extensionWindow(null, 'missing')).toEqual({ value: '—', sub: 'No contract on file' });
+    expect(extensionWindow(null, 'unavailable')).toEqual({ value: '—', sub: 'Contract data unavailable' });
+    expect(extensionWindow(currentContract, 'loaded')).toEqual({ value: '2028-29', sub: 'First season after listed deal' });
   });
 
   it('handles contracts with no year rows', () => {
     const noYears = { ...expiredContract, coverage_status: 'no_years', coverage_start_season: null, coverage_end_season: null } as PlayerContractResponse;
-    expect(contractStatusNote(noYears)).toBe('No contract years on file');
+    expect(contractStatusNote(noYears)).toBe('No contract years on file · spotrac, fetched 2026-06-08');
+    expect(contractCoverageNote(noYears)).toBe('No contract years on file');
     expect(extensionWindow(noYears)).toEqual({ value: '—', sub: 'No contract years on file' });
   });
 
   it('describes a deal that only starts after the current season', () => {
     const future = { ...expiredContract, coverage_status: 'future_only', coverage_start_season: '2027-28' } as PlayerContractResponse;
-    expect(contractStatusNote(future)).toBe('Starts 2027-28 · no 2026-27 contract on file');
+    expect(contractStatusNote(future)).toBe('Starts 2027-28 · no 2026-27 contract on file · spotrac, fetched 2026-06-08');
   });
 });
 

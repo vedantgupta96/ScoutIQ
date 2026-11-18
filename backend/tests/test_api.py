@@ -761,7 +761,9 @@ def test_player_contract_expired_deal_is_history_not_current(monkeypatch):
     assert body["coverage_end_season"] == "2025-26"
     assert body["extension_start_season"] is None
     assert body["contract_team"]["abbreviation"] == "MEM"
-    assert body["caveat"].startswith("Contract history: this spotrac record covers 2024-25 to 2025-26")
+    assert body["caveat"].startswith(
+        "Contract history: this spotrac record (fetched 2026-06-01) covers 2024-25 to 2025-26"
+    )
     assert "does not cover 2026-27" in body["caveat"]
     assert len(body["years_detail"]) == 2
 

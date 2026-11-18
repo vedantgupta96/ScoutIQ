@@ -1,4 +1,4 @@
-from scoutiq.api.financial_status import CURRENT_SEASON, contract_coverage
+from scoutiq.api.financial_status import CURRENT_SEASON, contract_coverage, non_current_contract_caveat
 
 
 def test_current_season_is_in_progress_season():
@@ -29,3 +29,10 @@ def test_mixed_missing_current_season_decided_by_max():
 
 def test_explicit_current_season_override():
     assert contract_coverage(["2025-26"], current_season="2025-26") == "current"
+
+
+def test_non_current_caveat_includes_fetch_date_only_when_known():
+    with_date = non_current_contract_caveat("expired", "spotrac", "2024-25", "2025-26", fetched="2026-06-08")
+    assert with_date.startswith("Contract history: this spotrac record (fetched 2026-06-08) covers 2024-25 to 2025-26")
+    without = non_current_contract_caveat("expired", "spotrac", "2024-25", "2025-26")
+    assert without.startswith("Contract history: this spotrac record covers 2024-25 to 2025-26")

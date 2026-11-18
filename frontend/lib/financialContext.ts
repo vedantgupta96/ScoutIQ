@@ -29,12 +29,12 @@ export function contractHeading(contract: Pick<ContractFields, 'coverage_status'
   return contract.coverage_status === 'current' ? 'Current contract' : 'Contract history';
 }
 
-export function contractStatusNote(contract: ContractFields): string {
+export type ContractFetchState = 'loading' | 'loaded' | 'missing' | 'unavailable';
+
+export function contractCoverageNote(contract: ContractFields): string {
   switch (contract.coverage_status) {
-    case 'current': {
-      const fetched = contract.scraped_at ? `, fetched ${contract.scraped_at.slice(0, 10)}` : '';
-      return `Covers ${contract.current_season} · ${contract.source}${fetched}`;
-    }
+    case 'current':
+      return `Covers ${contract.current_season}`;
     case 'expired':
       return `Ended ${contract.coverage_end_season} · no ${contract.current_season} contract on file`;
     case 'future_only':
@@ -44,15 +44,24 @@ export function contractStatusNote(contract: ContractFields): string {
   }
 }
 
+export function contractStatusNote(contract: ContractFields): string {
+  const fetched = contract.scraped_at ? `, fetched ${contract.scraped_at.slice(0, 10)}` : '';
+  return `${contractCoverageNote(contract)} · ${contract.source}${fetched}`;
+}
+
 export function extensionWindow(
   contract: ContractFields | null | undefined,
-  missing = false,
+  state: ContractFetchState = 'loading',
 ): { value: string; sub: string } {
-  if (!contract) return { value: '—', sub: missing ? 'No contract on file' : 'Contract data loading' };
+  if (!contract) {
+    if (state === 'missing') return { value: '—', sub: 'No contract on file' };
+    if (state === 'unavailable') return { value: '—', sub: 'Contract data unavailable' };
+    return { value: '—', sub: 'Contract data loading' };
+  }
   if (contract.coverage_status === 'current') {
     return { value: contract.extension_start_season ?? '—', sub: 'First season after listed deal' };
   }
-  return { value: '—', sub: contractStatusNote(contract) };
+  return { value: '—', sub: contractCoverageNote(contract) };
 }
 
 export function simulateActionLabel(contract: ContractFields | null | undefined): string {

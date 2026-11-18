@@ -28,22 +28,24 @@ def non_current_contract_caveat(
     start: str | None,
     end: str | None,
     current_season: str = CURRENT_SEASON,
+    fetched: str | None = None,
 ) -> str:
     tail = (
         f"No contract covering {current_season} is on file; "
         "a current roster listing does not verify pay."
     )
+    record = f"{source} record" + (f" (fetched {fetched})" if fetched else "")
     if coverage_status == "expired":
         return (
-            f"Contract history: this {source} record covers {start} to {end} "
+            f"Contract history: this {record} covers {start} to {end} "
             f"and does not cover {current_season}. {tail}"
         )
     if coverage_status == "future_only":
         return (
-            f"Contract history: this {source} record starts {start} "
+            f"Contract history: this {record} starts {start} "
             f"and does not cover {current_season}. {tail}"
         )
     return (
-        f"Contract history: this {source} record has no contract years on file "
+        f"Contract history: this {record} has no contract years on file "
         f"and does not cover {current_season}. {tail}"
     )

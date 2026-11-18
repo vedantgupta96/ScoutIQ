@@ -772,7 +772,11 @@ def get_player_contract(player_id: int, db: DB = None):
         )
     else:
         caveat = non_current_contract_caveat(
-            coverage_status, contract.source, coverage_start, coverage_end
+            coverage_status,
+            contract.source,
+            coverage_start,
+            coverage_end,
+            fetched=contract.scraped_at.date().isoformat() if contract.scraped_at else None,
         )
     return PlayerContractResponse(
         player_id=player_id,

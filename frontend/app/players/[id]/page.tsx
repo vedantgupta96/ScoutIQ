@@ -19,6 +19,7 @@ import {
   Lock,
 } from 'lucide-react';
 import {
+  ApiError,
   getPlayerContract,
   getPlayerExtension,
   getPlayerRationale,
@@ -59,6 +60,7 @@ import { teamVisual } from '@/lib/teamVisuals';
 import {
   contractHeading,
   contractStatusNote,
+  type ContractFetchState,
   extensionWindow,
   payContextNote,
   payLabel,
@@ -648,7 +650,7 @@ function DecisionHero({
   valueUsd,
   actualUsd,
   contract,
-  contractMissing,
+  contractState,
   extensionHref,
   onSimulate,
 }: {
@@ -656,7 +658,7 @@ function DecisionHero({
   valueUsd: number;
   actualUsd: number | null;
   contract: PlayerContractResponse | null;
-  contractMissing: boolean;
+  contractState: ContractFetchState;
   extensionHref: string;
   onSimulate: () => void;
 }) {
@@ -711,8 +713,8 @@ function DecisionHero({
         />
         <StatTile
           label="Extension window"
-          value={extensionWindow(contract, contractMissing).value}
-          sub={extensionWindow(contract, contractMissing).sub}
+          value={extensionWindow(contract, contractState).value}
+          sub={extensionWindow(contract, contractState).sub}
           size="sm"
         />
       </div>
@@ -946,7 +948,7 @@ function FrontOfficeRead({
   valueUsd,
   actualUsd,
   contract,
-  contractMissing,
+  contractState,
   similarMarket,
   scoutRatings,
   seasonToDate,
@@ -955,7 +957,7 @@ function FrontOfficeRead({
   valueUsd: number;
   actualUsd: number | null;
   contract: PlayerContractResponse | null;
-  contractMissing: boolean;
+  contractState: ContractFetchState;
   similarMarket: SimilarPlayersResponse | null;
   scoutRatings: PlayerScoutRatingsResponse | null;
   seasonToDate: PlayerSeasonToDate | null;
@@ -1018,8 +1020,8 @@ function FrontOfficeRead({
           />
           <MetricPlate
             label="Extension"
-            value={extensionWindow(contract, contractMissing).value}
-            sub={extensionWindow(contract, contractMissing).sub}
+            value={extensionWindow(contract, contractState).value}
+            sub={extensionWindow(contract, contractState).sub}
           />
         </div>
         <ValueDrivers attribution={val.attribution} />
@@ -1158,7 +1160,7 @@ function RationaleCard({ playerId }: { playerId: number }) {
 function ActionRail({
   val,
   contract,
-  contractMissing,
+  contractState,
   similarMarket,
   extensionHref,
   activeTab,
@@ -1167,7 +1169,7 @@ function ActionRail({
 }: {
   val: ValuationResponse;
   contract: PlayerContractResponse | null;
-  contractMissing: boolean;
+  contractState: ContractFetchState;
   similarMarket: SimilarPlayersResponse | null;
   extensionHref: string;
   activeTab: WorkspaceTab;
@@ -1201,7 +1203,7 @@ function ActionRail({
         <RiskLine label="Active view" value={WORKSPACE_TABS.find((tab) => tab.key === activeTab)?.label ?? '—'} />
         <RiskLine label="Value gap" value={val.gap_pct != null ? `${signed(val.gap_pct)}%` : '—'} tone={val.gap_pct != null && val.gap_pct >= 0 ? 'positive' : 'negative'} />
         <RiskLine label="Top comp" value={topMatch?.player.full_name ?? 'Loading'} />
-        <RiskLine label="Extension window" value={extensionWindow(contract, contractMissing).value} />
+        <RiskLine label="Extension window" value={extensionWindow(contract, contractState).value} />
       </Panel>
 
       <RationaleCard playerId={val.player_id} />
@@ -1326,6 +1328,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
 
   const [contract, setContract] = useState<PlayerContractResponse | null>(null);
   const [contractError, setContractError] = useState<string | null>(null);
+  const [contractState, setContractState] = useState<ContractFetchState>('loading');
   const [extension, setExtension] = useState<PlayerExtensionResponse | null>(null);
   const [seasonToDate, setSeasonToDate] = useState<PlayerSeasonToDate | null>(null);
   const [extensionError, setExtensionError] = useState<string | null>(null);
@@ -1345,9 +1348,16 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   useEffect(() => {
     setContract(null);
     setContractError(null);
+    setContractState('loading');
     getPlayerContract(playerId)
-      .then(setContract)
-      .catch((e: unknown) => setContractError(e instanceof Error ? e.message : 'Failed to load contract.'));
+      .then((c) => {
+        setContract(c);
+        setContractState('loaded');
+      })
+      .catch((e: unknown) => {
+        setContractError(e instanceof Error ? e.message : 'Failed to load contract.');
+        setContractState(e instanceof ApiError && e.status === 404 ? 'missing' : 'unavailable');
+      });
 
     setScoutRatings(null);
     setScoutError(null);
@@ -1430,7 +1440,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
         valueUsd={valueUsd}
         actualUsd={actualUsd}
         contract={contract}
-        contractMissing={contractError != null}
+        contractState={contractState}
         extensionHref={extensionHref}
         onSimulate={() => router.push(extensionHref)}
       />
@@ -1452,7 +1462,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
                   valueUsd={valueUsd}
                   actualUsd={actualUsd}
                   contract={contract}
-                  contractMissing={contractError != null}
+                  contractState={contractState}
                   similarMarket={similarMarket}
                   scoutRatings={scoutRatings}
                   seasonToDate={seasonToDate}
@@ -1502,7 +1512,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
         <ActionRail
           val={val}
           contract={contract}
-          contractMissing={contractError != null}
+          contractState={contractState}
           similarMarket={similarMarket}
           extensionHref={extensionHref}
           activeTab={activeTab}
