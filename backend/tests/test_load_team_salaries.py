@@ -452,3 +452,122 @@ def test_loader_has_no_network_or_player_salaries_writes():
     src = Path(lts.__file__).read_text(encoding="utf-8")
     for banned in ("import requests", "urllib", "httpx", "socket", "PlayerSalary", "check_contract_decision_coverage"):
         assert banned not in src
+
+
+FOX_KEY = "7:2019-07-01:standard:springfield-foxes"
+
+
+def _stored_record(event_key, status, reason, evidence, *, team="Springfield Foxes", season="2019-20"):
+    return {
+        "status": status,
+        "reason": reason,
+        "salary": None,
+        "rule_version": "v1",
+        "row_key": None,
+        "player_id": 7,
+        "first_paid_season": season,
+        "team_name": team,
+        "evidence": evidence,
+    }
+
+
+def _zero_evidence(**over):
+    return {
+        "team_signings_in_season": 1,
+        "prior_terminations_by_team": 0,
+        "prior_service_with_team": 0,
+        "prior_releases_team_unknown": 0,
+        **over,
+    }
+
+
+def test_stored_signing_evidence_survives_cache_refresh_on_sqlite():
+    engine = _sqlite_engine(with_tables=True)
+    now = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    waiver = ("July 2, 2019", "Waived by the Springfield Foxes.")
+    early = ("July 5, 2019", "Signed a multi-year contract with the Springfield Foxes.")
+    late = ("July 20, 2019", "Signed a multi-year contract with the Springfield Foxes.")
+
+    def reader():
+        with engine.connect() as conn:
+            return read_db_state(conn)
+
+    v1 = _txn_page((waiver, early, late), [FOX_ROW])
+    plan1 = build_plan(Path("."), None, reader, pages=[v1])
+    assert plan1.attributions_by_status == {"attributed": 0, "unresolved": 2}
+    assert plan1.unresolved_by_reason["multiple_signings_with_team"] == 2
+    with Session(engine) as session:
+        apply_plan(session, plan1, now)
+        session.commit()
+
+    v2 = _txn_page((late,), [FOX_ROW])
+    plan2 = build_plan(Path("."), None, reader, pages=[v2])
+    assert plan2.attributions_by_status == {"attributed": 0, "unresolved": 1}
+    assert plan2.unresolved_by_reason["multiple_signings_with_team"] == 1
+    assert plan2.promotions == 0
+    assert plan2.attributions.to_update == [] and plan2.attributions.to_insert == []
+    assert plan2.attributions.unchanged == ["7:2019-07-20:standard:springfield-foxes"]
+    assert plan2.attributions.orphaned == ["7:2019-07-05:standard:springfield-foxes"]
+    assert plan2.events_with_stored_signing_evidence == 1
+    report = plan_report(plan2, "dry_run")["attributions"]
+    assert (report["events_with_stored_signing_evidence"], report["promotions"]) == (1, 0)
+
+    query = text("select event_key, status, reason, salary from salary_decision_attributions order by event_key")
+    with engine.connect() as conn:
+        before = conn.execute(query).all()
+    with Session(engine) as session:
+        apply_plan(session, plan2, datetime(2027, 1, 1, tzinfo=timezone.utc))
+        session.commit()
+    with engine.connect() as conn:
+        after = conn.execute(query).all()
+    assert after == before
+
+
+def test_stored_termination_evidence_blocks_after_waiver_dropped_from_cache():
+    stored = {
+        FOX_KEY: _stored_record(
+            FOX_KEY, "unresolved", "earlier_termination_by_signing_team", _zero_evidence(prior_terminations_by_team=1)
+        )
+    }
+    plan = _plan_with([FOX_ROW], {FOX0: (2 * M, "SPR", 1)}, stored)
+    assert plan.attributions_by_status == {"attributed": 0, "unresolved": 1}
+    assert plan.unresolved_by_reason["earlier_termination_by_signing_team"] == 1
+    assert plan.events_with_stored_signing_evidence == 1
+    assert plan.attributions.unchanged == [FOX_KEY]
+    assert plan.promotions == 0
+
+
+def test_empty_db_leaves_attribution_unadjusted():
+    plan = _plan_with([FOX_ROW], {})
+    assert plan.attributions_by_status == {"attributed": 1, "unresolved": 0}
+    assert (plan.events_with_stored_signing_evidence, plan.promotions) == (0, 0)
+    assert len(plan.attributions.to_insert) == 1
+
+
+@pytest.mark.parametrize(
+    "orphan_key,team,season",
+    [
+        ("7:2019-06-01:standard:riverton-owls", "Riverton Owls", "2019-20"),
+        ("7:2018-07-01:standard:springfield-foxes", "Springfield Foxes", "2018-19"),
+    ],
+)
+def test_orphan_for_other_team_or_season_does_not_block(orphan_key, team, season):
+    stored = {
+        orphan_key: _stored_record(
+            orphan_key, "unresolved", "no_row_for_signing_team", _zero_evidence(), team=team, season=season
+        )
+    }
+    plan = _plan_with([FOX_ROW], {FOX0: (2 * M, "SPR", 1)}, stored)
+    assert plan.attributions_by_status == {"attributed": 1, "unresolved": 0}
+    assert plan.attributions.orphaned == [orphan_key]
+    assert plan.events_with_stored_signing_evidence == 0
+
+
+def test_promotions_counts_unresolved_to_attributed_updates():
+    stored = {FOX_KEY: _stored_record(FOX_KEY, "unresolved", "no_salary_rows_for_season", _zero_evidence())}
+    plan = _plan_with([FOX_ROW], {FOX0: (2 * M, "SPR", 1)}, stored)
+    assert plan.attributions_by_status == {"attributed": 1, "unresolved": 0}
+    assert [i["event_key"] for i in plan.attributions.to_update] == [FOX_KEY]
+    assert plan.promotions == 1
+    assert plan.events_with_stored_signing_evidence == 0
+    assert plan_report(plan, "dry_run")["attributions"]["promotions"] == 1

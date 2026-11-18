@@ -10,7 +10,7 @@ import re
 import sys
 from collections import Counter
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
 
@@ -328,6 +328,7 @@ def attribute_events(
     events: list[DecisionEvent],
     pages_by_slug: dict[str, BbrefPage],
     season_rows_for: Callable[[DecisionEvent], Sequence[SalaryRow]] | None = None,
+    adjust_facts: Callable[[DecisionEvent, SigningFacts], SigningFacts] | None = None,
 ) -> None:
     signings = team_signings(events)
     for ev in events:
@@ -337,20 +338,20 @@ def attribute_events(
             rows = season_rows_for(ev)
         else:
             rows = [r for r in pages_by_slug[ev.slug].salary_rows if r.season == ev.first_paid_season]
-        ev.attribution = attribute_salary(
-            SigningFacts(
-                event_key=ev.event_key,
-                team=ev.team,
-                first_paid_season=ev.first_paid_season,
-                entry_combines_forms=ev.entry_combines_forms,
-                team_signings_in_season=signings[(ev.player_id, ev.first_paid_season, ev.team)],
-                prior_terminations_by_team=ev.prior_terminations_by_team,
-                prior_service_with_team=ev.prior_service_with_team,
-                prior_releases_team_unknown=ev.prior_releases_team_unknown,
-                in_season=ev.phase == "in_season",
-            ),
-            rows,
+        facts = SigningFacts(
+            event_key=ev.event_key,
+            team=ev.team,
+            first_paid_season=ev.first_paid_season,
+            entry_combines_forms=ev.entry_combines_forms,
+            team_signings_in_season=signings[(ev.player_id, ev.first_paid_season, ev.team)],
+            prior_terminations_by_team=ev.prior_terminations_by_team,
+            prior_service_with_team=ev.prior_service_with_team,
+            prior_releases_team_unknown=ev.prior_releases_team_unknown,
+            in_season=ev.phase == "in_season",
         )
+        if adjust_facts is not None:
+            facts = adjust_facts(ev, facts)
+        ev.attribution = attribute_salary(facts, rows)
 
 def _scalar(v) -> str:
     if isinstance(v, float):

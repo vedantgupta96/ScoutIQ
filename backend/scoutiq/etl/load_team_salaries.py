@@ -2,7 +2,10 @@
 
 Source salary rows are insert-only evidence: a stored row is never updated or deleted, and a
 stored row whose salary differs from the source is reported as a conflict, never overwritten.
-`player_salaries` is not touched. Default is a read-only dry run; `--apply` writes in one
+`player_salaries` is not touched.
+Stored attribution records take part in attribution the same way: a stored signing the cache no longer
+produces still counts toward the signing team's signings, and stored evidence counts are only ever
+raised, so evidence of ambiguity is never lost across runs. Default is a read-only dry run; `--apply` writes in one
 transaction and refuses when the tables are missing or any conflict exists.
 
 Usage:
@@ -17,7 +20,7 @@ import json
 import sys
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -31,7 +34,7 @@ from scoutiq.etl.contract_decision_events import (
     render_report,
     set_in_window,
 )
-from scoutiq.etl.salary_attribution import ATTRIBUTED, RULE_VERSION, UNRESOLVED_REASONS
+from scoutiq.etl.salary_attribution import ATTRIBUTED, RULE_VERSION, UNRESOLVED_REASONS, SigningFacts
 from scoutiq.sources.contract_events import SalaryRow
 from scoutiq.sources.nba import team_id_for_abbreviation
 
@@ -85,6 +88,8 @@ class LoadPlan:
     stored_team_salary_count: int
     stored_attribution_count: int
     events_with_stored_only_evidence: int = 0
+    events_with_stored_signing_evidence: int = 0
+    promotions: int = 0
 
 
 def _keyed_page_rows(page: BbrefPage, pid: int) -> list[tuple[TeamSalaryKey, SalaryRow]]:
@@ -235,6 +240,14 @@ def plan_attributions(
     return plan
 
 
+def _evidence_dict(value) -> dict:
+    if value is None:
+        return {}
+    if isinstance(value, str):
+        value = json.loads(value)
+    return value if isinstance(value, dict) else {}
+
+
 def read_db_state(conn) -> DbState:
     from sqlalchemy import inspect, text
 
@@ -273,6 +286,10 @@ def read_db_state(conn) -> DbState:
             "reason": r.reason,
             "salary": None if r.salary is None else int(r.salary),
             "rule_version": r.rule_version,
+            "player_id": int(r.player_id),
+            "first_paid_season": r.first_paid_season,
+            "team_name": r.team_name,
+            "evidence": _evidence_dict(r.evidence),
             "row_key": None
             if r.ts_id is None
             else (int(r.ts_player_id), r.ts_season, r.ts_source, r.ts_team_name, int(r.ts_row_ordinal)),
@@ -280,6 +297,7 @@ def read_db_state(conn) -> DbState:
         for r in conn.execute(
             text(
                 "select a.event_key, a.status, a.reason, a.salary, a.rule_version, "
+                "a.player_id, a.first_paid_season, a.team_name, a.evidence, "
                 "s.id as ts_id, s.player_id as ts_player_id, s.season as ts_season, "
                 "s.source as ts_source, s.team_name as ts_team_name, s.row_ordinal as ts_row_ordinal "
                 "from salary_decision_attributions a "
@@ -322,10 +340,40 @@ def build_plan(
     stored_only = {(k[0], k[1]) for k in team_salary_plan.stored_not_in_source}
     events, _candidate = build_events(pages, state.xref)
     set_in_window(events, settings.seasons[1:])
+    produced = {
+        e.event_key
+        for e in events
+        if e.in_window and e.kind != "extension" and e.form_class == "standard_form" and e.first_paid_season is not None
+    }
+    orphan_signings = Counter(
+        (a.get("player_id"), a.get("first_paid_season"), a.get("team_name"))
+        for key, a in state.attributions.items()
+        if key not in produced
+    )
+    adjusted: set[str] = set()
+
+    def adjust(ev, facts: SigningFacts) -> SigningFacts:
+        counts = {
+            "team_signings_in_season": facts.team_signings_in_season
+            + orphan_signings[(ev.player_id, ev.first_paid_season, ev.team)],
+            "prior_terminations_by_team": facts.prior_terminations_by_team,
+            "prior_service_with_team": facts.prior_service_with_team,
+            "prior_releases_team_unknown": facts.prior_releases_team_unknown,
+        }
+        stored = state.attributions.get(ev.event_key)
+        if stored is not None:
+            stored_evidence = stored.get("evidence") or {}
+            counts = {k: max(v, int(stored_evidence.get(k) or 0)) for k, v in counts.items()}
+        adjusted_facts = replace(facts, **counts)
+        if adjusted_facts != facts:
+            adjusted.add(ev.event_key)
+        return adjusted_facts
+
     attribute_events(
         events,
         {p.slug: p for p in pages},
         lambda ev: [row for _key, row in evidence.get((ev.player_id, ev.first_paid_season), [])],
+        adjust,
     )
     scoped = [e for e in events if e.in_window and e.attribution is not None]
     attribution_plan = plan_attributions(
@@ -333,6 +381,11 @@ def build_plan(
         state.attributions,
         {p.slug: p.fetched_on for p in pages},
         attributed_row_keys(scoped, evidence),
+    )
+    promotions = sum(
+        1
+        for item in attribution_plan.to_update
+        if state.attributions[item["event_key"]]["status"] == "unresolved" and item["status"] == ATTRIBUTED
     )
     by_status = Counter(e.attribution.status for e in scoped)
     by_reason = Counter(e.attribution.reason for e in scoped if e.attribution.status != ATTRIBUTED)
@@ -348,6 +401,8 @@ def build_plan(
         events_with_stored_only_evidence=sum(
             1 for e in scoped if (e.player_id, e.first_paid_season) in stored_only
         ),
+        events_with_stored_signing_evidence=len(adjusted),
+        promotions=promotions,
     )
 
 
@@ -382,6 +437,8 @@ def plan_report(plan: LoadPlan, mode: str) -> dict:
             "unchanged": len(at.unchanged),
             "orphaned": len(at.orphaned),
             "events_with_stored_only_evidence": plan.events_with_stored_only_evidence,
+            "events_with_stored_signing_evidence": plan.events_with_stored_signing_evidence,
+            "promotions": plan.promotions,
         },
         "conflicts": ts.conflicts,
     }
