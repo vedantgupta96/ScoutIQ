@@ -21,8 +21,13 @@ export function payContextNote(val: PayFields): string {
   return base;
 }
 
+export function verdictCaptionParts(val: PayFields): { prefix: string; season: string; suffix: string } {
+  return { prefix: 'Verdict on ', season: paySeason(val), suffix: ' pay' };
+}
+
 export function verdictCaption(val: PayFields): string {
-  return `Verdict on ${paySeason(val)} pay`;
+  const { prefix, season, suffix } = verdictCaptionParts(val);
+  return `${prefix}${season}${suffix}`;
 }
 
 export function contractHeading(contract: Pick<ContractFields, 'coverage_status'>): string {

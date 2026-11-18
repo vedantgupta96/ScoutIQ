@@ -43,6 +43,7 @@ import {
 } from '@/lib/api';
 import { Panel } from '@/components/ui/Panel';
 import { Badge } from '@/components/ui/Badge';
+import { Alert } from '@/components/ui/Alert';
 import { Button, ButtonLink } from '@/components/ui/Button';
 import { Tabs } from '@/components/ui/Tabs';
 import { StatTile } from '@/components/ui/StatTile';
@@ -65,7 +66,7 @@ import {
   payContextNote,
   payLabel,
   simulateActionLabel,
-  verdictCaption,
+  verdictCaptionParts,
 } from '@/lib/financialContext';
 import { useApi } from '@/lib/useApi';
 
@@ -307,13 +308,6 @@ function ContractCard({
                 <Badge tone="warning" variant="outline" size="sm">Option decision →</Badge>
               </Link>
             )}
-            <Badge
-              tone={contract.coverage_status === 'current' ? 'neutral' : 'warning'}
-              variant="outline"
-              size="sm"
-            >
-              {contractStatusNote(contract)}
-            </Badge>
             <Badge tone="neutral" variant="outline" size="sm">{contract.source}</Badge>
           </div>
         ) : undefined
@@ -323,6 +317,11 @@ function ContractCard({
         <p className="siq-profile-state">Loading contract…</p>
       ) : (
         <>
+          {contract.coverage_status === 'current' ? (
+            <p className="ds-note ds-m0">{contractStatusNote(contract)}</p>
+          ) : (
+            <Alert tone="warning">{contractStatusNote(contract)}</Alert>
+          )}
           <div className="siq-contract-summary-strip">
             <StatTile
               label="Total value"
@@ -662,6 +661,7 @@ function DecisionHero({
   extensionHref: string;
   onSimulate: () => void;
 }) {
+  const captionParts = verdictCaptionParts(val);
   return (
     <section className="siq-decision-hero">
       {val.current_team && (
@@ -730,7 +730,11 @@ function DecisionHero({
           }}
         >
           <VerdictPill gapPct={val.gap_pct} label={val.verdict_label} tone={val.verdict_tone} size="lg" />
-          <small className="ds-note">{verdictCaption(val)}</small>
+          <small className="ds-note">
+            {captionParts.prefix}
+            <span style={{ whiteSpace: 'nowrap' }}>{captionParts.season}</span>
+            {captionParts.suffix}
+          </small>
         </span>
         <Button variant="primary" icon={<SlidersHorizontal size={15} />} onClick={onSimulate}>
           Run simulation

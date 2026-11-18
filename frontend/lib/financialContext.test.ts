@@ -7,6 +7,7 @@ import {
   extensionWindow,
   payContextNote,
   payLabel,
+  verdictCaptionParts,
   simulateActionLabel,
   verdictCaption,
 } from './financialContext';
@@ -44,6 +45,7 @@ describe('LeBron case: prior-team pay and an expired contract', () => {
     expect(payLabel(lebronValuation)).toBe('2025-26 pay');
     expect(payContextNote(lebronValuation)).toBe('2025-26 cap hit with LAL');
     expect(verdictCaption(lebronValuation)).toBe('Verdict on 2025-26 pay');
+    expect(verdictCaptionParts(lebronValuation)).toEqual({ prefix: 'Verdict on ', season: '2025-26', suffix: ' pay' });
   });
 
   it('presents the contract as history with no extension window', () => {
