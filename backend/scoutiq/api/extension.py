@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from sqlalchemy import desc, select
 
 from scoutiq.api.cap import cap_for, load_season_caps
+from scoutiq.api.financial_status import CURRENT_SEASON, contract_coverage
 from scoutiq.api.free_agency import DECISION_THRESHOLD_PCT
 from scoutiq.api.season import LATEST_SEASON, next_season
 from scoutiq.api.valuation import value_player_detail, value_players
@@ -101,6 +102,19 @@ def _extension_eligibility(
     final_contract_season = max(all_seasons) if all_seasons else None
     remaining = [row for row in year_rows if row.season > LATEST_SEASON]
     guaranteed_remaining = [row for row in remaining if not (row.is_player_option or row.is_team_option)]
+
+    coverage = contract_coverage(all_seasons)
+    if coverage != "current":
+        if coverage == "no_years":
+            lead = "No contract years are on file"
+        elif coverage == "expired":
+            lead = f"The listed contract ended {final_contract_season}"
+        else:
+            lead = f"The listed contract starts {min(all_seasons)}"
+        return False, (
+            f"{lead}; no contract covering {CURRENT_SEASON} is on file, "
+            "so there is no current deal to extend."
+        ), None, final_contract_season
 
     if not remaining:
         return False, (
@@ -285,6 +299,8 @@ def rank_extension_candidates(db, *, limit: int = 30) -> list[ExtensionCandidate
 
     eligible: dict[int, dict] = {}
     for cid, years in years_by_contract.items():
+        if contract_coverage([cy.season for cy in years]) != "current":
+            continue
         remaining = [cy for cy in years if cy.season > LATEST_SEASON]
         guaranteed_remaining = [
             cy for cy in remaining if not (cy.is_player_option or cy.is_team_option)

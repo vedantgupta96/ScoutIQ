@@ -137,3 +137,30 @@ def test_extension_verdict_matches_decide_extension_behavior():
 
     verdict, tone, rationale, gap_pct = ext.extension_verdict(25.0, None)
     assert (verdict, tone, gap_pct) == ("Extend at market", "neutral", None)
+
+
+def test_batch_summaries_exclude_future_only_contract(monkeypatch):
+    _patch_value_players(monkeypatch, {1: 25.0, 2: 25.0})
+    db = _rostered_db(
+        players=[
+            Player(player_id=1, full_name="Covers"),
+            Player(player_id=2, full_name="FutureOnly"),
+        ],
+        contracts=[
+            Contract(id=1, player_id=1, season_start="2023-24", years=1),
+            Contract(id=2, player_id=2, season_start="2027-28", years=1),
+        ],
+        contract_years=[
+            ContractYear(contract_id=1, season="2026-27", cap_pct=0.15,
+                         is_player_option=False, is_team_option=False),
+            ContractYear(contract_id=2, season="2027-28", cap_pct=0.15,
+                         is_player_option=False, is_team_option=False),
+        ],
+        rostered_ids=[1, 2],
+    )
+
+    summaries = ext.batch_extension_summaries(db, [1, 2])
+
+    assert summaries[1].eligible is True
+    assert summaries[2].eligible is False
+    assert [c.player_id for c in ext.rank_extension_candidates(db)] == [1]

@@ -19,6 +19,7 @@ import {
   Lock,
 } from 'lucide-react';
 import {
+  ApiError,
   getPlayerContract,
   getPlayerExtension,
   getPlayerRationale,
@@ -42,6 +43,7 @@ import {
 } from '@/lib/api';
 import { Panel } from '@/components/ui/Panel';
 import { Badge } from '@/components/ui/Badge';
+import { Alert } from '@/components/ui/Alert';
 import { Button, ButtonLink } from '@/components/ui/Button';
 import { Tabs } from '@/components/ui/Tabs';
 import { StatTile } from '@/components/ui/StatTile';
@@ -56,6 +58,16 @@ import { PlayerCutout } from '@/components/players/PlayerCutout';
 import { traitLabel } from '@/lib/present';
 import { clamp, fmtM, fmtPct, pctPosition, roundedDomainMax, signed } from '@/lib/utils';
 import { teamVisual } from '@/lib/teamVisuals';
+import {
+  contractHeading,
+  contractStatusNote,
+  type ContractFetchState,
+  extensionWindow,
+  payContextNote,
+  payLabel,
+  simulateActionLabel,
+  verdictCaptionParts,
+} from '@/lib/financialContext';
 import { useApi } from '@/lib/useApi';
 
 function StatRow({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
@@ -286,12 +298,12 @@ function ContractCard({
     <Panel
       variant="board"
       teamAccent
-      eyebrow="Current contract"
+      eyebrow={contract ? contractHeading(contract) : 'Contract'}
       icon={<FileText size={15} />}
       action={
         contract ? (
           <div className="siq-row">
-            {contract.years_detail.some((y) => y.is_player_option || y.is_team_option) && (
+            {contract.coverage_status === 'current' && contract.years_detail.some((y) => y.is_player_option || y.is_team_option) && (
               <Link href="/free-agency?tab=options" className="siq-plain-link">
                 <Badge tone="warning" variant="outline" size="sm">Option decision →</Badge>
               </Link>
@@ -305,6 +317,11 @@ function ContractCard({
         <p className="siq-profile-state">Loading contract…</p>
       ) : (
         <>
+          {contract.coverage_status === 'current' ? (
+            <p className="ds-note ds-m0">{contractStatusNote(contract)}</p>
+          ) : (
+            <Alert tone="warning">{contractStatusNote(contract)}</Alert>
+          )}
           <div className="siq-contract-summary-strip">
             <StatTile
               label="Total value"
@@ -314,8 +331,8 @@ function ContractCard({
             />
             <StatTile
               label="Next extension"
-              value={contract.extension_start_season ?? '—'}
-              sub="First season after listed deal"
+              value={extensionWindow(contract).value}
+              sub={extensionWindow(contract).sub}
               size="sm"
             />
           </div>
@@ -340,10 +357,12 @@ function ExtensionCard({
   extension,
   error,
   currentSeasonGap,
+  gapSeason,
 }: {
   extension: PlayerExtensionResponse | null;
   error: string | null;
   currentSeasonGap: number | null;
+  gapSeason: string;
 }) {
   if (error) {
     return null;
@@ -360,8 +379,8 @@ function ExtensionCard({
     Math.abs(extension.gap_pct) >= 1 &&
     Math.abs(currentSeasonGap) >= 1
       ? currentSeasonGap > 0
-        ? 'Underpaid on this season’s cap hit, but the deal escalates past the model value by its final guaranteed year — which is what an extension would build on.'
-        : 'Overpaid on this season’s cap hit, yet the final guaranteed year lands below the model value — the anchor an extension would build on.'
+        ? `Underpaid on the ${gapSeason} cap hit, but the deal escalates past the model value by its final guaranteed year — which is what an extension would build on.`
+        : `Overpaid on the ${gapSeason} cap hit, yet the final guaranteed year lands below the model value — the anchor an extension would build on.`
       : null;
 
   return (
@@ -394,9 +413,9 @@ function ExtensionCard({
               size="sm"
             />
             <StatTile
-              label="Current pay"
+              label="Final guaranteed year"
               value={extension.current_pay_pct != null ? fmtPct(extension.current_pay_pct) : '—'}
-              sub="Final guaranteed year, % of cap"
+              sub="% of cap"
               size="sm"
             />
             <StatTile
@@ -630,6 +649,7 @@ function DecisionHero({
   valueUsd,
   actualUsd,
   contract,
+  contractState,
   extensionHref,
   onSimulate,
 }: {
@@ -637,9 +657,11 @@ function DecisionHero({
   valueUsd: number;
   actualUsd: number | null;
   contract: PlayerContractResponse | null;
+  contractState: ContractFetchState;
   extensionHref: string;
   onSimulate: () => void;
 }) {
+  const captionParts = verdictCaptionParts(val);
   return (
     <section className="siq-decision-hero">
       {val.current_team && (
@@ -655,7 +677,7 @@ function DecisionHero({
         <Avatar name={val.player_name} size="xl" position={val.position} playerId={val.player_id} />
         <div className="siq-min0">
           <div className="siq-decision-kicker">
-            <Badge tone="neutral" size="sm">{val.season}</Badge>
+            <Badge tone="neutral" size="sm">{`Valuation ${val.season}`}</Badge>
             {val.current_team && (
               <TeamLogo
                 teamId={val.current_team.team_id}
@@ -664,7 +686,7 @@ function DecisionHero({
                 size="sm"
               />
             )}
-            <span>{val.current_team?.name ?? 'Team unavailable'}</span>
+            <span>{val.current_team ? `${val.current_team.name} · current roster` : 'Team unavailable'}</span>
           </div>
           <h1>{val.player_name}</h1>
           <div className="siq-decision-subline">
@@ -683,16 +705,16 @@ function DecisionHero({
           size="sm"
         />
         <StatTile
-          label="Current pay"
+          label={payLabel(val)}
           value={actualUsd != null ? fmtM(actualUsd) : '—'}
           unit={val.actual_pct != null ? fmtPct(val.actual_pct) : undefined}
-          sub={`${val.season} cap hit`}
+          sub={payContextNote(val)}
           size="sm"
         />
         <StatTile
           label="Extension window"
-          value={contract?.extension_start_season ?? '—'}
-          sub={contract ? `${contract.years} listed years` : 'Contract data loading'}
+          value={extensionWindow(contract, contractState).value}
+          sub={extensionWindow(contract, contractState).sub}
           size="sm"
         />
       </div>
@@ -708,6 +730,11 @@ function DecisionHero({
           }}
         >
           <VerdictPill gapPct={val.gap_pct} label={val.verdict_label} tone={val.verdict_tone} size="lg" />
+          <small className="ds-note">
+            {captionParts.prefix}
+            <span style={{ whiteSpace: 'nowrap' }}>{captionParts.season}</span>
+            {captionParts.suffix}
+          </small>
         </span>
         <Button variant="primary" icon={<SlidersHorizontal size={15} />} onClick={onSimulate}>
           Run simulation
@@ -925,6 +952,7 @@ function FrontOfficeRead({
   valueUsd,
   actualUsd,
   contract,
+  contractState,
   similarMarket,
   scoutRatings,
   seasonToDate,
@@ -933,6 +961,7 @@ function FrontOfficeRead({
   valueUsd: number;
   actualUsd: number | null;
   contract: PlayerContractResponse | null;
+  contractState: ContractFetchState;
   similarMarket: SimilarPlayersResponse | null;
   scoutRatings: PlayerScoutRatingsResponse | null;
   seasonToDate: PlayerSeasonToDate | null;
@@ -953,10 +982,10 @@ function FrontOfficeRead({
         <div className="siq-brief-copy">
           <p>
             Production prices {val.player_name} at <strong>{fmtPct(val.value_pct)}</strong> of the cap
-            {val.actual_pct != null ? <> against a <strong>{fmtPct(val.actual_pct)}</strong> current hit</> : null}.
+            {val.actual_pct != null ? <> against a <strong>{fmtPct(val.actual_pct)}</strong> {val.pay_season ?? val.season} cap hit</> : null}.
           </p>
           <p>
-            The current case reads as <strong>{val.gap_pct != null ? `${signed(val.gap_pct)}% of cap` : 'incomplete'}</strong>
+            The {val.season} case reads as <strong>{val.gap_pct != null ? `${signed(val.gap_pct)}% of cap` : 'incomplete'}</strong>
             {topMatch ? <> with <strong>{topMatch.player.full_name}</strong> as the closest visible market comp.</> : <> while the market set loads.</>}
           </p>
           {val.caveat && (
@@ -984,7 +1013,7 @@ function FrontOfficeRead({
           <MetricPlate
             label="Pay $"
             value={actualUsd != null ? fmtM(actualUsd) : '—'}
-            sub={val.actual_pct != null ? `${fmtPct(val.actual_pct)} of cap` : `${val.season} cap hit`}
+            sub={val.actual_pct != null ? `${fmtPct(val.actual_pct)} of ${val.season} cap` : payContextNote(val)}
             tone={val.gap_pct != null && val.gap_pct < 0 ? 'negative' : 'neutral'}
           />
           <MetricPlate
@@ -995,8 +1024,8 @@ function FrontOfficeRead({
           />
           <MetricPlate
             label="Extension"
-            value={contract?.extension_start_season ?? '—'}
-            sub={contract ? `${contract.years} listed yrs` : 'loading'}
+            value={extensionWindow(contract, contractState).value}
+            sub={extensionWindow(contract, contractState).sub}
           />
         </div>
         <ValueDrivers attribution={val.attribution} />
@@ -1135,6 +1164,7 @@ function RationaleCard({ playerId }: { playerId: number }) {
 function ActionRail({
   val,
   contract,
+  contractState,
   similarMarket,
   extensionHref,
   activeTab,
@@ -1143,6 +1173,7 @@ function ActionRail({
 }: {
   val: ValuationResponse;
   contract: PlayerContractResponse | null;
+  contractState: ContractFetchState;
   similarMarket: SimilarPlayersResponse | null;
   extensionHref: string;
   activeTab: WorkspaceTab;
@@ -1155,7 +1186,7 @@ function ActionRail({
       <Panel variant="card" eyebrow="Action rail" icon={<SlidersHorizontal size={15} />}>
         <div className="siq-action-stack">
           <Button variant="primary" icon={<SlidersHorizontal size={15} />} onClick={onSimulate}>
-            Simulate extension
+            {simulateActionLabel(contract)}
           </Button>
           <ButtonLink href={extensionHref} icon={<DollarSign size={15} />}>
             Open contract pricer
@@ -1176,7 +1207,7 @@ function ActionRail({
         <RiskLine label="Active view" value={WORKSPACE_TABS.find((tab) => tab.key === activeTab)?.label ?? '—'} />
         <RiskLine label="Value gap" value={val.gap_pct != null ? `${signed(val.gap_pct)}%` : '—'} tone={val.gap_pct != null && val.gap_pct >= 0 ? 'positive' : 'negative'} />
         <RiskLine label="Top comp" value={topMatch?.player.full_name ?? 'Loading'} />
-        <RiskLine label="Extension window" value={contract?.extension_start_season ?? '—'} />
+        <RiskLine label="Extension window" value={extensionWindow(contract, contractState).value} />
       </Panel>
 
       <RationaleCard playerId={val.player_id} />
@@ -1301,6 +1332,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
 
   const [contract, setContract] = useState<PlayerContractResponse | null>(null);
   const [contractError, setContractError] = useState<string | null>(null);
+  const [contractState, setContractState] = useState<ContractFetchState>('loading');
   const [extension, setExtension] = useState<PlayerExtensionResponse | null>(null);
   const [seasonToDate, setSeasonToDate] = useState<PlayerSeasonToDate | null>(null);
   const [extensionError, setExtensionError] = useState<string | null>(null);
@@ -1320,9 +1352,16 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
   useEffect(() => {
     setContract(null);
     setContractError(null);
+    setContractState('loading');
     getPlayerContract(playerId)
-      .then(setContract)
-      .catch((e: unknown) => setContractError(e instanceof Error ? e.message : 'Failed to load contract.'));
+      .then((c) => {
+        setContract(c);
+        setContractState('loaded');
+      })
+      .catch((e: unknown) => {
+        setContractError(e instanceof Error ? e.message : 'Failed to load contract.');
+        setContractState(e instanceof ApiError && e.status === 404 ? 'missing' : 'unavailable');
+      });
 
     setScoutRatings(null);
     setScoutError(null);
@@ -1405,6 +1444,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
         valueUsd={valueUsd}
         actualUsd={actualUsd}
         contract={contract}
+        contractState={contractState}
         extensionHref={extensionHref}
         onSimulate={() => router.push(extensionHref)}
       />
@@ -1426,6 +1466,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
                   valueUsd={valueUsd}
                   actualUsd={actualUsd}
                   contract={contract}
+                  contractState={contractState}
                   similarMarket={similarMarket}
                   scoutRatings={scoutRatings}
                   seasonToDate={seasonToDate}
@@ -1450,7 +1491,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
               )}
 
               {activeTab === 'extension' && (
-                <ExtensionCard extension={extension} error={extensionError} currentSeasonGap={val.gap_pct} />
+                <ExtensionCard extension={extension} error={extensionError} currentSeasonGap={val.gap_pct} gapSeason={val.season} />
               )}
 
               {activeTab === 'scout' && (
@@ -1475,6 +1516,7 @@ export default function PlayerPage({ params }: { params: Promise<{ id: string }>
         <ActionRail
           val={val}
           contract={contract}
+          contractState={contractState}
           similarMarket={similarMarket}
           extensionHref={extensionHref}
           activeTab={activeTab}

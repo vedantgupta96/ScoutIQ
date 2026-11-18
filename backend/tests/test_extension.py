@@ -88,6 +88,8 @@ def test_eligible_underpaid_projected_aav_from_stored_cap(monkeypatch):
     _patch_value(monkeypatch, value_pct=25.0, lo=20.0, hi=30.0)
     _patch_caps(monkeypatch)
     db = _contract_db(year_rows=[
+        ContractYear(contract_id=1, season="2026-27", cap_pct=0.15,
+                     is_player_option=False, is_team_option=False),
         ContractYear(contract_id=1, season="2027-28", cap_pct=0.15,
                      is_player_option=False, is_team_option=False),
     ])
@@ -139,8 +141,39 @@ def test_impending_free_agent_ineligible(monkeypatch):
     result = ext.decide_extension(db, 1)
 
     assert result.eligible is False
-    assert "impending free agent" in result.ineligible_reason
+    assert result.ineligible_reason == (
+        "The listed contract ended 2025-26; no contract covering 2026-27 is on file, "
+        "so there is no current deal to extend."
+    )
     assert result.verdict == "Not extension-eligible"
+    assert result.projected_aav_usd is None
+
+
+def test_empty_contract_years_reason():
+    eligible, reason, pay_pct, final = ext._extension_eligibility([])
+
+    assert eligible is False and pay_pct is None and final is None
+    assert reason == (
+        "No contract years are on file; no contract covering 2026-27 is on file, "
+        "so there is no current deal to extend."
+    )
+
+
+def test_future_only_contract_ineligible(monkeypatch):
+    _patch_value(monkeypatch, value_pct=20.0, lo=18.0, hi=22.0)
+    _patch_caps(monkeypatch)
+    db = _contract_db(year_rows=[
+        ContractYear(contract_id=1, season="2027-28", cap_pct=0.20,
+                     is_player_option=False, is_team_option=False),
+    ])
+
+    result = ext.decide_extension(db, 1)
+
+    assert result.eligible is False
+    assert result.ineligible_reason == (
+        "The listed contract starts 2027-28; no contract covering 2026-27 is on file, "
+        "so there is no current deal to extend."
+    )
     assert result.projected_aav_usd is None
 
 

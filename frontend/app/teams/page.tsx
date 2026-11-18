@@ -73,6 +73,9 @@ function RosterRow({ player, gaugeDomainMaxPct }: { player: TeamCapSheetPlayer; 
         <div className="ds-tnum ds-note">
           {player.salary_pct != null ? `${fmtPct(player.salary_pct)} cap` : (player.pay_source == null ? 'no cap data' : '—')}
         </div>
+        {player.pay_with_other_team && player.pay_team_abbreviation && (
+          <Badge tone="warning" variant="outline" size="sm">with {player.pay_team_abbreviation}</Badge>
+        )}
       </div>
 
       <div className="siq-roster-gauge-cell">
@@ -238,6 +241,14 @@ function WarRoom({ sheet }: { sheet: TeamCapSheetResponse }) {
           </Select>
         }
       >
+        {!sheet.pay_is_current_season && (
+          <Alert tone="warning">
+            {`${sheet.season} pay for today's roster — not a ${sheet.current_season} payroll.`}
+            {totals.other_team_pay_count > 0
+              ? ` ${totals.other_team_pay_count} ${totals.other_team_pay_count === 1 ? "player's" : "players'"} ${sheet.season} pay (${fmtM(totals.other_team_pay_usd)}) was with another team.`
+              : ''}
+          </Alert>
+        )}
         {sheet.top_bargain && sheet.top_overpay && (
           <div className="siq-teams-badge-row">
             <Badge tone="positive" variant="outline" size="sm">

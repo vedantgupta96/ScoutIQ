@@ -172,3 +172,15 @@ def team_cap_hits(
             pay_source_by_player[sr.player_id] = "salary"
 
     return cap_hit_by_player, pay_source_by_player
+
+
+def season_team_ids(db: DB, player_ids: list[int], season: str) -> dict[int, int | None]:
+    """Team each player's `season` stats row is attributed to (the pay team for that season)."""
+    if not player_ids:
+        return {}
+    rows = db.execute(
+        select(PlayerSeason.player_id, PlayerSeason.team_id)
+        .where(PlayerSeason.player_id.in_(player_ids))
+        .where(PlayerSeason.season == season)
+    ).all()
+    return {player_id: team_id for player_id, team_id in rows}

@@ -512,7 +512,7 @@ function ExtensionsTab({ season }: { season: string }) {
       >
         <div className="siq-roster-ledger-head">
           <span className="ds-eyebrow">Player</span>
-          <span className="ds-eyebrow ds-right">Current pay</span>
+          <span className="ds-eyebrow ds-right">Final guaranteed yr</span>
           <span className="ds-eyebrow">Verdict</span>
           <span className="ds-eyebrow ds-right">Model value</span>
         </div>

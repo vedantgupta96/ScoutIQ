@@ -163,7 +163,8 @@ function effectiveSeason(data: PlayerComparisonData): string | null {
 function currentCapHitCell(data: PlayerComparisonData): ReactNode {
   const val = data.valuation;
   if (val?.actual_pct != null || val?.actual_usd != null) {
-    return <Cell primary={pct(val.actual_pct)} secondary={usd(val.actual_usd)} />;
+    const paySeason = val.pay_season ?? val.season;
+    return <Cell primary={pct(val.actual_pct)} secondary={val.actual_usd != null ? `${fmtM(val.actual_usd)} · ${paySeason}` : paySeason} />;
   }
   const season = effectiveSeason(data);
   const year = data.contract?.years_detail?.find((y) => y.season === season);
@@ -179,7 +180,7 @@ function paySection(a: PlayerComparisonData, b: PlayerComparisonData): Row[] {
   // Each player is anchored to their own season — see effectiveSeason.
   return [
     {
-      label: 'Current cap hit',
+      label: 'Season cap hit',
       a: currentCapHitCell(a),
       b: currentCapHitCell(b),
     },
