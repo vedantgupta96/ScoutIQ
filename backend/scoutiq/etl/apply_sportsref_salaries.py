@@ -18,6 +18,7 @@ from pathlib import Path
 
 from scoutiq.etl.plan_sportsref_salaries import (
     DbState,
+    StoredContract,
     _compare_contract,
     _counts,
     _stored_option,
@@ -41,6 +42,8 @@ EXIT_FORMAT_ERROR = 3
 EXIT_CONFIRM = 4
 EXIT_CONFLICT = 5
 EXIT_VERIFY = 6
+EXIT_MIGRATION = 7
+MIGRATION_NOTE = "migration 0013_contract_source_ref is required (contracts.source_ref column is missing)"
 
 
 class ApplyRefused(RuntimeError):
@@ -56,6 +59,7 @@ class ApplyExtras:
     team_name_by_id: dict[int, str] = field(default_factory=dict)
     cap_by_season: dict[str, int] = field(default_factory=dict)
     contract_starts: dict[int, set[str]] = field(default_factory=dict)
+    all_contracts: dict[int, list[StoredContract]] = field(default_factory=dict)
     existing_team_rows: list[dict] = field(default_factory=list)
 
 
@@ -64,14 +68,6 @@ def _parse_received(manifest: dict) -> datetime:
     if received.tzinfo is None:
         received = received.replace(tzinfo=timezone.utc)
     return received.astimezone(timezone.utc)
-
-
-def _as_utc(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
 
 
 def _resolve_abbr(team_abbr: str) -> str:
@@ -83,7 +79,8 @@ def _is_postgres(session) -> bool:
 
 
 def read_apply_extras(session, pids: list[int]) -> ApplyExtras:
-    from sqlalchemy import select
+    from sqlalchemy import desc, select
+    from sqlalchemy.orm import load_only, selectinload
 
     from scoutiq.models import CapConstants, Contract, PlayerTeamSalary, Team
 
@@ -95,10 +92,27 @@ def read_apply_extras(session, pids: list[int]) -> ApplyExtras:
         if cap:
             extras.cap_by_season[season] = cap
     if pids:
-        for pid, start in session.execute(
-            select(Contract.player_id, Contract.season_start).where(Contract.player_id.in_(pids))
+        for contract in session.scalars(
+            select(Contract)
+            .where(Contract.player_id.in_(pids))
+            .options(
+                load_only(Contract.player_id, Contract.season_start, Contract.source, Contract.scraped_at),
+                selectinload(Contract.contract_years),
+            )
+            .order_by(Contract.player_id, desc(Contract.season_start), desc(Contract.scraped_at))
         ):
-            extras.contract_starts.setdefault(pid, set()).add(start)
+            extras.contract_starts.setdefault(contract.player_id, set()).add(contract.season_start)
+            extras.all_contracts.setdefault(contract.player_id, []).append(
+                StoredContract(
+                    source=contract.source,
+                    scraped_at=contract.scraped_at.isoformat() if contract.scraped_at else None,
+                    season_start=contract.season_start,
+                    years=[
+                        (cy.season, cy.aav, bool(cy.is_player_option), bool(cy.is_team_option))
+                        for cy in contract.contract_years
+                    ],
+                )
+            )
         for row in session.execute(
             select(
                 PlayerTeamSalary.id,
@@ -160,11 +174,10 @@ def _contract_decision(
         }
     stored = state.contracts.get(pid)
     wanted = {y.season: (y.amount, y.option) for y in schedule}
+    season_start = schedule[0].season
     if stored is not None:
         stored_by = {s: (aav, _stored_option(po, to)) for s, aav, po, to in stored.years}
-        if not (set(stored_by) & set(wanted)):
-            stored = None
-        else:
+        if set(stored_by) & set(wanted):
             relevant = {s: v for s, v in stored_by.items() if s >= first_season}
             if relevant == wanted:
                 return {**base, "action": "unchanged", "team": resolved, "season_start": stored.season_start}
@@ -178,11 +191,58 @@ def _contract_decision(
                 "stored_season_start": stored.season_start,
                 "diff": {s: v for s, v in cmp_["seasons"].items() if v["outcome"] != "same"},
             }
-    season_start = schedule[0].season
+        overlapping = [
+            {
+                "season_start": c.season_start,
+                "source": c.source,
+                "seasons": sorted({s for s, *_ in c.years} & set(wanted)),
+            }
+            for c in extras.all_contracts.get(pid, [])[1:]
+            if {s for s, *_ in c.years} & set(wanted)
+        ]
+        if overlapping:
+            return {
+                **base,
+                "action": "held",
+                "reason": "older_contract_overlaps",
+                "team": resolved,
+                "overlapping_contracts": overlapping,
+            }
+        if stored.season_start >= season_start:
+            return {
+                **base,
+                "action": "held",
+                "reason": "would_not_be_latest",
+                "team": resolved,
+                "season_start": season_start,
+                "latest_stored_season_start": stored.season_start,
+            }
     if season_start in extras.contract_starts.get(pid, set()):
         return {**base, "action": "held", "reason": "season_start_collision", "team": resolved, "season_start": season_start}
+    guaranteed = row.remaining_guaranteed
+    if guaranteed is None:
+        return {**base, "action": "held", "reason": "guarantee_unknown", "team": resolved}
+    total = sum(y.amount for y in schedule)
+    firm_total = sum(y.amount for y in schedule if not y.option)
+    has_options = any(y.option for y in schedule)
+    if guaranteed == 0:
+        basis, flags = "none_guaranteed", [False] * len(schedule)
+    elif guaranteed == total:
+        basis, flags = "all_guaranteed", [True] * len(schedule)
+    elif has_options and guaranteed == firm_total:
+        basis, flags = "option_years_unguaranteed", [not y.option for y in schedule]
+    else:
+        return {
+            **base,
+            "action": "held",
+            "reason": "guarantee_unresolved",
+            "team": resolved,
+            "remaining_guaranteed": guaranteed,
+            "amounts": {y.season: y.amount for y in schedule},
+            "options": {y.season: y.option for y in schedule if y.option},
+        }
     entries = []
-    for y in schedule:
+    for idx, y in enumerate(schedule):
         cap = extras.cap_by_season.get(y.season)
         entries.append(
             {
@@ -192,7 +252,7 @@ def _contract_decision(
                 "option": y.option,
                 "is_player_option": y.option == "player_option",
                 "is_team_option": y.option == "team_option",
-                "is_guaranteed": y.option is None,
+                "is_guaranteed": flags[idx],
             }
         )
     return {
@@ -203,6 +263,8 @@ def _contract_decision(
         "season_start": season_start,
         "years": len(schedule),
         "total_value": sum(y.amount for y in schedule),
+        "remaining_guaranteed": guaranteed,
+        "guarantee_basis": basis,
         "source": SOURCE,
         "scraped_at": received_iso,
         "schedule": entries,
@@ -471,6 +533,7 @@ def apply_in_transaction(session, parsed: ParsedExport, manifest: dict, snapshot
             total_value=item["total_value"],
             source=SOURCE,
             scraped_at=received,
+            source_ref=snapshot_name,
             contract_years=[
                 ContractYear(
                     season=y["season"],
@@ -517,9 +580,18 @@ def apply_in_transaction(session, parsed: ParsedExport, manifest: dict, snapshot
     }
 
 
-def _write_journal(snapshot: Path, manifest: dict, confirm: str, result: dict, now: datetime) -> Path:
+def _journal_path(snapshot: Path, prefix: str, now: datetime) -> Path:
+    return snapshot / f"{prefix}-{now.strftime('%Y%m%dT%H%M%SZ')}.json"
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _apply_journal(snapshot: Path, manifest: dict, confirm: str, result: dict, now: datetime, status: str) -> dict:
     plan = result["plan"]
-    journal = {
+    return {
+        "status": status,
         "sha256": manifest.get("sha256"),
         "confirm": confirm,
         "snapshot": snapshot.name,
@@ -534,22 +606,45 @@ def _write_journal(snapshot: Path, manifest: dict, confirm: str, result: dict, n
         "inserted_team_salary_ids": result["inserted_team_salary_ids"],
         "table_counts": result["table_counts"],
     }
-    path = snapshot / f"apply-{now.strftime('%Y%m%dT%H%M%SZ')}.json"
-    path.write_text(json.dumps(journal, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return path
 
 
-def select_snapshot_rows(session, manifest: dict, snapshot_name: str) -> dict:
+def _rollback_journal(snapshot: Path, manifest: dict, confirm: str, result: dict, now: datetime, status: str) -> dict:
+    return {
+        "status": status,
+        "sha256": manifest.get("sha256"),
+        "confirm": confirm,
+        "snapshot": snapshot.name,
+        "rolled_back_at_utc": now.isoformat(),
+        "deleted_contract_ids": result["contract_ids"],
+        "deleted_contract_year_ids": result["contract_year_ids"],
+        "deleted_team_salary_ids": result["team_salary_ids"],
+        "players": {str(k): v for k, v in result["players"].items()},
+        "table_counts": result["table_counts"],
+    }
+
+
+def _has_source_ref(session) -> bool:
+    from sqlalchemy import inspect
+
+    return any(c["name"] == "source_ref" for c in inspect(session.connection()).get_columns("contracts"))
+
+
+def select_snapshot_rows(session, snapshot_name: str, has_source_ref: bool = True) -> dict:
     from sqlalchemy import select
 
     from scoutiq.models import Contract, ContractYear, PlayerTeamSalary
 
-    received = _parse_received(manifest)
-    contracts = [
-        c
-        for c in session.scalars(select(Contract).where(Contract.source == SOURCE).order_by(Contract.id))
-        if _as_utc(c.scraped_at) == received
-    ]
+    contracts = (
+        list(
+            session.scalars(
+                select(Contract)
+                .where(Contract.source == SOURCE, Contract.source_ref == snapshot_name)
+                .order_by(Contract.id)
+            )
+        )
+        if has_source_ref
+        else []
+    )
     contract_ids = [c.id for c in contracts]
     year_ids = (
         list(session.scalars(select(ContractYear.id).where(ContractYear.contract_id.in_(contract_ids))))
@@ -576,14 +671,14 @@ def select_snapshot_rows(session, manifest: dict, snapshot_name: str) -> dict:
     }
 
 
-def rollback_in_transaction(session, manifest: dict, snapshot_name: str) -> dict:
+def rollback_in_transaction(session, snapshot_name: str) -> dict:
     from sqlalchemy import delete, text
 
     from scoutiq.models import Contract, ContractYear, PlayerTeamSalary
 
     if _is_postgres(session):
         session.execute(text(f"LOCK TABLE {LOCKED_TABLES} IN SHARE ROW EXCLUSIVE MODE"))
-    selected = select_snapshot_rows(session, manifest, snapshot_name)
+    selected = select_snapshot_rows(session, snapshot_name)
     before = _count_tables(session)
     if selected["contract_ids"]:
         session.execute(delete(ContractYear).where(ContractYear.contract_id.in_(selected["contract_ids"])))
@@ -670,33 +765,45 @@ def _cmd_apply(args, session_factory) -> int:
                 session.execute(text("SET TRANSACTION READ ONLY"))
             _, _, plan = _read_plan(session, parsed, manifest, snapshot_name, read_only=False)
             print(render_apply_summary(plan, "dry run (no writes)"))
+            if not _has_source_ref(session):
+                print(f"warning: {MIGRATION_NOTE}; --apply will refuse until it is applied", file=sys.stderr)
             if args.json:
-                Path(args.json).write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                _write_json(Path(args.json), plan)
                 print(f"wrote {args.json}")
             return 0
+        if not _has_source_ref(session):
+            print(f"refused: {MIGRATION_NOTE}; nothing written", file=sys.stderr)
+            return EXIT_MIGRATION
         now = datetime.now(timezone.utc)
+        journal = _journal_path(snapshot, "apply", now)
         try:
             result = apply_in_transaction(session, parsed, manifest, snapshot_name, now)
+            _write_json(journal, _apply_journal(snapshot, manifest, args.confirm, result, now, "pending"))
         except ApplyRefused as exc:
             session.rollback()
             print(f"refused: {exc}", file=sys.stderr)
             return EXIT_CONFLICT
-        except ApplyVerificationError as exc:
+        except (ApplyVerificationError, OSError) as exc:
             session.rollback()
-            print(f"verification failed, rolled back: {exc}", file=sys.stderr)
+            print(f"verification or journal failure, rolled back: {exc}", file=sys.stderr)
             return EXIT_VERIFY
         except Exception:
             session.rollback()
             raise
-        session.commit()
+        try:
+            session.commit()
+        except Exception:
+            try:
+                _write_json(journal, _apply_journal(snapshot, manifest, args.confirm, result, now, "rolled_back"))
+            except OSError:
+                pass
+            raise
+        _write_json(journal, _apply_journal(snapshot, manifest, args.confirm, result, now, "committed"))
         print(render_apply_summary(result["plan"], "applied"))
         print(f"table counts {result['table_counts']}")
-        journal = _write_journal(snapshot, manifest, args.confirm, result, now)
         print(f"journal {journal}")
         if args.json:
-            Path(args.json).write_text(
-                json.dumps(result["plan"], indent=2, sort_keys=True) + "\n", encoding="utf-8"
-            )
+            _write_json(Path(args.json), result["plan"])
             print(f"wrote {args.json}")
         return 0
     finally:
@@ -714,28 +821,46 @@ def _cmd_rollback(args, session_factory) -> int:
     if session is None:
         return 1
     try:
+        has_ref = _has_source_ref(session)
         if not args.apply:
             from sqlalchemy import text
 
             if _is_postgres(session):
                 session.execute(text("SET TRANSACTION READ ONLY"))
-            selected = select_snapshot_rows(session, manifest, snapshot.name)
+            selected = select_snapshot_rows(session, snapshot.name, has_ref)
             print("rollback dry run (no writes)")
             print(_render_selected(selected))
+            if not has_ref:
+                print(f"warning: {MIGRATION_NOTE}; --apply will refuse until it is applied", file=sys.stderr)
             return 0
+        if not has_ref:
+            print(f"refused: {MIGRATION_NOTE}; nothing written", file=sys.stderr)
+            return EXIT_MIGRATION
+        now = datetime.now(timezone.utc)
+        journal = _journal_path(snapshot, "rollback", now)
         try:
-            result = rollback_in_transaction(session, manifest, snapshot.name)
-        except ApplyVerificationError as exc:
+            result = rollback_in_transaction(session, snapshot.name)
+            _write_json(journal, _rollback_journal(snapshot, manifest, args.confirm, result, now, "pending"))
+        except (ApplyVerificationError, OSError) as exc:
             session.rollback()
-            print(f"verification failed, rolled back: {exc}", file=sys.stderr)
+            print(f"verification or journal failure, rolled back: {exc}", file=sys.stderr)
             return EXIT_VERIFY
         except Exception:
             session.rollback()
             raise
-        session.commit()
+        try:
+            session.commit()
+        except Exception:
+            try:
+                _write_json(journal, _rollback_journal(snapshot, manifest, args.confirm, result, now, "rolled_back"))
+            except OSError:
+                pass
+            raise
+        _write_json(journal, _rollback_journal(snapshot, manifest, args.confirm, result, now, "committed"))
         print("rollback applied")
         print(_render_selected(result))
         print(f"table counts {result['table_counts']}")
+        print(f"journal {journal}")
         return 0
     finally:
         session.rollback()

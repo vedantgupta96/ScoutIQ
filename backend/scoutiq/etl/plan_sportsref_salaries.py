@@ -154,12 +154,15 @@ def read_db_state(
         select(Player.player_id, Player.full_name, Player.current_team_id).where(Player.player_id.in_(pids))
     ):
         state.players[pid] = (name, team_id)
-    from sqlalchemy.orm import selectinload
+    from sqlalchemy.orm import load_only, selectinload
 
     for contract in session.scalars(
         select(Contract)
         .where(Contract.player_id.in_(pids))
-        .options(selectinload(Contract.contract_years))
+        .options(
+            load_only(Contract.player_id, Contract.season_start, Contract.source, Contract.scraped_at),
+            selectinload(Contract.contract_years),
+        )
         .order_by(Contract.player_id, desc(Contract.season_start), desc(Contract.scraped_at))
     ):
         if contract.player_id in state.contracts:

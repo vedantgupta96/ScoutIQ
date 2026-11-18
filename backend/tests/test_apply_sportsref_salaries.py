@@ -26,7 +26,7 @@ from scoutiq.models import (
     PlayerXref,
     Team,
 )
-from scoutiq.sources.sportsref_salary_export import parse_export
+from scoutiq.sources.sportsref_salary_export import ObligationRow, ParsedExport, YearCell, parse_export
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sportsref" / "contracts_export.html"
 RECEIVED = datetime(2026, 7, 12, 15, 30, tzinfo=timezone.utc)
@@ -213,13 +213,170 @@ def test_stored_contract_differs_is_held_and_never_overwritten(tmp_path, factory
     assert before[0] != table_dump(factory)[0]
 
 
-def test_season_start_collision_is_held(tmp_path, factory):
+def test_latest_with_same_start_and_no_overlap_would_not_be_latest(tmp_path, factory):
     add_contract(factory, 23, "2026-27", [("2025-26", 1, False, False)])
     snap = snapshot(tmp_path)
     plan_path = tmp_path / "p.json"
     run(snap, factory, "--json", str(plan_path))
     held = {h["bbref_id"]: h for h in json.loads(plan_path.read_text())["contracts"]["held"]}
-    assert held["jamesle01"]["reason"] == "season_start_collision"
+    assert held["jamesle01"]["reason"] == "would_not_be_latest"
+
+
+def test_older_contract_overlap_held_even_when_hidden_by_newer_disjoint_contract(tmp_path, factory):
+    add_contract(factory, 23, "2025-26", [("2025-26", 1, False, False), ("2026-27", 2, False, False)])
+    add_contract(factory, 23, "2028-29", [("2028-29", 3, False, False)])
+    snap = snapshot(tmp_path)
+    plan_path = tmp_path / "p.json"
+    run(snap, factory, "--json", str(plan_path))
+    held = {h["bbref_id"]: h for h in json.loads(plan_path.read_text())["contracts"]["held"]}
+    assert held["jamesle01"]["reason"] == "older_contract_overlaps"
+    assert held["jamesle01"]["overlapping_contracts"] == [
+        {"season_start": "2025-26", "source": "spotrac", "seasons": ["2026-27"]}
+    ]
+    assert run_apply(snap, factory) == 0
+    assert [c.source for c in contract_rows(factory, 23)] == ["spotrac", "spotrac"]
+
+
+def test_newer_disjoint_contract_would_not_be_latest(tmp_path, factory):
+    add_contract(factory, 23, "2028-29", [("2028-29", 3, False, False)])
+    plan = plan_for(base_state(contracts={23: StoredContract("spotrac", None, "2028-29", [("2028-29", 3, False, False)])}),
+                    base_extras(all_contracts={23: [StoredContract("spotrac", None, "2028-29", [("2028-29", 3, False, False)])]}))
+    assert held_reasons(plan)["jamesle01"] == "would_not_be_latest"
+
+
+def custom_plan(cells, guaranteed):
+    years = [YearCell(f"{2026 + i}-{27 + i}", amt, opt, False) for i, (amt, opt) in enumerate(cells)]
+    row = ObligationRow(0, 1, "jamesle01", "LeBron James", "PHI", years, guaranteed)
+    parsed = ParsedExport([y.season for y in years], [row], [])
+    return build_apply_plan(parsed, base_state(), base_extras(), MANIFEST, "snap")
+
+
+def contract_for(plan):
+    inserted = [r for r in plan["contracts"]["insert"] if r["bbref_id"] == "jamesle01"]
+    return inserted[0] if inserted else None
+
+
+def test_guarantee_unknown_when_remaining_guaranteed_missing():
+    plan = custom_plan([(5, None), (5, None)], None)
+    assert held_reasons(plan)["jamesle01"] == "guarantee_unknown"
+
+
+def test_equal_firm_years_with_partial_guarantee_are_unresolved_and_not_written():
+    plan = custom_plan([(5_000_000, None), (5_000_000, None)], 5_000_000)
+    held = {h["bbref_id"]: h for h in plan["contracts"]["held"]}["jamesle01"]
+    assert held["reason"] == "guarantee_unresolved" and held["remaining_guaranteed"] == 5_000_000
+    assert held["amounts"] == {"2026-27": 5_000_000, "2027-28": 5_000_000}
+    assert contract_for(plan) is None and plan["planned_inserts"]["contracts"] == 0
+
+
+def test_cisse_like_prefix_match_without_options_is_held():
+    plan = custom_plan([(2_185_116, None), (2_571_895, None)], 2_185_116)
+    assert held_reasons(plan)["jamesle01"] == "guarantee_unresolved"
+
+
+def test_guarantee_equals_total_marks_all_guaranteed():
+    c = contract_for(custom_plan([(5, None), (7, "team_option")], 12))
+    assert c["guarantee_basis"] == "all_guaranteed"
+    assert [y["is_guaranteed"] for y in c["schedule"]] == [True, True]
+    assert [y["is_team_option"] for y in c["schedule"]] == [False, True]
+
+
+def test_zero_guarantee_marks_none_guaranteed():
+    c = contract_for(custom_plan([(5, None), (7, None)], 0))
+    assert c["guarantee_basis"] == "none_guaranteed"
+    assert [y["is_guaranteed"] for y in c["schedule"]] == [False, False]
+
+
+def test_lebron_like_option_year_unguaranteed_rule():
+    c = contract_for(custom_plan([(3_876_529, None), (4_070_355, "player_option")], 3_876_529))
+    assert c["guarantee_basis"] == "option_years_unguaranteed"
+    assert [(y["is_guaranteed"], y["is_player_option"]) for y in c["schedule"]] == [(True, False), (False, True)]
+    assert c["remaining_guaranteed"] == 3_876_529
+
+
+def test_guarantee_into_option_year_is_held():
+    plan = custom_plan([(5, None), (7, "player_option")], 8)
+    assert held_reasons(plan)["jamesle01"] == "guarantee_unresolved"
+
+
+def test_fixture_players_resolve_via_option_year_rule():
+    by_id = {r["bbref_id"]: r for r in plan_for()["contracts"]["insert"]}
+    assert {b: r["guarantee_basis"] for b, r in by_id.items()} == {
+        "jamesle01": "option_years_unguaranteed", "tatumja01": "option_years_unguaranteed"}
+
+
+def test_same_received_at_two_snapshots_roll_back_independently(tmp_path, factory):
+    snap_a = snapshot(tmp_path)
+    html_b = FIXTURE.read_text().replace("tatumja01", "tatumb02")
+    snap_b = snapshot(tmp_path, html_b, name="b")
+    assert snap_a != snap_b
+    with factory() as s:
+        s.add(Player(player_id=50, full_name="Other Tatum", current_team_id=2))
+        s.flush()
+        s.add(PlayerXref(player_id=50, bbref_slug="tatumb02", status="verified"))
+        s.commit()
+    assert run_apply(snap_a, factory) == 0
+    assert run_apply(snap_b, factory) == 0
+    with factory() as s:
+        refs = {r for r in s.scalars(select(Contract.source_ref).where(Contract.source == SOURCE))}
+        assert refs == {snap_a.name, snap_b.name}
+    assert main(["rollback", "--snapshot", str(snap_a), "--apply", "--confirm", confirm_for(snap_a)],
+                session_factory=factory) == 0
+    with factory() as s:
+        assert {r for r in s.scalars(select(Contract.source_ref))} == {snap_b.name}
+        assert {r for r in s.scalars(select(PlayerTeamSalary.source_ref))} == {snap_b.name}
+        assert s.scalar(select(func.count()).select_from(PlayerTeamSalary)) > 0
+    assert list(snap_a.glob("rollback-*.json"))
+    assert json.loads(next(snap_a.glob("rollback-*.json")).read_text())["status"] == "committed"
+
+
+def test_missing_source_ref_column_refuses_apply_but_dry_run_works(tmp_path, factory, monkeypatch, capsys):
+    snap = snapshot(tmp_path)
+    monkeypatch.setattr(mod, "_has_source_ref", lambda session: False)
+    before = table_dump(factory)
+    assert run(snap, factory) == 0
+    assert "0013" in capsys.readouterr().err
+    assert run_apply(snap, factory) == 7
+    assert main(["rollback", "--snapshot", str(snap), "--apply", "--confirm", confirm_for(snap)],
+                session_factory=factory) == 7
+    assert table_dump(factory) == before
+
+
+def test_journal_pending_failure_rolls_back_and_success_ends_committed(tmp_path, factory, monkeypatch):
+    snap = snapshot(tmp_path)
+    before = table_dump(factory)
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(mod, "_write_json", boom)
+    assert run_apply(snap, factory) == 6
+    assert table_dump(factory) == before
+    monkeypatch.undo()
+    assert run_apply(snap, factory) == 0
+    [path] = list(snap.glob("apply-*.json"))
+    assert json.loads(path.read_text())["status"] == "committed"
+
+
+def test_commit_failure_marks_journal_rolled_back(tmp_path, factory, monkeypatch):
+    snap = snapshot(tmp_path)
+    seen = []
+    real = mod._write_json
+
+    def spy(path, payload):
+        seen.append(payload.get("status"))
+        real(path, payload)
+
+    def bad_commit(self):
+        raise RuntimeError("commit failed")
+
+    monkeypatch.setattr(mod, "_write_json", spy)
+    monkeypatch.setattr(Session, "commit", bad_commit)
+    with pytest.raises(RuntimeError):
+        run_apply(snap, factory)
+    assert seen == ["pending", "rolled_back"]
+    monkeypatch.undo()
+    assert counts(factory)["contracts"] == 0
 
 
 def test_multi_obligation_writes_team_rows_but_no_contract(tmp_path, factory):

@@ -14,7 +14,19 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    FetchedValue,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -188,6 +200,7 @@ class Contract(Base):
         UniqueConstraint("player_id", "season_start", name="uq_contract_player_start"),
         Index("ix_contracts_player_latest", "player_id", "season_start", "scraped_at"),
     )
+    __mapper_args__ = {"eager_defaults": False}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.player_id"), index=True)
@@ -197,6 +210,9 @@ class Contract(Base):
     total_value: Mapped[int | None] = mapped_column(BigInteger)  # total dollars across all years
     source: Mapped[str] = mapped_column(String(32), default="spotrac")
     scraped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Deferred so default SELECTs never name the column: the API must keep working if code ships before
+    # migration 0013 has run (FetchedValue also keeps it out of INSERTs when unset). Only the SportsRef apply/rollback tool reads or filters on it.
+    source_ref: Mapped[str | None] = mapped_column(String(128), deferred=True, server_default=FetchedValue())
 
     contract_years: Mapped[list["ContractYear"]] = relationship(
         back_populates="contract", cascade="all, delete-orphan", order_by="ContractYear.season"

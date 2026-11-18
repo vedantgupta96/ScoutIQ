@@ -92,10 +92,10 @@ refused because a `player_team_salaries` conflict exists; 6 the post-write row-c
   is distinct evidence. Key: (player_id, season, source, team_name, row_ordinal). Same key and salary is
   `unchanged`; same key and a different salary is a `conflict` and the whole apply refuses.
 - `contracts` + `contract_years` (what the app reads as the player's contract): one new contract per eligible
-  player, `source = sportsref_export`, `scraped_at` = manifest `received_at_utc`, `season_start` = first
+  player, `source = sportsref_export`, `source_ref` = snapshot directory name, `scraped_at` = manifest `received_at_utc`, `season_start` = first
   scheduled season, `total_value` = sum of amounts, `cap_pct` = amount / `cap_constants.salary_cap` rounded to 4
-  places (null when the season has no cap row), option flags from the cell markers (`is_guaranteed` only when
-  there is no option).
+  places (null when the season has no cap row), option flags from the cell markers. `is_guaranteed` comes only from the
+  determinate cases below (see "Guarantee rule").
 - `player_salaries` is never written: season totals are not derivable from per-team obligation rows, and
   valuation pay remains the completed-season figure.
 
@@ -103,9 +103,11 @@ refused because a `player_team_salaries` conflict exists; 6 the post-write row-c
 
 A player is eligible when identity is matched, there is exactly one export row, no cell in it is uncertain, its
 team resolves, and the team equals the player's current team (or the player has no current team). Then, against
-the latest stored contract (season_start desc, scraped_at desc): no stored contract, or one with no year in the
-export schedule, is an `insert`; one that matches the schedule amounts and options for every season from the
-first export season on is `unchanged`; anything else is held.
+the latest stored contract (season_start desc, scraped_at desc): if it overlaps the export schedule, one that
+matches the schedule amounts and options for every season from the first export season on is `unchanged` and anything
+else is `stored_contract_differs`. If the latest does not overlap, every older stored contract is checked too
+(`older_contract_overlaps`), the new contract must start after the latest stored one (`would_not_be_latest`),
+and the guarantee rule must resolve; only then is it an `insert`.
 
 | Reason | Meaning |
 | --- | --- |
@@ -117,26 +119,55 @@ first export season on is `unchanged`; anything else is held.
 | `uncertain_cells` | a season cell was unparseable or had conflicting markers |
 | `no_amounts` | the row has no non-blank amounts |
 | `team_differs_from_current` | export team differs from the player's current team |
+| `older_contract_overlaps` | an older stored contract has a year in the export schedule (it would be hidden behind a newer contract); the report lists it |
+| `would_not_be_latest` | the latest stored contract starts at or after the new `season_start`, so the API would not read the insert |
+| `guarantee_unknown` | the row has no `remaining_guaranteed` |
+| `guarantee_unresolved` | `remaining_guaranteed` does not fix the per-year split (see "Guarantee rule"); the report carries G, the per-year amounts and options |
 | `season_start_collision` | a stored contract already starts in the new first season |
 | `stored_contract_differs` | the stored contract overlaps the schedule but differs; the report carries a per-season diff |
 
 Uncertain cells are listed under `held_uncertain_cells` and are not written to `player_team_salaries`.
 
+### Guarantee rule
+
+The export gives one `remaining_guaranteed` figure G for the whole row, not a per-year split. A matching
+prefix does not prove the split: two $5M years with G = $5M could be $5M in year 1, or partial guarantees across
+both. So guarantees are set only when the split is forced; with `sched` the seasons that have an amount, `opt`
+the option years and `firm` the years without an option:
+
+1. G missing: held `guarantee_unknown`.
+2. G = 0: no year is guaranteed (`guarantee_basis: none_guaranteed`).
+3. G = sum of all `sched` amounts: every year is guaranteed (`all_guaranteed`); option flags are kept.
+4. `opt` is non-empty and G = sum of `firm` amounts: every firm year is guaranteed and every option year is not
+   (`option_years_unguaranteed`). An unexercised option year carries no guarantee, so the split is forced.
+5. Anything else: held `guarantee_unresolved`.
+
+Every inserted contract entry in the report carries `remaining_guaranteed` and `guarantee_basis`. Absence of an
+option marker never implies a guarantee.
+
 ### Idempotency, journal and rollback
+
+Apply and rollback `--apply` need migration `0013_contract_source_ref` (adds nullable `contracts.source_ref`);
+they exit 7 with nothing written if the column is missing. Dry runs still work and warn. Run the migration
+before deploying code that reads the `Contract` model.
 
 Re-running `--apply` on the same snapshot inserts nothing: written team rows are `unchanged`, written contracts
 are `unchanged`. Under Postgres the apply takes `LOCK TABLE contracts, contract_years, player_team_salaries IN
 SHARE ROW EXCLUSIVE MODE`, re-reads state inside the transaction, refuses on conflicts, and asserts that each
-table grew by exactly the planned inserts before committing. After commit it writes
-`apply-<UTC timestamp>.json` into the snapshot directory: sha256, confirm, plan counts, a before-record per
+table grew by exactly the planned inserts before committing. Before commit (after the flush and count check) it writes
+`apply-<UTC timestamp>.json` into the snapshot directory with `status: pending`; if that write fails the
+transaction rolls back (exit 6). After commit the file is rewritten with `status: committed` (or
+`rolled_back` if the commit raised). It contains: sha256, confirm, plan counts, a before-record per
 affected player (latest stored contract with years, existing `sportsref_export` team rows), inserted contract
 and team-salary ids, and table counts before and after.
 
-`rollback` selects `contracts` with `source = sportsref_export` and `scraped_at` equal to the manifest
-`received_at_utc` (plus their `contract_years`) and `player_team_salaries` with `source = sportsref_export` and
+`rollback` selects `contracts` with `source = sportsref_export` and `source_ref` equal to the snapshot
+directory name (plus their `contract_years`; `scraped_at` is not used, since two snapshots can share it) and `player_team_salaries` with `source = sportsref_export` and
 `source_ref` equal to the snapshot directory name. It deletes them in one transaction (years, contracts, team
 salaries) after verifying counts. Rows from other sources or other snapshots are untouched. Applying again after
-a rollback re-inserts the same rows.
+a rollback re-inserts the same rows. Rollback writes its own `rollback-<UTC timestamp>.json` journal (deleted
+ids, `pending` then `committed`) the same way. Contracts written before migration 0013 have no `source_ref`
+and cannot be rolled back by this tool.
 
 Production apply needs explicit owner approval after PR review. Always run the dry run first and review the
 report, including the `spot_checks` entry for `jamesle01`.
