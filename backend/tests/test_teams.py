@@ -133,6 +133,41 @@ def test_cap_sheet_happy_path(monkeypatch):
     assert body["top_overpay"]["full_name"] == "Vet Overpay"
 
 
+def test_cap_sheet_marks_pay_with_other_team(monkeypatch):
+    _patch_model(monkeypatch)
+    baseline = _client(FakeDB()).get(f"/teams/{ATL_ID}/cap-sheet").json()
+
+    _patch_model(monkeypatch)
+    fake = FakeDB()
+    fake.seasons[1].team_id = fake.bos.team_id
+    body = _client(fake).get(f"/teams/{ATL_ID}/cap-sheet").json()
+
+    assert body["current_season"] == "2026-27"
+    assert body["pay_is_current_season"] is False
+    by_name = {p["full_name"]: p for p in body["players"]}
+    assert by_name["Vet Overpay"]["pay_with_other_team"] is True
+    assert by_name["Vet Overpay"]["pay_team_abbreviation"] == "BOS"
+    assert by_name["Vet Overpay"]["pay_season"] == "2025-26"
+    assert by_name["Star Bargain"]["pay_with_other_team"] is False
+    assert body["totals"]["other_team_pay_count"] == 1
+    assert body["totals"]["other_team_pay_usd"] == 30_000_000
+    assert body["totals"]["total_payroll_usd"] == baseline["totals"]["total_payroll_usd"] == 40_000_000
+    assert body["cap_context"]["tier"] == baseline["cap_context"]["tier"]
+
+
+def test_cap_sheet_pay_team_unknown_is_none(monkeypatch):
+    _patch_model(monkeypatch)
+    fake = FakeDB()
+    fake.seasons[1].team_id = None
+    body = _client(fake).get(f"/teams/{ATL_ID}/cap-sheet").json()
+
+    by_name = {p["full_name"]: p for p in body["players"]}
+    assert by_name["Vet Overpay"]["pay_with_other_team"] is None
+    assert by_name["Vet Overpay"]["pay_team_abbreviation"] is None
+    assert body["totals"]["other_team_pay_count"] == 0
+    assert body["totals"]["other_team_pay_usd"] == 0
+
+
 def test_cap_sheet_keeps_roster_when_model_artifact_missing(monkeypatch):
     monkeypatch.setattr(
         valuation_module,

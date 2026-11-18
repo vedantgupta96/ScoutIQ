@@ -16,6 +16,7 @@ from sqlalchemy import select
 from scoutiq.api import rosters
 from scoutiq.api.cap import apron_values, classify_tier, room_to_lines
 from scoutiq.api.deps import DB
+from scoutiq.api.financial_status import CURRENT_SEASON
 from scoutiq.api.roster_fit import TeamNeedsResponse, load_fit_context, needs_response
 from scoutiq.api.rosters import CAVEAT, PlayerSummary, TeamSummary
 from scoutiq.api.season import LATEST_SEASON, is_valid_season
@@ -98,6 +99,8 @@ class TeamCapTotals(BaseModel):
     valued_player_count: int   # players with a model value
     bargain_count: int
     overpay_count: int
+    other_team_pay_count: int  # players whose pay-season row sits with a different team
+    other_team_pay_usd: int    # sum of those players' cap hits
 
 
 class TeamCapSheetPlayer(PlayerSummary):
@@ -109,11 +112,16 @@ class TeamCapSheetPlayer(PlayerSummary):
     gap_pct: float | None
     valuation_status: str  # ready | unavailable
     pay_source: str | None  # contract | salary | None
+    pay_season: str
+    pay_team_abbreviation: str | None
+    pay_with_other_team: bool | None  # None when the pay season is current or a team is unknown
 
 
 class TeamCapSheetResponse(BaseModel):
     team: TeamSummary
     season: str
+    current_season: str
+    pay_is_current_season: bool
     cap_context: TeamCapContext
     totals: TeamCapTotals
     players: list[TeamCapSheetPlayer]
@@ -177,6 +185,15 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     season_by_player = {r.player_id: r for r in season_rows}
     vals = value_players(db, [(pid, target) for pid in player_ids])
 
+    pay_is_current_season = target == CURRENT_SEASON
+    pay_team_id_by_player = {pid: row.team_id for pid, row in season_by_player.items()}
+    pay_team_ids = {tid for tid in pay_team_id_by_player.values() if tid is not None}
+    pay_teams = (
+        {t.team_id: t for t in db.scalars(select(Team).where(Team.team_id.in_(pay_team_ids))).all()}
+        if pay_team_ids
+        else {}
+    )
+
     players: list[TeamCapSheetPlayer] = []
     total_payroll = 0
     total_value = 0
@@ -184,6 +201,8 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     valued_count = 0
     bargains = 0
     overpays = 0
+    other_team_pay_count = 0
+    other_team_pay_usd = 0
 
     for p in roster:
         summary = summaries[p.player_id]
@@ -201,6 +220,17 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
         )
         season_row = season_by_player.get(p.player_id)
         age = season_row.age if season_row else None
+
+        pay_team_id = pay_team_id_by_player.get(p.player_id)
+        pay_team_row = pay_teams.get(pay_team_id) if pay_team_id is not None else None
+        pay_with_other_team = (
+            pay_team_id != p.current_team_id
+            if (not pay_is_current_season and pay_team_id is not None and p.current_team_id is not None)
+            else None
+        )
+        if pay_with_other_team:
+            other_team_pay_count += 1
+            other_team_pay_usd += cap_hit or 0
 
         if cap_hit:
             total_payroll += cap_hit
@@ -226,6 +256,9 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
                 gap_pct=gap_pct,
                 valuation_status="ready" if val else "unavailable",
                 pay_source=pay_source,
+                pay_season=target,
+                pay_team_abbreviation=pay_team_row.abbreviation if pay_team_row else None,
+                pay_with_other_team=pay_with_other_team,
             )
         )
 
@@ -251,6 +284,8 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
     return TeamCapSheetResponse(
         team=rosters.team_summary(team),
         season=target,
+        current_season=CURRENT_SEASON,
+        pay_is_current_season=pay_is_current_season,
         cap_context=TeamCapContext(
             season=target,
             salary_cap=salary_cap,
@@ -273,6 +308,8 @@ def get_team_cap_sheet(team_id: int, season: str | None = None, db: DB = None):
             valued_player_count=valued_count,
             bargain_count=bargains,
             overpay_count=overpays,
+            other_team_pay_count=other_team_pay_count,
+            other_team_pay_usd=other_team_pay_usd,
         ),
         players=players,
         top_bargain=top_bargain,

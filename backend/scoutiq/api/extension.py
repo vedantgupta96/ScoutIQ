@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from sqlalchemy import desc, select
 
 from scoutiq.api.cap import cap_for, load_season_caps
+from scoutiq.api.financial_status import CURRENT_SEASON
 from scoutiq.api.free_agency import DECISION_THRESHOLD_PCT
 from scoutiq.api.season import LATEST_SEASON, next_season
 from scoutiq.api.valuation import value_player_detail, value_players
@@ -103,9 +104,14 @@ def _extension_eligibility(
     guaranteed_remaining = [row for row in remaining if not (row.is_player_option or row.is_team_option)]
 
     if not remaining:
+        lead = (
+            f"The listed contract ended {final_contract_season}"
+            if final_contract_season
+            else "No contract years are on file"
+        )
         return False, (
-            "No contract years remain after the current season (impending free agent — "
-            "see the Free Agency board)."
+            f"{lead}; no contract covering {CURRENT_SEASON} is on file, "
+            "so there is no current deal to extend."
         ), None, final_contract_season
 
     if not guaranteed_remaining:

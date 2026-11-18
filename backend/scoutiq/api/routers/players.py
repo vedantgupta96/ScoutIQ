@@ -13,6 +13,12 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from scoutiq.api import extension, rosters
 from scoutiq.api.deps import DB
+from scoutiq.api.financial_status import (
+    CURRENT_SEASON,
+    CoverageStatus,
+    contract_coverage,
+    non_current_contract_caveat,
+)
 from scoutiq.api.rosters import PlayerSummary, _player_summary_from_parts, latest_stats_row
 from scoutiq.api.season import LATEST_SEASON, in_progress_season, next_season
 from scoutiq.api.valuation import (
@@ -100,6 +106,11 @@ class PlayerContractResponse(BaseModel):
     source: str
     scraped_at: str | None
     extension_start_season: str | None
+    current_season: str
+    coverage_status: CoverageStatus
+    coverage_start_season: str | None
+    coverage_end_season: str | None
+    contract_team: rosters.TeamSummary | None
     years_detail: list[PlayerContractYear]
     caveat: str
 
@@ -745,7 +756,24 @@ def get_player_contract(player_id: int, db: DB = None):
             value_gap_pct=value_gap_pct,
         ))
 
-    extension_start = _next_season(max(seasons)) if seasons else None
+    coverage_status = contract_coverage(seasons)
+    coverage_start = min(seasons) if seasons else None
+    coverage_end = max(seasons) if seasons else None
+    extension_start = (
+        _next_season(coverage_end) if (coverage_status == "current" and coverage_end) else None
+    )
+    contract_team = (
+        rosters.team_summary(db.get(Team, contract.team_id)) if contract.team_id else None
+    )
+    if coverage_status == "current":
+        caveat = (
+            "Spotrac forward contract structure. Value gaps are shown only for seasons with loaded "
+            "stats/model coverage; future seasons remain contract-only until new stats arrive."
+        )
+    else:
+        caveat = non_current_contract_caveat(
+            coverage_status, contract.source, coverage_start, coverage_end
+        )
     return PlayerContractResponse(
         player_id=player_id,
         player_name=player.full_name,
@@ -756,11 +784,13 @@ def get_player_contract(player_id: int, db: DB = None):
         source=contract.source,
         scraped_at=contract.scraped_at.isoformat() if contract.scraped_at else None,
         extension_start_season=extension_start,
+        current_season=CURRENT_SEASON,
+        coverage_status=coverage_status,
+        coverage_start_season=coverage_start,
+        coverage_end_season=coverage_end,
+        contract_team=contract_team,
         years_detail=years_detail,
-        caveat=(
-            "Spotrac forward contract structure. Value gaps are shown only for seasons with loaded "
-            "stats/model coverage; future seasons remain contract-only until new stats arrive."
-        ),
+        caveat=caveat,
     )
 
 
@@ -791,12 +821,25 @@ def get_valuation(player_id: int, season: str | None = None, db: DB = None):
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
+    pay_team_id = rosters.season_team_ids(db, [player_id], target_season).get(player_id)
+    pay_team = rosters.team_summary(db.get(Team, pay_team_id)) if pay_team_id else None
+    pay_team_is_current_team = (
+        pay_team_id == player.current_team_id
+        if (pay_team_id is not None and player.current_team_id is not None)
+        else None
+    )
+
     return {
         "player_id": player_id,
         "player_name": player.full_name,
         "position": player.position,
         "current_team": rosters.team_summary(db.get(Team, player.current_team_id)) if player.current_team_id else None,
         "season": target_season,
+        "current_season": CURRENT_SEASON,
+        "pay_season": target_season,
+        "pay_is_current_season": target_season == CURRENT_SEASON,
+        "pay_team": pay_team,
+        "pay_team_is_current_team": pay_team_is_current_team,
         "value_pct": valuation.value_pct,
         "lo_pct": valuation.lo_pct,
         "hi_pct": valuation.hi_pct,

@@ -195,6 +195,10 @@ class FakeDB:
 
     def execute(self, stmt):
         sql = str(stmt)
+        if "player_seasons.team_id" in sql and "player_seasons.player_id IN" in sql and "teams" not in sql:
+            return FakeScalarResult(
+                [(self.player_season.player_id, self.player_season.team_id)] if self.player else []
+            )
         if "player_seasons.player_id IN" in sql and "player_seasons.season" in sql and "teams" in sql:
             team_by_id = {
                 self.memphis.team_id: self.memphis,
@@ -729,13 +733,94 @@ def test_player_contract_returns_current_contract_timeline(monkeypatch):
     assert body["season_start"] == "2024-25"
     assert body["years"] == 2
     assert body["total_value"] == 60_000_000
-    assert body["extension_start_season"] == "2026-27"
+    assert body["extension_start_season"] is None
     assert body["years_detail"][0]["season"] == "2024-25"
     assert body["years_detail"][0]["cap_hit_pct"] == 19.92
     assert body["years_detail"][0]["value_pct"] == 23.5
     assert body["years_detail"][0]["value_gap_pct"] == 3.58
     assert body["years_detail"][1]["is_player_option"] is True
     assert body["years_detail"][1]["value_pct"] is None
+
+
+def test_player_contract_expired_deal_is_history_not_current(monkeypatch):
+    monkeypatch.setattr(
+        valuation_module,
+        "predict_many_from_features",
+        lambda rows: [
+            {"value_pct": 23.5, "lo_pct": 18.1, "hi_pct": 28.9, "model_version": "v0-gbm-conformal"}
+            for _ in rows
+        ],
+    )
+    fake = FakeDB()
+    fake.contract.team_id = fake.memphis.team_id
+    body = _client(fake).get("/players/1630217/contract").json()
+
+    assert body["current_season"] == "2026-27"
+    assert body["coverage_status"] == "expired"
+    assert body["coverage_start_season"] == "2024-25"
+    assert body["coverage_end_season"] == "2025-26"
+    assert body["extension_start_season"] is None
+    assert body["contract_team"]["abbreviation"] == "MEM"
+    assert body["caveat"].startswith("Contract history: this spotrac record covers 2024-25 to 2025-26")
+    assert "does not cover 2026-27" in body["caveat"]
+    assert len(body["years_detail"]) == 2
+
+
+def test_player_contract_covering_current_season_keeps_extension_window(monkeypatch):
+    monkeypatch.setattr(
+        valuation_module,
+        "predict_many_from_features",
+        lambda rows: [
+            {"value_pct": 23.5, "lo_pct": 18.1, "hi_pct": 28.9, "model_version": "v0-gbm-conformal"}
+            for _ in rows
+        ],
+    )
+    fake = FakeDB()
+    fake.contract_years = [
+        ContractYear(contract_id=42, season=season, aav=30_000_000, cap_pct=0.2,
+                     is_guaranteed=True, is_player_option=False, is_team_option=False)
+        for season in ("2025-26", "2026-27", "2027-28")
+    ]
+    body = _client(fake).get("/players/1630217/contract").json()
+
+    assert body["coverage_status"] == "current"
+    assert body["coverage_start_season"] == "2025-26"
+    assert body["coverage_end_season"] == "2027-28"
+    assert body["extension_start_season"] == "2028-29"
+    assert body["caveat"].startswith("Spotrac forward contract structure.")
+
+
+def test_player_contract_missing_contract_still_404s():
+    fake = FakeDB()
+    fake.contract = None
+    original_scalars = fake.scalars
+
+    def scalars(stmt):
+        if "FROM contracts" in str(stmt):
+            return FakeScalarResult([])
+        return original_scalars(stmt)
+
+    fake.scalars = scalars
+    assert _client(fake).get("/players/1630217/contract").status_code == 404
+
+
+def test_valuation_reports_pay_season_and_pay_team(monkeypatch):
+    monkeypatch.setattr(
+        valuation_module,
+        "predict_from_features",
+        lambda features: {
+            "value_pct": 23.5, "lo_pct": 18.1, "hi_pct": 28.9, "model_version": "v0-gbm-conformal",
+        },
+    )
+    body = _client(FakeDB()).get("/players/1630217/valuation").json()
+
+    assert body["season"] == "2024-25"
+    assert body["current_team"]["abbreviation"] == "ORL"
+    assert body["current_season"] == "2026-27"
+    assert body["pay_season"] == "2024-25"
+    assert body["pay_is_current_season"] is False
+    assert body["pay_team"]["abbreviation"] == "MEM"
+    assert body["pay_team_is_current_team"] is False
 
 
 def test_similar_players_returns_role_and_market_context(monkeypatch):

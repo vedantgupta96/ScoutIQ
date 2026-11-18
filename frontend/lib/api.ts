@@ -101,6 +101,11 @@ export interface ValuationResponse {
   position: string | null;
   current_team: TeamSummary | null;
   season: string;
+  current_season: string;
+  pay_season: string;
+  pay_is_current_season: boolean;
+  pay_team: TeamSummary | null;
+  pay_team_is_current_team: boolean | null;
   value_pct: number;
   lo_pct: number;
   hi_pct: number;
@@ -174,6 +179,8 @@ export interface PlayerContractYear {
   value_gap_pct: number | null;
 }
 
+export type ContractCoverageStatus = 'current' | 'expired' | 'future_only' | 'no_years';
+
 export interface PlayerContractResponse {
   player_id: number;
   player_name: string;
@@ -184,6 +191,11 @@ export interface PlayerContractResponse {
   source: string;
   scraped_at: string | null;
   extension_start_season: string | null;
+  current_season: string;
+  coverage_status: ContractCoverageStatus;
+  coverage_start_season: string | null;
+  coverage_end_season: string | null;
+  contract_team: TeamSummary | null;
   years_detail: PlayerContractYear[];
   caveat: string;
 }
@@ -566,6 +578,8 @@ export interface TeamCapTotals {
   valued_player_count: number;
   bargain_count: number;
   overpay_count: number;
+  other_team_pay_count: number;
+  other_team_pay_usd: number;
 }
 
 export interface TeamCapSheetPlayer extends PlayerSummary {
@@ -577,11 +591,16 @@ export interface TeamCapSheetPlayer extends PlayerSummary {
   gap_pct: number | null;
   valuation_status: ValuationStatus;
   pay_source: 'contract' | 'salary' | null;
+  pay_season: string;
+  pay_team_abbreviation: string | null;
+  pay_with_other_team: boolean | null;
 }
 
 export interface TeamCapSheetResponse {
   team: TeamSummary;
   season: string;
+  current_season: string;
+  pay_is_current_season: boolean;
   cap_context: TeamCapContext;
   totals: TeamCapTotals;
   players: TeamCapSheetPlayer[];
