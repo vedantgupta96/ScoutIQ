@@ -6993,3 +6993,10 @@ main h1:not(.siq-sr-only) {
   font-size: clamp(26px, 22cqi, 40px) !important;
   white-space: nowrap;
 }
+
+/* ---------- Arena fixes: metric plates go 2×2 until 4 columns fit ----------
+   Phones already use 2 columns (≤720px). Four columns are too narrow for the
+   figures until ~900px, so keep 2 columns through the tablet range. */
+@media (max-width: 899px) {
+  .siq-metric-plates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
