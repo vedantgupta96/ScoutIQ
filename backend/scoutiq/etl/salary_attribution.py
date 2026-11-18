@@ -77,6 +77,7 @@ def attribute_salary(facts: SigningFacts, season_rows: Sequence[SalaryRow]) -> A
         "season_row_teams": list(dict.fromkeys(r.team for r in season_rows)),
         "signing_team_row_count": len(team_rows),
         "team_signings_in_season": facts.team_signings_in_season,
+        "entry_combines_forms": facts.entry_combines_forms,
         "prior_terminations_by_team": facts.prior_terminations_by_team,
         "prior_service_with_team": facts.prior_service_with_team,
         "prior_releases_team_unknown": facts.prior_releases_team_unknown,

@@ -134,6 +134,7 @@ def test_evidence_is_json_serializable_with_stable_keys():
         "season_row_teams",
         "signing_team_row_count",
         "team_signings_in_season",
+        "entry_combines_forms",
         "prior_terminations_by_team",
         "prior_service_with_team",
         "prior_releases_team_unknown",

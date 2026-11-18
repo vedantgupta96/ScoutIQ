@@ -169,7 +169,7 @@ def test_attribution_insert_update_unchanged_orphaned():
     json.dumps(unresolved["evidence"])
 
     stored = {
-        i["event_key"]: {k: i[k] for k in ("status", "reason", "salary", "rule_version", "row_key")}
+        i["event_key"]: {k: i[k] for k in ("status", "reason", "salary", "rule_version", "row_key", "evidence")}
         for i in plan.to_insert
     }
     again = plan_attributions(events, stored, fetched, row_keys)
@@ -248,7 +248,7 @@ def test_idempotent_replan_with_stored_only_rows():
     stored = {FOX0: (2 * M, "SPR", 1), OWL0: (900_000, "RIV", 2)}
     first = _plan_with([FOX_ROW], stored)
     recorded = {
-        i["event_key"]: {k: i[k] for k in ("status", "reason", "salary", "rule_version", "row_key")}
+        i["event_key"]: {k: i[k] for k in ("status", "reason", "salary", "rule_version", "row_key", "evidence")}
         for i in first.attributions.to_insert
     }
     again = _plan_with([FOX_ROW], stored, recorded)
@@ -267,7 +267,7 @@ def test_idempotent_replan_against_in_memory_state():
         for n, r in enumerate(ts.to_insert, 1)
     }
     stored = {
-        i["event_key"]: {k: i[k] for k in ("status", "reason", "salary", "rule_version", "row_key")}
+        i["event_key"]: {k: i[k] for k in ("status", "reason", "salary", "rule_version", "row_key", "evidence")}
         for i in at.to_insert
     }
     ts2 = plan_team_salary_rows(pages, {"fixpl01": 7}, existing, team_id_for)
@@ -395,6 +395,9 @@ def test_end_to_end_apply_on_sqlite_is_idempotent(tmp_path):
     assert len(replan.team_salaries.unchanged) == 5
     assert (len(replan.attributions.to_insert), len(replan.attributions.to_update)) == (0, 0)
     assert len(replan.attributions.unchanged) == 2
+    assert replan.attributions.orphaned == []
+    again = build_plan(raw, None, reader)
+    assert (again.attributions.to_insert, again.attributions.to_update) == ([], [])
     with Session(engine) as session:
         before = session.execute(text("select loaded_at from player_team_salaries")).all()
         apply_plan(session, replan, datetime(2027, 1, 1, tzinfo=timezone.utc))
@@ -533,7 +536,8 @@ def test_stored_termination_evidence_blocks_after_waiver_dropped_from_cache():
     assert plan.attributions_by_status == {"attributed": 0, "unresolved": 1}
     assert plan.unresolved_by_reason["earlier_termination_by_signing_team"] == 1
     assert plan.events_with_stored_signing_evidence == 1
-    assert plan.attributions.unchanged == [FOX_KEY]
+    assert [i["event_key"] for i in plan.attributions.to_update] == [FOX_KEY]
+    assert plan.attributions.to_update[0]["evidence"]["prior_terminations_by_team"] == 1
     assert plan.promotions == 0
 
 
@@ -571,3 +575,115 @@ def test_promotions_counts_unresolved_to_attributed_updates():
     assert plan.promotions == 1
     assert plan.events_with_stored_signing_evidence == 0
     assert plan_report(plan, "dry_run")["attributions"]["promotions"] == 1
+
+
+def _reader_for(engine):
+    def reader():
+        with engine.connect() as conn:
+            return read_db_state(conn)
+
+    return reader
+
+
+def _apply(engine, plan, now=datetime(2026, 7, 1, tzinfo=timezone.utc)):
+    with Session(engine) as session:
+        apply_plan(session, plan, now)
+        session.commit()
+
+
+def _stored_row(engine):
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("select status, reason, salary, evidence from salary_decision_attributions")
+        ).one()
+    evidence = row.evidence if isinstance(row.evidence, dict) else json.loads(row.evidence)
+    return row.status, row.reason, row.salary, evidence
+
+
+def test_new_evidence_is_saved_when_status_and_reason_are_unchanged():
+    engine = _sqlite_engine(with_tables=True)
+    reader = _reader_for(engine)
+    waiver = ("July 2, 2019", "Waived by the Springfield Foxes.")
+    sign = ("July 5, 2019", "Signed a multi-year contract with the Springfield Foxes.")
+    key = "7:2019-07-05:standard:springfield-foxes"
+
+    plan1 = build_plan(Path("."), None, reader, pages=[_txn_page((sign,), [])])
+    assert plan1.unresolved_by_reason["no_salary_rows_for_season"] == 1
+    _apply(engine, plan1)
+    status, reason, _salary, evidence = _stored_row(engine)
+    assert (status, reason, evidence["prior_terminations_by_team"]) == (
+        "unresolved",
+        "no_salary_rows_for_season",
+        0,
+    )
+
+    plan2 = build_plan(Path("."), None, reader, pages=[_txn_page((waiver, sign), [])])
+    assert plan2.unresolved_by_reason["no_salary_rows_for_season"] == 1
+    assert [i["event_key"] for i in plan2.attributions.to_update] == [key]
+    assert plan2.attributions.unchanged == []
+    _apply(engine, plan2)
+    status, reason, _salary, evidence = _stored_row(engine)
+    assert (status, reason, evidence["prior_terminations_by_team"]) == (
+        "unresolved",
+        "no_salary_rows_for_season",
+        1,
+    )
+
+    plan3 = build_plan(Path("."), None, reader, pages=[_txn_page((sign,), [FOX_ROW])])
+    assert plan3.attributions_by_status == {"attributed": 0, "unresolved": 1}
+    assert plan3.unresolved_by_reason["earlier_termination_by_signing_team"] == 1
+    assert plan3.promotions == 0
+    _apply(engine, plan3)
+    status, reason, salary, _evidence = _stored_row(engine)
+    assert (status, reason, salary) == ("unresolved", "earlier_termination_by_signing_team", None)
+
+
+def test_combined_entry_stays_combined_after_wording_loses_detail():
+    engine = _sqlite_engine(with_tables=True)
+    reader = _reader_for(engine)
+    combined = (
+        "July 1, 2019",
+        "Signed two 10-day contracts with the Springfield Foxes, then signed a contract for the rest of the season.",
+    )
+
+    plain = ("July 1, 2019", "Signed a contract for the rest of the season with the Springfield Foxes.")
+
+    plan1 = build_plan(Path("."), None, reader, pages=[_txn_page((combined,), [FOX_ROW])])
+    assert plan1.attributions_by_status == {"attributed": 0, "unresolved": 1}
+    assert plan1.unresolved_by_reason["entry_combines_forms"] == 1
+    _apply(engine, plan1)
+    status, reason, _salary, evidence = _stored_row(engine)
+    assert (status, reason, evidence["entry_combines_forms"]) == ("unresolved", "entry_combines_forms", True)
+
+    plan2 = build_plan(Path("."), None, reader, pages=[_txn_page((plain,), [FOX_ROW])])
+    assert plan2.attributions_by_status == {"attributed": 0, "unresolved": 1}
+    assert plan2.unresolved_by_reason["entry_combines_forms"] == 1
+    assert plan2.promotions == 0
+    assert plan2.events_with_stored_signing_evidence == 1
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "multiple_signings_with_team",
+        "entry_combines_forms",
+        "earlier_termination_by_signing_team",
+        "earlier_service_with_signing_team",
+        "earlier_release_team_unknown",
+    ],
+)
+def test_stored_reason_floors_keep_event_unresolved_without_evidence(reason):
+    stored = {FOX_KEY: _stored_record(FOX_KEY, "unresolved", reason, {})}
+    plan = _plan_with([FOX_ROW], {FOX0: (2 * M, "SPR", 1)}, stored)
+    assert plan.attributions_by_status == {"attributed": 0, "unresolved": 1}
+    assert plan.unresolved_by_reason[reason] == 1
+    assert plan.promotions == 0
+    assert plan.events_with_stored_signing_evidence == 1
+
+
+def test_stored_cache_only_reason_with_empty_evidence_does_not_block_attribution():
+    stored = {FOX_KEY: _stored_record(FOX_KEY, "unresolved", "no_salary_rows_for_season", {})}
+    plan = _plan_with([FOX_ROW], {FOX0: (2 * M, "SPR", 1)}, stored)
+    assert plan.attributions_by_status == {"attributed": 1, "unresolved": 0}
+    assert plan.promotions == 1
+    assert plan.events_with_stored_signing_evidence == 0

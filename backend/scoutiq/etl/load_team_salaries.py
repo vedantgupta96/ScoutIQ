@@ -4,8 +4,9 @@ Source salary rows are insert-only evidence: a stored row is never updated or de
 stored row whose salary differs from the source is reported as a conflict, never overwritten.
 `player_salaries` is not touched.
 Stored attribution records take part in attribution the same way: a stored signing the cache no longer
-produces still counts toward the signing team's signings, and stored evidence counts are only ever
-raised, so evidence of ambiguity is never lost across runs. Default is a read-only dry run; `--apply` writes in one
+produces still counts toward the signing team's signings, and stored evidence and stored reasons are both
+honoured (counts are only ever raised, a combined-forms entry stays combined), so evidence of ambiguity is
+never lost across runs. Default is a read-only dry run; `--apply` writes in one
 transaction and refuses when the tables are missing or any conflict exists.
 
 Usage:
@@ -40,6 +41,14 @@ from scoutiq.sources.nba import team_id_for_abbreviation
 
 SOURCE = "bbref"
 CONFLICT_TEXT_CAP = 50
+
+STORED_REASON_FLOORS: dict[str, tuple[str, int]] = {
+    "multiple_signings_with_team": ("team_signings_in_season", 2),
+    "entry_combines_forms": ("entry_combines_forms", 1),
+    "earlier_termination_by_signing_team": ("prior_terminations_by_team", 1),
+    "earlier_service_with_signing_team": ("prior_service_with_team", 1),
+    "earlier_release_team_unknown": ("prior_releases_team_unknown", 1),
+}
 
 TeamSalaryKey = tuple[int, str, str, str, int]
 SeasonEvidence = dict[tuple[int, str], list[tuple[TeamSalaryKey, SalaryRow]]]
@@ -232,7 +241,8 @@ def plan_attributions(
             stored["salary"],
             stored["rule_version"],
             stored["row_key"],
-        ) == (att.status, att.reason, att.salary, RULE_VERSION, row_key):
+            _normalised_evidence(stored.get("evidence")),
+        ) == (att.status, att.reason, att.salary, RULE_VERSION, row_key, _normalised_evidence(att.evidence)):
             plan.unchanged.append(ev.event_key)
         else:
             plan.to_update.append(item)
@@ -246,6 +256,10 @@ def _evidence_dict(value) -> dict:
     if isinstance(value, str):
         value = json.loads(value)
     return value if isinstance(value, dict) else {}
+
+
+def _normalised_evidence(value) -> dict:
+    return json.loads(json.dumps(_evidence_dict(value)))
 
 
 def read_db_state(conn) -> DbState:
@@ -362,9 +376,21 @@ def build_plan(
         }
         stored = state.attributions.get(ev.event_key)
         if stored is not None:
-            stored_evidence = stored.get("evidence") or {}
-            counts = {k: max(v, int(stored_evidence.get(k) or 0)) for k, v in counts.items()}
-        adjusted_facts = replace(facts, **counts)
+            stored_evidence = _evidence_dict(stored.get("evidence"))
+            floors = dict.fromkeys(counts, 0)
+            if stored["status"] == "unresolved" and stored["reason"] in STORED_REASON_FLOORS:
+                floor_key, floor_value = STORED_REASON_FLOORS[stored["reason"]]
+                if floor_key in floors:
+                    floors[floor_key] = floor_value
+                else:
+                    stored_evidence = {**stored_evidence, floor_key: True}
+            counts = {
+                k: max(v, int(stored_evidence.get(k) or 0), floors[k]) for k, v in counts.items()
+            }
+            combines = facts.entry_combines_forms or bool(stored_evidence.get("entry_combines_forms"))
+        else:
+            combines = facts.entry_combines_forms
+        adjusted_facts = replace(facts, entry_combines_forms=combines, **counts)
         if adjusted_facts != facts:
             adjusted.add(ev.event_key)
         return adjusted_facts
