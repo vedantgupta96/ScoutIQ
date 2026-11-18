@@ -110,7 +110,7 @@ function RatingPill({ rating }: { rating: ScoutRatingRow }) {
         <Badge tone={rating.confidence === 'high' ? 'confidence' : rating.confidence === 'medium' ? 'neutral' : 'warning'} size="sm">
           {rating.confidence}
         </Badge>
-        <span className="ds-note siq-model-rating-evidence">
+        <span className="ds-note siq-model-rating-evidence" title={rating.evidence_span}>
           &quot;{rating.evidence_span}&quot;
         </span>
       </div>
