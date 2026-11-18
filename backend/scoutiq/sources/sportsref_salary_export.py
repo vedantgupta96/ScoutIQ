@@ -33,6 +33,7 @@ class YearCell:
     amount: int | None
     option: str | None
     blank: bool
+    uncertain: str | None = None
 
 
 @dataclass
@@ -104,7 +105,7 @@ def _digits_amount(text: str) -> int | None:
     return int(digits) if digits else None
 
 
-def _read_amount(cell, where: str, problems: list[str]) -> tuple[int | None, bool]:
+def _read_amount(cell, where: str, problems: list[str]) -> tuple[int | None, bool, str | None]:
     text = _text(cell)
     csk = (cell.get("csk") or "").strip()
     shown = _digits_amount(text)
@@ -112,14 +113,19 @@ def _read_amount(cell, where: str, problems: list[str]) -> tuple[int | None, boo
         try:
             value = int(csk)
         except ValueError:
-            problems.append(f"{where}: csk {csk!r} is not an integer")
-            return shown, shown is None
+            reason = f"csk {csk!r} is not an integer"
+            problems.append(f"{where}: {reason}")
+            return None, False, reason
         if shown is not None and shown != value:
             problems.append(f"{where}: csk {value} disagrees with displayed text {text!r}")
-        return value, False
+        return value, False, None
     if shown is None:
-        return None, True
-    return shown, False
+        if text:
+            reason = f"non-numeric salary value {text!r}"
+            problems.append(f"{where}: {reason}")
+            return None, False, reason
+        return None, True, None
+    return shown, False, None
 
 
 def parse_export(html: str) -> ParsedExport:
@@ -166,19 +172,24 @@ def parse_export(html: str) -> ParsedExport:
                 if cell is None:
                     years.append(YearCell(seasons[idx], None, None, True))
                     continue
-                amount, blank = _read_amount(cell, where, problems)
-                option = None
+                amount, blank, uncertain = _read_amount(cell, where, problems)
+                markers = []
                 for cls in _classes(cell):
                     if cls.startswith("salary-"):
                         if cls in MARKER_SEMANTICS:
-                            option = MARKER_SEMANTICS[cls]
+                            markers.append(cls)
                             option_class_counts[cls] = option_class_counts.get(cls, 0) + 1
                         else:
                             problems.append(f"{where}: unknown cell class {cls!r}")
-                years.append(YearCell(seasons[idx], amount, option, blank))
+                option = MARKER_SEMANTICS[markers[0]] if len(set(markers)) == 1 else None
+                if len(set(markers)) > 1:
+                    reason = "conflicting option markers"
+                    problems.append(f"{where}: {reason}")
+                    uncertain = f"{uncertain}; {reason}" if uncertain else reason
+                years.append(YearCell(seasons[idx], amount, option, blank, uncertain))
             gtd_cell = cells.get("remain_gtd")
             gtd = None
             if gtd_cell is not None:
-                gtd, _ = _read_amount(gtd_cell, f"{where_row} remain_gtd", problems)
+                gtd, _, _ = _read_amount(gtd_cell, f"{where_row} remain_gtd", problems)
             rows.append(ObligationRow(this_ordinal, rank, bbref_id, name, team, years, gtd))
     return ParsedExport(seasons, rows, problems, skipped, option_class_counts)

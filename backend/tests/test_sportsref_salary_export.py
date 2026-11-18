@@ -92,3 +92,28 @@ def test_missing_team_cell_is_a_problem_and_row_kept():
     tatum = next(r for r in result.rows if r.bbref_id == "tatumja01")
     assert tatum.team_abbr == ""
     assert any("tatumja01" in p and "team_id" in p for p in result.problems)
+
+
+def _variant(old, new):
+    html = (FIXTURES / "contracts_export.html").read_text(encoding="utf-8")
+    assert old in html
+    return parse_export(html.replace(old, new, 1))
+
+
+def test_non_numeric_cell_is_uncertain_not_blank():
+    result = _variant(
+        '<td class="right salary-pl" data-stat="y2" csk="4070355">$4,070,355</td>',
+        '<td class="right " data-stat="y2">TBD</td>',
+    )
+    cell = result.rows[0].years[1]
+    assert cell.amount is None and cell.blank is False and "TBD" in cell.uncertain
+    assert any("non-numeric salary value 'TBD'" in p for p in result.problems)
+
+
+def test_conflicting_option_markers_are_uncertain():
+    result = _variant(
+        '<td class="right salary-pl" data-stat="y2"', '<td class="right salary-pl salary-tm" data-stat="y2"'
+    )
+    cell = result.rows[0].years[1]
+    assert cell.option is None and cell.uncertain == "conflicting option markers"
+    assert any("conflicting option markers" in p for p in result.problems)

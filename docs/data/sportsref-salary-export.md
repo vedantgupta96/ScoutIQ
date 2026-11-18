@@ -38,6 +38,18 @@ Basketball-Reference spells some teams differently from the `teams` table (BRK, 
 
 For each unmatched id the plan adds evidence only: players whose normalized full name (the crosswalk's `normalize_name`) equals the export name, each with player_id, current team, and its xref status and slug. These are `exact_name_candidates` ("candidate only - not assigned"); ids with no exact-name player are `no_player_record` (for example new rookies). If an exact-name candidate already has a verified crosswalk row under a different BBRef id, the id is categorized `verified_slug_conflict` and listed under `identity.verified_slug_conflicts` (export id, export name, player_id, stored verified slug). One side may be wrong and it must be resolved before any apply; it is never assigned. Each evidence entry also carries the export row's player name and team. The evidence is never used to match or compare; `matched` counts stay verified-slug only.
 
+### Uncertain cells
+
+A non-empty cell with no `csk` and no digits (for example "TBD") is not treated as blank: amount is None, `blank` is false, a problem is recorded, and the cell is marked `uncertain` with the reason. A cell carrying both `salary-pl` and `salary-tm` gets no option, a "conflicting option markers" problem, and is also uncertain. Uncertain cells are counted in `coverage.uncertain_cells`, and every comparison reports them as `uncertain_in_export`, never as same, missing, or blank.
+
+### Comparison outcomes
+
+Each comparison covers matched single-obligation players only; multi-obligation players are listed under `not_compared_multi_obligation` (id and row count) with a count. Every outcome is explicit, with counts in `summary` and per-item `details`:
+
+- Contract years: `same`, `amount_differs`, `option_differs`, `missing_in_stored`, `missing_in_export`, `uncertain_in_export`.
+- `player_salaries` (per export season): `same`, `amount_differs`, `missing_in_stored`, `extra_in_stored` (a stored row where the export is blank), `uncertain_in_export`.
+- `player_team_salaries`: keyed by player, season and resolved team. Both the export team and the stored `team_abbr` pass through `TEAM_ABBREV_ALIASES` before keying, so CHO matches CHA. Each export obligation matches at most one stored row (`same`, or `amount_differs` when only the amount differs); `missing_in_stored` when none exists; every unconsumed stored row is `extra_in_stored`, never dropped.
+
 ## Rerun steps
 
 From `backend/`:

@@ -232,7 +232,9 @@ def _compare_contract(row, stored: StoredContract, first_season: str) -> dict:
         y = export_by_season.get(season)
         in_export = y is not None and not y.blank
         s = stored_by_season.get(season)
-        if in_export and s is None:
+        if y is not None and y.uncertain:
+            seasons[season] = {"outcome": "uncertain_in_export", "reason": y.uncertain}
+        elif in_export and s is None:
             seasons[season] = {"outcome": "missing_in_stored", "export": y.amount, "export_option": y.option}
         elif in_export:
             aav, po, to = s
@@ -404,7 +406,7 @@ def build_plan(parsed: ParsedExport, state: DbState, manifest: dict) -> dict:
             continue
         pid = matched[bid]
         if len(rows_by_id[bid]) > 1:
-            not_compared.append(bid)
+            not_compared.append({"bbref_id": bid, "rows": len(rows_by_id[bid])})
             continue
         stored = state.contracts.get(pid)
         if stored is None:
@@ -426,28 +428,78 @@ def build_plan(parsed: ParsedExport, state: DbState, manifest: dict) -> dict:
     }
 
     single_pid_to_row = {matched[b]: rows_by_id[b][0] for b in distinct_ids if b in matched and len(rows_by_id[b]) == 1}
-    ps_outcomes = []
-    ps_by_key = {(p, s): sal for p, s, sal in state.player_salaries}
+    alias = lambda abbr: TEAM_ABBREV_ALIASES.get((abbr or "").upper(), (abbr or "").upper())
+    not_compared = [
+        {"bbref_id": bid, "rows": len(rows_by_id[bid])} for bid in multi_ids if bid in matched
+    ]
+
+    ps_details = []
+    ps_by_key = {(p, s_): sal for p, s_, sal in state.player_salaries}
     for pid, row in sorted(single_pid_to_row.items()):
         for y in row.years:
+            has_stored = (pid, y.season) in ps_by_key
             stored_sal = ps_by_key.get((pid, y.season))
-            if y.blank:
-                if stored_sal is not None:
-                    ps_outcomes.append({"player_id": pid, "season": y.season, "outcome": "missing_in_export", "stored": stored_sal})
-            elif (pid, y.season) not in ps_by_key:
-                continue
+            base = {"player_id": pid, "bbref_id": row.bbref_id, "season": y.season}
+            if y.uncertain:
+                ps_details.append({**base, "outcome": "uncertain_in_export", "reason": y.uncertain})
+            elif y.blank:
+                if has_stored:
+                    ps_details.append({**base, "outcome": "extra_in_stored", "stored": stored_sal})
+            elif not has_stored:
+                ps_details.append({**base, "outcome": "missing_in_stored", "export": y.amount})
             elif stored_sal != y.amount:
-                ps_outcomes.append({"player_id": pid, "season": y.season, "outcome": "amount_differs", "stored": stored_sal, "export": y.amount})
-    ts_outcomes = []
+                ps_details.append({**base, "outcome": "amount_differs", "stored": stored_sal, "export": y.amount})
+            else:
+                ps_details.append({**base, "outcome": "same", "amount": y.amount})
+
+    stored_ts: dict[tuple, list[tuple[int, int]]] = {}
+    for idx, (pid, season, abbr, salary) in enumerate(state.team_salaries):
+        stored_ts.setdefault((pid, season, alias(abbr)), []).append((idx, salary))
+    consumed: set[int] = set()
+    ts_details = []
     for pid, row in sorted(single_pid_to_row.items()):
+        team = alias(row.team_abbr)
         for y in row.years:
-            stored_rows = [(a, s) for p, se, a, s in state.team_salaries if p == pid and se == y.season]
-            if not stored_rows:
+            base = {
+                "player_id": pid,
+                "bbref_id": row.bbref_id,
+                "season": y.season,
+                "team": team,
+                "team_source": row.team_abbr,
+            }
+            candidates = [c for c in stored_ts.get((pid, y.season, team), []) if c[0] not in consumed]
+            if y.uncertain:
+                ts_details.append({**base, "outcome": "uncertain_in_export", "reason": y.uncertain})
+                for key, items in stored_ts.items():
+                    if key[0] == pid and key[1] == y.season:
+                        consumed.update(i for i, _ in items)
                 continue
             if y.blank:
-                ts_outcomes.append({"player_id": pid, "season": y.season, "outcome": "missing_in_export", "stored": [list(x) for x in stored_rows]})
-            elif (row.team_abbr, y.amount) not in stored_rows:
-                ts_outcomes.append({"player_id": pid, "season": y.season, "outcome": "differs", "export": [row.team_abbr, y.amount], "stored": [list(x) for x in stored_rows]})
+                continue
+            exact = next((c for c in candidates if c[1] == y.amount), None)
+            if exact is not None:
+                consumed.add(exact[0])
+                ts_details.append({**base, "outcome": "same", "amount": y.amount})
+            elif candidates:
+                consumed.add(candidates[0][0])
+                ts_details.append({**base, "outcome": "amount_differs", "stored": candidates[0][1], "export": y.amount})
+            else:
+                ts_details.append({**base, "outcome": "missing_in_stored", "export": y.amount})
+    single_pids = set(single_pid_to_row)
+    for idx, (pid, season, abbr, salary) in enumerate(state.team_salaries):
+        if pid in single_pids and idx not in consumed:
+            ts_details.append(
+                {
+                    "player_id": pid,
+                    "bbref_id": single_pid_to_row[pid].bbref_id,
+                    "season": season,
+                    "team": alias(abbr),
+                    "team_source": abbr,
+                    "outcome": "extra_in_stored",
+                    "stored": salary,
+                }
+            )
+    ts_details.sort(key=lambda d: (d["player_id"], d["season"], d["team"], d["outcome"]))
 
     return {
         "provenance": {
@@ -470,6 +522,7 @@ def build_plan(parsed: ParsedExport, state: DbState, manifest: dict) -> dict:
             "seasons": list(parsed.seasons),
             "option_markers": _counts(y.option for r in parsed.rows for y in r.years if y.option),
             "blank_cells": sum(1 for r in parsed.rows for y in r.years if y.blank),
+            "uncertain_cells": sum(1 for r in parsed.rows for y in r.years if y.uncertain),
             "explicit_zero_cells": sum(1 for r in parsed.rows for y in r.years if y.amount == 0 and not y.blank),
             "rows_with_remaining_guaranteed": sum(1 for r in parsed.rows if r.remaining_guaranteed is not None),
             "skipped_rows": parsed.skipped_rows,
@@ -492,19 +545,35 @@ def build_plan(parsed: ParsedExport, state: DbState, manifest: dict) -> dict:
         "stored_contract_comparison": {
             "summary": comparison_summary,
             "players_without_stored_contract": sorted(no_stored),
-            "not_compared_multi_obligation": sorted(not_compared),
+            "not_compared_multi_obligation": sorted(not_compared, key=lambda d: d["bbref_id"]),
+            "not_compared_multi_obligation_count": len(not_compared),
             "players": comparisons,
         },
         "player_salaries_comparison": {
             "stored_rows_for_export_seasons": len(state.player_salaries),
-            "differences": ps_outcomes,
+            "summary": _counts(d["outcome"] for d in ps_details),
+            "details": ps_details,
+            "not_compared_multi_obligation": not_compared,
+            "not_compared_multi_obligation_count": len(not_compared),
         },
         "team_salary_rows_comparison": {
             "stored_rows_for_export_seasons": len(state.team_salaries),
-            "differences": ts_outcomes,
+            "summary": _counts(d["outcome"] for d in ts_details),
+            "details": ts_details,
+            "not_compared_multi_obligation": not_compared,
+            "not_compared_multi_obligation_count": len(not_compared),
         },
         "problems": list(parsed.problems),
     }
+
+
+def _table_line(label: str, section: dict) -> str:
+    outcomes = ("same", "amount_differs", "missing_in_stored", "extra_in_stored", "uncertain_in_export")
+    counts = ", ".join(f"{o} {section['summary'].get(o, 0)}" for o in outcomes)
+    return (
+        f"{label}: stored rows {section['stored_rows_for_export_seasons']}; {counts}; "
+        f"not compared (multi-obligation) {section['not_compared_multi_obligation_count']}"
+    )
 
 
 def render_summary(plan: dict) -> str:
@@ -513,7 +582,7 @@ def render_summary(plan: dict) -> str:
     lines = [
         f"sha256 {p['sha256']} ({p['bytes']} bytes), received {p['received_at_utc']}, export time: {p['export_time']}",
         f"rows {c['rows']}, distinct ids {c['distinct_ids']}, teams {c['distinct_teams']}, seasons {', '.join(c['seasons'])}",
-        f"option markers {c['option_markers']}, blank cells {c['blank_cells']}, explicit $0 {c['explicit_zero_cells']}, "
+        f"option markers {c['option_markers']}, blank cells {c['blank_cells']}, explicit $0 {c['explicit_zero_cells']}, uncertain {c['uncertain_cells']}, "
         f"rows with remaining_guaranteed {c['rows_with_remaining_guaranteed']}, skipped rows {c['skipped_rows']}",
         f"identity: matched {i['matched']}, unmatched {len(i['unmatched'])}, "
         f"not_verified {len(i['not_verified'])}, ambiguous {len(i['ambiguous'])}",
@@ -526,10 +595,8 @@ def render_summary(plan: dict) -> str:
         f"with differences {s['players_with_any_difference']}",
         f"  coverage {s['coverage']}",
         f"  season outcomes {s['season_outcomes']}",
-        f"player_salaries stored rows {plan['player_salaries_comparison']['stored_rows_for_export_seasons']}, "
-        f"differences {len(plan['player_salaries_comparison']['differences'])}",
-        f"player_team_salaries stored rows {plan['team_salary_rows_comparison']['stored_rows_for_export_seasons']}, "
-        f"differences {len(plan['team_salary_rows_comparison']['differences'])}",
+        _table_line("player_salaries", plan["player_salaries_comparison"]),
+        _table_line("player_team_salaries", plan["team_salary_rows_comparison"]),
         f"parser problems {len(plan['problems'])}",
     ]
     lines.extend(f"  - {msg}" for msg in plan["problems"][:20])

@@ -51,7 +51,9 @@ def test_multi_obligation_listed_and_not_compared(parsed):
     multi = plan["multi_obligation_players"]
     assert len(multi) == 1 and multi[0]["bbref_id"] == "lillada01"
     assert [r["team"] for r in multi[0]["rows"]] == ["MIL", "POR"]
-    assert plan["stored_contract_comparison"]["not_compared_multi_obligation"] == ["lillada01"]
+    assert plan["stored_contract_comparison"]["not_compared_multi_obligation"] == [
+        {"bbref_id": "lillada01", "rows": 2}
+    ]
     assert all(p["bbref_id"] != "lillada01" for p in plan["stored_contract_comparison"]["players"])
 
 
@@ -220,3 +222,70 @@ def test_plan_refuses_tampered_snapshot(tmp_path):
     os.chmod(target / "input.html", 0o644)
     (target / "input.html").write_bytes(b"tampered")
     assert plan_mod.main(["plan", "--snapshot", str(target)]) == 2
+
+
+def _variant(old, new):
+    html = FIXTURE.read_text(encoding="utf-8")
+    assert old in html
+    return parse_export(html.replace(old, new, 1))
+
+
+def _by(details, **kw):
+    return [d for d in details if all(d.get(k) == v for k, v in kw.items())]
+
+
+def test_empty_stored_tables_report_missing_in_stored(parsed):
+    plan = _plan(parsed, _state())
+    for section in ("player_salaries_comparison", "team_salary_rows_comparison"):
+        sec = plan[section]
+        assert sec["stored_rows_for_export_seasons"] == 0
+        assert sec["summary"]["missing_in_stored"] > 0
+        assert _by(sec["details"], bbref_id="jamesle01", season="2026-27")[0]["outcome"] == "missing_in_stored"
+        assert _by(sec["details"], bbref_id="jamesle01", season="2027-28")[0]["outcome"] == "missing_in_stored"
+        assert sec["not_compared_multi_obligation"] == [{"bbref_id": "lillada01", "rows": 2}]
+        assert sec["not_compared_multi_obligation_count"] == 1
+        assert not _by(sec["details"], bbref_id="lillada01")
+
+
+def test_player_salaries_outcomes(parsed):
+    state = _state(player_salaries=[(23, "2026-27", 3876529), (23, "2029-30", 5), (30, "2026-27", 1)])
+    details = _plan(parsed, state)["player_salaries_comparison"]["details"]
+    assert _by(details, bbref_id="jamesle01", season="2026-27")[0]["outcome"] == "same"
+    assert _by(details, bbref_id="jamesle01", season="2029-30")[0]["outcome"] == "extra_in_stored"
+    assert _by(details, bbref_id="tatumja01", season="2026-27")[0]["outcome"] == "amount_differs"
+
+
+def test_team_salary_extra_row_and_alias(parsed):
+    state = _state(team_salaries=[(23, "2026-27", "PHI", 3876529), (23, "2026-27", "PHI", 99), (30, "2026-27", "BOS", 34848340)])
+    details = _plan(parsed, state)["team_salary_rows_comparison"]["details"]
+    lebron = _by(details, bbref_id="jamesle01", season="2026-27")
+    assert sorted(d["outcome"] for d in lebron) == ["extra_in_stored", "same"]
+    assert _by(details, bbref_id="tatumja01", season="2026-27")[0]["outcome"] == "same"
+
+
+def test_team_salary_alias_both_sides(parsed):
+    cho = _variant('/teams/PHI/2027.html">PHI<', '/teams/CHO/2027.html">CHO<')
+    state = _state(team_salaries=[(23, "2026-27", "CHA", 3876529)])
+    details = _plan(cho, state)["team_salary_rows_comparison"]["details"]
+    assert _by(details, bbref_id="jamesle01", season="2026-27")[0]["outcome"] == "same"
+    brk = _variant('/teams/PHI/2027.html">PHI<', '/teams/BRK/2027.html">BRK<')
+    state = _state(team_salaries=[(23, "2026-27", "BRK", 3876529)])
+    details = _plan(brk, state)["team_salary_rows_comparison"]["details"]
+    assert _by(details, bbref_id="jamesle01", season="2026-27")[0]["outcome"] == "same"
+    assert not _by(details, outcome="extra_in_stored")
+
+
+def test_uncertain_cells_have_own_outcome():
+    tbd = _variant(
+        '<td class="right salary-pl" data-stat="y2" csk="4070355">$4,070,355</td>',
+        '<td class="right " data-stat="y2">TBD</td>',
+    )
+    stored = StoredContract("spotrac", None, "2026-27", [("2026-27", 3876529, False, False), ("2027-28", 4070355, False, False)])
+    state = _state(contracts={23: stored}, player_salaries=[(23, "2027-28", 4070355)], team_salaries=[(23, "2027-28", "PHI", 4070355)])
+    plan = _plan(tbd, state)
+    assert plan["coverage"]["uncertain_cells"] == 1
+    assert plan["stored_contract_comparison"]["players"][0]["seasons"]["2027-28"]["outcome"] == "uncertain_in_export"
+    for section in ("player_salaries_comparison", "team_salary_rows_comparison"):
+        details = plan[section]["details"]
+        assert _by(details, bbref_id="jamesle01", season="2027-28")[0]["outcome"] == "uncertain_in_export"
+        assert not _by(details, outcome="extra_in_stored")
