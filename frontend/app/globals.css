@@ -6973,3 +6973,14 @@ main h1:not(.siq-sr-only) {
 }
 /* Standalone text links (e.g. Build plan / FA targets): meet the 24px minimum target */
 .siq-plain-link { display: inline-flex; align-items: center; min-height: 24px; }
+
+/* ---------- Arena fixes: player hero snapshot fits its own width ----------
+   The snapshot narrows when the actions sit beside it, so figures size to the
+   snapshot (container query) and the cap-% unit wraps under the figure. */
+.siq-decision-snapshot { container-type: inline-size; }
+.siq-decision-snapshot .siq-stat { min-width: 0; }
+.siq-decision-snapshot .siq-stat__readout { flex-wrap: wrap; column-gap: 6px; row-gap: 0; }
+.siq-decision-snapshot .siq-stat__value {
+  font-size: clamp(22px, 6.4cqi, 34px) !important;
+  white-space: nowrap;
+}
