@@ -23,6 +23,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Tone, classifyGap, toneColor, toneText } from '@/lib/present';
 import { fmtM, fmtPct, signed } from '@/lib/utils';
+import { teamVisual } from '@/lib/teamVisuals';
 import { useApi } from '@/lib/useApi';
 
 function CountUpPct({
@@ -142,6 +143,8 @@ function RosterCard({ player, index }: { player: PlayerCardResponse; index: numb
   const team = player.current_team ?? player.latest_stats_team;
   const valuation = player.valuation_status === 'ready' ? player.valuation : undefined;
   const gap = valuation?.gap_pct ?? null;
+  const visual = teamVisual(team?.abbreviation);
+  const verdictLabel = valuation ? (valuation.verdict_label ?? classifyGap(gap).label) : null;
   const tone: Tone = valuation?.verdict_tone ?? classifyGap(gap).tone;
   const accent = gap == null ? 'var(--border-strong)' : toneColor(tone);
   const valueUsd = valuation?.salary_cap != null
@@ -152,7 +155,13 @@ function RosterCard({ player, index }: { player: PlayerCardResponse; index: numb
     <Link
       href={`/players/${player.player_id}`}
       className="siq-case-card siq-row-enter"
-      style={{ '--case-accent': accent, '--row-i': Math.min(index, 8) } as React.CSSProperties}
+      data-tier={verdictLabel === 'Significant bargain' ? 'elite' : undefined}
+      style={{
+        '--case-accent': accent,
+        '--row-i': Math.min(index, 8),
+        '--team-primary': visual.primary,
+        '--team-secondary': visual.secondary,
+      } as React.CSSProperties}
     >
         <div className="siq-case-card__head">
           <Avatar name={player.full_name} size="lg" position={player.position} playerId={player.player_id} />
@@ -171,7 +180,7 @@ function RosterCard({ player, index }: { player: PlayerCardResponse; index: numb
             {/* Verdict + hero gap */}
             <div className="siq-case-card__verdict">
               <span className="siq-players-verdict-label" style={{ color: toneText(tone) }}>
-                {valuation.verdict_label ?? classifyGap(gap).label}
+                {verdictLabel}
               </span>
               {gap != null && (
                 <CountUpPct

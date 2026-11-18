@@ -143,7 +143,7 @@
   /* Fonts — loaded via next/font in app/layout.tsx (variable weight axes) */
   --font-display: var(--font-sans);
   --font-sans:    var(--font-commissioner), 'Commissioner', system-ui, sans-serif;
-  --font-mono:    var(--font-azeret-mono), 'Azeret Mono', ui-monospace, monospace;
+  --font-mono:    var(--font-jetbrains-mono), 'JetBrains Mono', ui-monospace, monospace;
 
   /* Radii */
   --radius-xs: 3px;
@@ -6213,3 +6213,763 @@ textarea::placeholder {
   text-decoration: none;
 }
 .siq-provenance-link:hover { text-decoration: underline; }
+
+/* ============ Arena component layer (UI refresh) — overrides keyed to existing classes ============ */
+/* ============================================================
+   ScoutIQ component refresh — layout-neutral overrides
+   ============================================================ */
+
+/* ---------- 1. Tokens ---------- */
+:root {
+  --font-figure: var(--font-barlow-sc), 'Barlow Semi Condensed', var(--font-sans);
+
+  --radius-lg: 12px;
+  --radius-md: 8px;
+
+  --surface-sheen: linear-gradient(180deg, rgba(255,255,255,0.65), rgba(255,255,255,0) 60%);
+  --hairline-top: inset 0 1px 0 rgba(255,255,255,0.9);
+  --shadow-card: 0 1px 2px rgba(20,24,31,0.05), 0 4px 14px -6px rgba(20,24,31,0.10);
+  --shadow-card-hover: 0 2px 4px rgba(20,24,31,0.06), 0 12px 28px -10px rgba(20,24,31,0.20);
+  --bg-app: #F2F3F6;
+}
+[data-theme="dark"] {
+  --bg-app:      #090B0E;
+  --bg-panel:    #12161B;
+  --bg-elevated: #171C22;
+  --bg-inset:    #0D1014;
+  --border-subtle:  rgba(232,237,243,0.07);
+  --border-default: rgba(232,237,243,0.12);
+
+  --surface-sheen: linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0) 70%);
+  --hairline-top: inset 0 1px 0 rgba(255,255,255,0.05);
+  --shadow-card: 0 1px 0 rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.7);
+  --shadow-card-hover: 0 1px 0 rgba(0,0,0,0.4), 0 18px 36px -14px rgba(0,0,0,0.85);
+}
+
+/* Mono figures: tighter, calmer — no more typewriter tracking */
+.ds-tnum {
+  letter-spacing: -0.01em;
+  font-feature-settings: 'tnum' 1, 'zero' 0;
+}
+
+/* Hero numerals: condensed sports figures with tabular digits */
+.siq-players-verdict-gap,
+.siq-teams-payroll-value,
+.siq-model-metric-value,
+.siq-stat--md .siq-stat__value,
+.siq-stat--lg .siq-stat__value,
+.siq-metric-plate__value,
+.siq-decision-strip__value {
+  font-family: var(--font-figure);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  font-weight: 700;
+}
+.siq-players-verdict-gap { font-size: 30px; line-height: 1; }
+.siq-teams-payroll-value { font-size: 38px; }
+.siq-model-metric-value { font-size: 28px; }
+.siq-decision-strip__value { font-size: 22px; }
+.siq-decision-strip__item--lead .siq-decision-strip__value { font-size: 28px; }
+
+/* ---------- 2. App background ---------- */
+[data-theme="dark"] body {
+  background:
+    radial-gradient(1200px 500px at 70% -10%, rgba(255,90,31,0.06), transparent 60%),
+    var(--bg-app);
+  background-attachment: fixed;
+}
+
+/* ---------- 3. Sidebar ---------- */
+.siq-sidebar {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 92%, transparent), var(--bg-app));
+}
+.siq-brand-mark {
+  background: linear-gradient(140deg, var(--orange-400), var(--orange-600));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 4px 12px -4px rgba(255,90,31,0.55);
+  border-radius: 9px;
+}
+.siq-nav-eyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.siq-sidebar-link { position: relative; }
+.siq-sidebar-link:hover:not(.siq-sidebar-link--active) {
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  color: var(--text-primary);
+}
+.siq-sidebar-link--active {
+  background: linear-gradient(90deg, rgba(255,90,31,0.16), rgba(255,90,31,0.04));
+  box-shadow: inset 0 0 0 1px rgba(255,90,31,0.18);
+}
+.siq-sidebar-link--active::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--orange-glow);
+}
+.siq-sidebar-link--active svg { color: var(--accent); }
+.siq-sidebar-footer {
+  margin: 0 10px 10px;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius-lg);
+  background: var(--bg-inset);
+  padding: 10px 12px !important;
+}
+
+/* ---------- 4. Top bar ---------- */
+.siq-topbar {
+  background: color-mix(in srgb, var(--bg-app) 72%, transparent);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  border-bottom-color: var(--border-subtle);
+}
+.siq-topbar-title {
+  font-size: 16px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  padding-right: 14px;
+  margin-right: 2px;
+  border-right: 1px solid var(--border-default);
+  line-height: 22px;
+}
+.siq-search-field {
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-panel) 80%, transparent);
+  border-color: var(--border-subtle);
+  padding: 0 14px;
+  box-shadow: var(--hairline-top);
+}
+.siq-search-field:hover { border-color: var(--border-default); }
+.siq-search-field:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+  background: var(--bg-panel);
+}
+.siq-season-badge .siq-badge {
+  background: var(--bg-panel);
+  border-color: var(--border-default);
+  padding: 4px 10px 4px 22px;
+  position: relative;
+  font-family: var(--font-mono);
+}
+.siq-season-badge .siq-badge::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 6px; height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--positive);
+  box-shadow: 0 0 0 3px var(--positive-soft);
+}
+.siq-topbar .siq-icon-button {
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  width: 36px; height: 36px;
+}
+.siq-topbar .siq-icon-button:hover { border-color: var(--border-default); background: var(--bg-elevated); }
+
+/* ---------- 5. Panels ---------- */
+.siq-panel {
+  background: var(--surface-sheen), var(--bg-panel);
+  box-shadow: var(--hairline-top), var(--shadow-card);
+  border-color: var(--border-subtle);
+}
+.siq-panel:hover { border-color: var(--border-default); }
+.siq-panel__head {
+  min-height: 48px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--text-primary) 2.5%, transparent), transparent);
+}
+.siq-panel__head .ds-eyebrow {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+}
+.siq-panel__icon {
+  width: 26px; height: 26px;
+  align-items: center; justify-content: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel-accent, var(--accent)) 13%, transparent);
+  color: var(--panel-accent, var(--accent)) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--panel-accent, var(--accent)) 22%, transparent);
+}
+.siq-panel__icon svg { width: 15px; height: 15px; }
+
+/* ---------- 6. Badges ---------- */
+.siq-badge {
+  letter-spacing: 0.005em;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+/* ---------- 7. Buttons ---------- */
+.siq-primary-button {
+  background: linear-gradient(180deg, var(--orange-400), var(--orange-500) 55%, var(--orange-600));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), 0 6px 18px -8px rgba(255,90,31,0.7);
+  border: 1px solid rgba(169,55,15,0.55);
+  border-radius: var(--radius-md);
+}
+.siq-primary-button:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.32), 0 10px 24px -8px rgba(255,90,31,0.8);
+}
+.siq-secondary-button {
+  background: var(--surface-sheen), var(--bg-elevated);
+  box-shadow: var(--hairline-top);
+  border-color: var(--border-default);
+  border-radius: var(--radius-md);
+}
+.siq-secondary-button:hover:not(:disabled) { border-color: var(--border-strong); }
+
+/* ---------- 8. Player case cards (watchlist) ---------- */
+.siq-case-card {
+  background:
+    radial-gradient(120% 70% at 100% 0%, color-mix(in srgb, var(--case-accent) 11%, transparent), transparent 55%),
+    var(--surface-sheen),
+    var(--bg-panel);
+  box-shadow: var(--hairline-top), var(--shadow-card);
+  border-color: var(--border-subtle);
+  padding: 18px;
+  transition:
+    transform var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out),
+    border-color var(--duration-base) var(--ease-out);
+}
+.siq-case-card::before {
+  left: 0; right: 0;
+  height: 3px;
+  border-radius: 0;
+  background: linear-gradient(90deg, transparent, var(--case-accent) 25%, var(--case-accent) 75%, transparent);
+  opacity: 0.9;
+}
+.siq-case-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--case-accent) 35%, var(--border-default));
+  box-shadow: var(--hairline-top), var(--shadow-card-hover);
+}
+.siq-players-card-name { font-size: 16px; font-weight: 750; letter-spacing: -0.01em; }
+.siq-players-verdict-label {
+  font-size: 12px !important;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.siq-players-gauge-track {
+  border-radius: var(--radius-pill);
+  background: var(--bg-inset);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.35);
+}
+.siq-case-card__metrics {
+  background: var(--bg-inset);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+}
+.siq-players-metric-value { font-size: 16px; font-weight: 600; }
+.siq-statline--card {
+  border-top-style: dashed !important;
+}
+.siq-statline__value { font-weight: 600; }
+.siq-statline__label { letter-spacing: 0.06em; font-size: 10px; }
+
+/* Filter row controls */
+.siq-players-search-bar {
+  border-radius: var(--radius-pill) !important;
+  box-shadow: var(--hairline-top);
+}
+.siq-players-title { font-size: 28px !important; letter-spacing: -0.02em; font-weight: 800; }
+
+/* ---------- 9. Home: decision queue ---------- */
+.siq-queue-list { display: grid; gap: 8px; }
+.siq-queue-item {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px 14px 18px;
+  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+  position: relative;
+  transition: border-color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out), transform var(--duration-base) var(--ease-out);
+}
+.siq-queue-item::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 14px; bottom: 14px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+  opacity: 0.85;
+}
+.siq-queue-item:hover {
+  border-color: var(--border-default);
+  background: var(--bg-elevated);
+  transform: translateX(2px);
+}
+.siq-queue-item__title { font-size: 15px; font-weight: 700; letter-spacing: -0.005em; }
+.siq-queue-item__reason { color: var(--text-secondary); }
+.siq-queue-item__figures { gap: 6px; margin-top: 4px; }
+.siq-queue-item__figures > * {
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  font-size: 11.5px;
+}
+
+/* ---------- 10. Decision strip (team / model KPI rows) ---------- */
+.siq-decision-strip {
+  background: var(--surface-sheen), var(--bg-panel);
+  box-shadow: var(--hairline-top), var(--shadow-card);
+  border-color: var(--border-subtle);
+}
+.siq-decision-strip__item { padding: 16px 20px; gap: 4px; }
+.siq-decision-strip__item--lead {
+  background:
+    radial-gradient(140% 120% at 0% 0%, rgba(255,90,31,0.10), transparent 60%),
+    var(--bg-elevated);
+  border-right-color: var(--border-subtle);
+}
+.siq-decision-strip__label {
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+/* ---------- 11. Stat tiles & metric plates ---------- */
+.siq-metric-plate {
+  background: var(--surface-sheen), var(--bg-elevated) !important;
+  box-shadow: var(--hairline-top);
+  border-radius: var(--radius-lg) !important;
+}
+.siq-metric-plate__value { font-size: 30px !important; }
+
+/* ---------- 12. Tabs ---------- */
+.siq-tabs__indicator {
+  background: linear-gradient(180deg, var(--orange-400), var(--orange-600)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 6px 16px -8px rgba(255,90,31,0.7) !important;
+}
+
+/* ---------- 13. Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .siq-case-card:hover, .siq-queue-item:hover { transform: none; }
+}
+
+/* ---------- 14. Player hero ---------- */
+.siq-decision-hero::after {
+  left: 0; right: 0; width: auto;
+  height: 3px;
+  border-radius: 0;
+  opacity: 0.85;
+}
+.siq-decision-identity h1 { letter-spacing: -0.025em; font-weight: 800; }
+.siq-verdict-beat::after { display: none; }
+.siq-decision-actions .siq-verdict-pill {
+  flex-direction: row !important;
+  align-items: baseline;
+  gap: 10px !important;
+  padding: 8px 14px !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent);
+  color: var(--positive-text);
+}
+.siq-decision-actions .siq-verdict-pill__label { font-size: 12px !important; font-weight: 700; }
+.siq-decision-actions .siq-verdict-pill__value {
+  font-family: var(--font-figure);
+  font-size: 24px !important;
+  letter-spacing: 0;
+  line-height: 1;
+}
+.siq-decision-snapshot {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--hairline-top);
+  padding: 16px 20px;
+}
+.siq-decision-snapshot::before { left: 0; right: 0; border-radius: 0; height: 2px; }
+.siq-decision-snapshot .siq-stat__value { font-family: var(--font-figure); font-size: 26px; letter-spacing: 0; }
+.siq-decision-snapshot .ds-eyebrow { text-transform: uppercase; letter-spacing: 0.07em; font-size: 10.5px; }
+
+/* ============================================================
+   ScoutIQ v2 "Arena" layer — sits on top of enhance.css
+   Poster type, court geometry, team foil, scoreboard wells.
+   ============================================================ */
+:root {
+  --font-poster: var(--font-big-shoulders), 'Big Shoulders Display', var(--font-figure);
+  --court: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 470' fill='none' stroke='black' stroke-opacity='0.07' stroke-width='2'><rect x='170' y='0' width='160' height='190'/><circle cx='250' cy='190' r='60'/><path d='M30 0 V140 A220 220 0 0 0 470 140 V0'/><circle cx='250' cy='52' r='7.5'/><path d='M0 469 H500'/><circle cx='250' cy='470' r='60'/></svg>");
+  --court-full: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 940 500' fill='none' stroke='black' stroke-opacity='0.045' stroke-width='2'><rect x='1' y='1' width='938' height='498'/><path d='M470 0 V500'/><circle cx='470' cy='250' r='60'/><rect x='0' y='170' width='190' height='160'/><rect x='750' y='170' width='190' height='160'/><circle cx='190' cy='250' r='60'/><circle cx='750' cy='250' r='60'/><path d='M0 30 H140 A220 220 0 0 1 140 470 H0'/><path d='M940 30 H800 A220 220 0 0 0 800 470 H940'/></svg>");
+  --scoreboard-bg: #0B0D10;
+  --scoreboard-dot: rgba(255,255,255,0.05);
+  --lamp-glow: 0.55;
+}
+[data-theme="dark"] {
+  --court: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 470' fill='none' stroke='white' stroke-opacity='0.055' stroke-width='2'><rect x='170' y='0' width='160' height='190'/><circle cx='250' cy='190' r='60'/><path d='M30 0 V140 A220 220 0 0 0 470 140 V0'/><circle cx='250' cy='52' r='7.5'/><path d='M0 469 H500'/><circle cx='250' cy='470' r='60'/></svg>");
+  --court-full: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 940 500' fill='none' stroke='white' stroke-opacity='0.035' stroke-width='2'><rect x='1' y='1' width='938' height='498'/><path d='M470 0 V500'/><circle cx='470' cy='250' r='60'/><rect x='0' y='170' width='190' height='160'/><rect x='750' y='170' width='190' height='160'/><circle cx='190' cy='250' r='60'/><circle cx='750' cy='250' r='60'/><path d='M0 30 H140 A220 220 0 0 1 140 470 H0'/><path d='M940 30 H800 A220 220 0 0 0 800 470 H940'/></svg>");
+}
+
+/* ---------- Arena floor: faint full court behind the workspace ---------- */
+.siq-main {
+  background-image: var(--court-full);
+  background-repeat: no-repeat;
+  background-size: 1500px auto;
+  background-position: calc(100% + 380px) 140px;
+  background-attachment: fixed;
+}
+
+/* ---------- Poster typography ---------- */
+.siq-logo-text {
+  font-family: var(--font-poster);
+  font-size: 25px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+.siq-topbar-title {
+  font-family: var(--font-poster);
+  font-size: 22px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.siq-players-title,
+.siq-teams-title,
+.siq-decision-identity h1 {
+  font-family: var(--font-poster) !important;
+  font-weight: 900 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.005em !important;
+  line-height: 0.92 !important;
+}
+.siq-players-title { font-size: 48px !important; }
+.siq-teams-title { font-size: 46px !important; }
+.siq-decision-identity h1 {
+  font-size: 64px !important;
+  background: linear-gradient(180deg, var(--text-primary) 55%, color-mix(in srgb, var(--text-primary) 62%, var(--team-primary, var(--accent))));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Jersey-number verdict figures */
+.siq-players-verdict-gap {
+  font-family: var(--font-poster) !important;
+  font-weight: 900 !important;
+  font-size: 46px !important;
+  line-height: 0.9 !important;
+  letter-spacing: 0 !important;
+  text-shadow: 0 0 24px color-mix(in srgb, currentColor 40%, transparent);
+}
+.siq-teams-payroll-value {
+  font-family: var(--font-poster) !important;
+  font-weight: 900 !important;
+  font-size: 56px !important;
+  line-height: 0.95;
+}
+
+/* ---------- Trading-card watchlist ---------- */
+.siq-case-card {
+  --tp: var(--team-primary, var(--case-accent));
+  --ts: var(--team-secondary, var(--case-accent));
+  background:
+    var(--court) no-repeat right -70px bottom -150px / 320px auto,
+    radial-gradient(130% 80% at 100% 0%, color-mix(in srgb, var(--tp) 30%, transparent), transparent 58%),
+    radial-gradient(90% 60% at 0% 100%, color-mix(in srgb, var(--case-accent) 9%, transparent), transparent 60%),
+    var(--bg-panel) !important;
+  border: 1px solid color-mix(in srgb, var(--tp) 26%, var(--border-subtle)) !important;
+  border-radius: 16px !important;
+}
+.siq-case-card::before {
+  height: 5px !important;
+  background: linear-gradient(90deg, var(--tp), var(--tp) 55%, var(--ts)) !important;
+  opacity: 1 !important;
+}
+/* Holographic foil on hover; always faintly on for elite bargains */
+.siq-case-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(115deg,
+    transparent 20%,
+    rgba(255,90,31,0.10) 36%,
+    rgba(31,193,193,0.12) 46%,
+    rgba(255,215,90,0.10) 56%,
+    transparent 72%);
+  background-size: 260% 100%;
+  background-position: 100% 0;
+  mix-blend-mode: screen;
+  opacity: 0;
+  transition: opacity var(--duration-slow) var(--ease-out), background-position 900ms var(--ease-out);
+}
+.siq-case-card[data-tier='elite']::after { opacity: 0.55; }
+.siq-case-card:hover::after { opacity: 1; background-position: 0% 0; }
+.siq-case-card:hover {
+  transform: translateY(-4px) rotate(-0.4deg) !important;
+  box-shadow:
+    var(--hairline-top),
+    0 22px 40px -18px color-mix(in srgb, var(--tp) 70%, black),
+    0 0 0 1px color-mix(in srgb, var(--tp) 45%, transparent) !important;
+}
+.siq-case-card .siq-avatar {
+  transform: scale(1.18);
+  transform-origin: left center;
+  margin-right: 8px;
+  box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 4px var(--tp), 0 8px 18px -6px rgba(0,0,0,0.6);
+  border-radius: 50%;
+}
+.siq-players-card-name {
+  font-family: var(--font-poster) !important;
+  font-size: 24px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.01em !important;
+  line-height: 1 !important;
+}
+.siq-players-card-meta {
+  font-family: var(--font-mono);
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.siq-case-card__metrics {
+  background: color-mix(in srgb, var(--bg-inset) 85%, transparent) !important;
+  backdrop-filter: blur(4px);
+}
+/* "Card back" stat line: printed-ticket look */
+.siq-statline--card {
+  border-top: 1px dashed color-mix(in srgb, var(--tp) 40%, var(--border-default)) !important;
+  position: relative;
+}
+.siq-statline__label {
+  font-family: var(--font-poster);
+  font-weight: 800;
+  font-size: 12px !important;
+  letter-spacing: 0.08em !important;
+}
+
+/* ---------- Scoreboard KPI strips (always dark, both themes) ---------- */
+.siq-decision-strip {
+  background:
+    radial-gradient(var(--scoreboard-dot) 1px, transparent 1.4px) 0 0 / 6px 6px,
+    linear-gradient(180deg, #14181D, var(--scoreboard-bg)) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -12px 24px rgba(0,0,0,0.4), 0 14px 30px -18px rgba(0,0,0,0.8) !important;
+  color: #F3F5F7;
+}
+.siq-decision-strip__item--lead {
+  background: radial-gradient(140% 120% at 0% 0%, rgba(255,90,31,0.22), transparent 62%) !important;
+  border-right: 1px solid rgba(255,255,255,0.08) !important;
+}
+.siq-decision-strip__support .siq-decision-strip__item + .siq-decision-strip__item { border-left-color: rgba(255,255,255,0.07) !important; }
+.siq-decision-strip__label { color: #8D98A5 !important; }
+.siq-decision-strip__detail { color: #9AA6B4 !important; }
+.siq-decision-strip__value {
+  font-family: var(--font-poster) !important;
+  font-weight: 800 !important;
+  font-size: 30px !important;
+  color: #F3F5F7;
+  text-shadow: 0 0 18px rgba(255,255,255,0.18);
+}
+.siq-decision-strip__item--lead .siq-decision-strip__value { font-size: 38px !important; text-transform: uppercase; }
+.siq-decision-strip__item[data-tone='positive'] .siq-decision-strip__value { color: #3DD98E; text-shadow: 0 0 18px rgba(61,217,142,var(--lamp-glow)); }
+.siq-decision-strip__item[data-tone='negative'] .siq-decision-strip__value { color: #FF6B6B; text-shadow: 0 0 18px rgba(255,107,107,var(--lamp-glow)); }
+.siq-decision-strip__item[data-tone='warning'] .siq-decision-strip__value { color: #FBDD92; text-shadow: 0 0 18px rgba(236,178,46,var(--lamp-glow)); }
+.siq-decision-strip__item[data-tone='confidence'] .siq-decision-strip__value { color: #4FD6D6; text-shadow: 0 0 18px rgba(31,193,193,var(--lamp-glow)); }
+
+/* ---------- Player hero: half-court + team spotlight ---------- */
+.siq-decision-hero {
+  background:
+    var(--court) no-repeat right 30% top -40px / 520px auto,
+    radial-gradient(70% 140% at 12% 0%, color-mix(in srgb, var(--team-primary, var(--accent)) 38%, transparent), transparent 62%),
+    radial-gradient(50% 120% at 100% 100%, color-mix(in srgb, var(--team-secondary, var(--accent)) 16%, transparent), transparent 60%),
+    var(--bg-panel) !important;
+  border-radius: 18px !important;
+}
+.siq-decision-hero::after {
+  height: 5px !important;
+  background: linear-gradient(90deg, var(--team-primary), var(--team-secondary)) !important;
+}
+.siq-decision-identity .siq-avatar {
+  box-shadow: 0 0 0 3px var(--bg-panel), 0 0 0 5px var(--team-primary), 0 14px 30px -10px rgba(0,0,0,0.7);
+  border-radius: 50%;
+}
+.siq-decision-snapshot {
+  background:
+    radial-gradient(var(--scoreboard-dot) 1px, transparent 1.4px) 0 0 / 6px 6px,
+    linear-gradient(180deg, #14181D, var(--scoreboard-bg)) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  color: #F3F5F7;
+}
+.siq-decision-snapshot .siq-stat__value {
+  font-family: var(--font-poster) !important;
+  font-weight: 800;
+  font-size: 34px !important;
+  color: #F3F5F7;
+  text-shadow: 0 0 16px rgba(255,255,255,0.16);
+}
+.siq-decision-snapshot .siq-stat__unit,
+.siq-decision-snapshot .siq-stat__sub,
+.siq-decision-snapshot .ds-eyebrow { color: #9AA6B4 !important; }
+.siq-decision-actions .siq-verdict-pill__value { font-family: var(--font-poster) !important; font-size: 30px !important; font-weight: 900; }
+
+/* Metric plates: big poster numbers */
+.siq-metric-plate__value { font-family: var(--font-poster) !important; font-weight: 800 !important; font-size: 40px !important; line-height: 1 !important; }
+
+/* ---------- Panels: court corner + sharper head ---------- */
+.siq-panel {
+  border-radius: 16px !important;
+}
+.siq-panel__head .ds-eyebrow {
+  font-family: var(--font-poster);
+  font-weight: 800;
+  font-size: 17px !important;
+  letter-spacing: 0.03em !important;
+  text-transform: uppercase;
+}
+.siq-home-queue.siq-panel,
+.siq-home-queue .siq-panel {
+  background:
+    var(--court) no-repeat right -120px top -60px / 480px auto,
+    var(--surface-sheen),
+    var(--bg-panel) !important;
+}
+
+/* Decision queue: priority tape */
+.siq-queue-item { border-radius: 12px !important; overflow: hidden; }
+.siq-queue-item::before {
+  top: 0 !important; bottom: 0 !important;
+  width: 4px !important;
+  border-radius: 0 !important;
+  background: repeating-linear-gradient(-45deg, var(--accent) 0 6px, var(--orange-700) 6px 12px) !important;
+}
+.siq-queue-item__title {
+  font-family: var(--font-poster);
+  font-weight: 800;
+  font-size: 21px !important;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  line-height: 1.05;
+}
+
+/* ---------- Sidebar: tunnel glow ---------- */
+.siq-sidebar {
+  background:
+    radial-gradient(120% 40% at 0% 100%, rgba(255,90,31,0.10), transparent 60%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 92%, transparent), var(--bg-app)) !important;
+}
+.siq-sidebar-link--active {
+  background: linear-gradient(90deg, rgba(255,90,31,0.26), rgba(255,90,31,0.02)) !important;
+}
+.siq-sidebar-link--active .siq-nav-label {
+  font-family: var(--font-poster);
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .siq-case-card:hover { transform: none !important; }
+  .siq-case-card::after { transition: none; }
+}
+
+/* ---------- v2 fixes ---------- */
+.siq-players-verdict-gap { font-size: 40px !important; }
+.siq-queue-item { background: var(--bg-elevated) !important; }
+.siq-home-queue.siq-panel,
+.siq-home-queue .siq-panel {
+  background-size: 360px auto, auto, auto !important;
+  background-position: right -110px top -40px, 0 0, 0 0 !important;
+}
+.siq-home-cal__stats > * > :last-child,
+.siq-home-cal__stats dd,
+.siq-home-cal__stats strong {
+  font-family: var(--font-poster) !important;
+  font-weight: 800 !important;
+  font-size: 34px !important;
+  letter-spacing: 0 !important;
+  line-height: 1.05;
+}
+
+/* ---------- Arena fixes: overflow and wrapping (UI audit, SCO-57) ---------- */
+/* Page titles on every route use the poster face (hero/watchlist/team titles already do) */
+main h1:not(.siq-sr-only) {
+  font-family: var(--font-poster);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.005em;
+  line-height: 0.95;
+  text-wrap: balance;
+}
+/* Watchlist card names: wrap long names instead of clipping them */
+.siq-players-card-name {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+/* Player hero name: scale with the viewport and wrap on narrow screens; room for the last line */
+.siq-decision-identity h1 {
+  font-size: clamp(40px, 9vw, 64px) !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere;
+  padding-bottom: 0.06em;
+}
+/* Panel heads: badges/actions drop below a long poster heading instead of squeezing it */
+.siq-panel__head { flex-wrap: wrap; row-gap: 6px; padding-block: 8px; }
+.siq-panel__head-l { flex: 1 1 220px; }
+/* Home movers: names get two lines before truncating */
+.siq-home-mover__name {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.25;
+}
+/* Model trust evidence quotes: two lines before truncating; full quote is in the title attribute */
+.siq-model-rating-evidence {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+/* League sort buttons: meet the 24px minimum pointer target */
+.siq-league-sort-btn { min-height: 28px; padding: 4px 2px; }
+
+/* ---------- Arena fixes: content-visibility placeholders match real row heights ----------
+   `auto` keeps each row's last rendered size so the scroll length stops jumping. */
+.siq-similar-dossier-row { contain-intrinsic-size: auto 94px; }
+.siq-roster-ledger-row { contain-intrinsic-size: auto 54px; }
+.siq-case-card { contain-intrinsic-size: auto 470px; }
+@media (max-width: 720px) {
+  .siq-similar-dossier-row { contain-intrinsic-size: auto 200px; }
+  .siq-roster-ledger-row { contain-intrinsic-size: auto 270px; }
+  .siq-case-card { contain-intrinsic-size: auto 520px; }
+}
+
+/* ---------- Arena fixes: alignment and target sizes (UI audit pass 2) ---------- */
+/* Watchlist cards: a two-line name must not push the verdict row out of line with neighbors.
+   The scaled headshot already sets ~68px, so single-line cards do not grow. */
+.siq-case-card__head { min-height: 72px; align-items: center; }
+/* Model trust leaderboards on phones: names get two lines before truncating */
+.siq-model-player-name {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.2;
+}
+/* Standalone text links (e.g. Build plan / FA targets): meet the 24px minimum target */
+.siq-plain-link { display: inline-flex; align-items: center; min-height: 24px; }
