@@ -62,3 +62,81 @@ python -m scoutiq.etl.plan_sportsref_salaries plan --snapshot backend/scoutiq/da
 `snapshot` copies the file byte-identically (read-only, 0444) into `scoutiq/data/snapshots/sportsref-salaries-<first 12 hex of sha256>/` (gitignored) with a `manifest.json`. An existing snapshot is reused only if its hash matches; it is never overwritten. `plan` refuses (exit 2) if `input.html` no longer matches the manifest hash, then parses, reads the database inside a `SET TRANSACTION READ ONLY` transaction, and prints a summary (optionally JSON).
 
 The plan reports provenance, coverage, identity buckets, multi-obligation players, team checks (unknown abbreviations and "obligation team differs from current roster team", with no roster-status inference), a per-season comparison against each matched single-row player's latest stored contract, and comparisons against `player_salaries` and `player_team_salaries`. Applying any of it is SCO-52's job.
+
+## Applying a snapshot
+
+`scoutiq.etl.apply_sportsref_salaries` turns a validated snapshot into database rows. It is a dry run unless
+`--apply` is passed. Every write happens in one transaction and nothing stored is ever updated or deleted by
+`apply`.
+
+```
+# dry run: reads the DB in a read-only transaction, prints the plan, writes nothing
+python -m scoutiq.etl.apply_sportsref_salaries apply --snapshot DIR [--json plan.json]
+
+# apply: --confirm must equal the first 12 hex chars of the snapshot sha256 (the directory name suffix)
+python -m scoutiq.etl.apply_sportsref_salaries apply --snapshot DIR --apply --confirm SHA12
+
+# remove exactly what this snapshot wrote
+python -m scoutiq.etl.apply_sportsref_salaries rollback --snapshot DIR [--apply --confirm SHA12]
+```
+
+Exit codes: 0 ok; 2 snapshot hash mismatch; 3 export format error; 4 missing or wrong `--confirm`; 5 apply
+refused because a `player_team_salaries` conflict exists; 6 the post-write row-count check failed (rolled back).
+
+### What is written
+
+- `player_team_salaries` (raw per-team evidence): one row per matched export row and season cell that has an
+  amount and is not uncertain. `team_name` is `teams.name` of the resolved team (`TEAM_ABBREV_ALIASES` first),
+  `source = sportsref_export`, `source_ref` = snapshot directory name, `source_fetched_on` = date of the
+  manifest `received_at_utc`. Multi-obligation players and team-differs rows are included, because each team row
+  is distinct evidence. Key: (player_id, season, source, team_name, row_ordinal). Same key and salary is
+  `unchanged`; same key and a different salary is a `conflict` and the whole apply refuses.
+- `contracts` + `contract_years` (what the app reads as the player's contract): one new contract per eligible
+  player, `source = sportsref_export`, `scraped_at` = manifest `received_at_utc`, `season_start` = first
+  scheduled season, `total_value` = sum of amounts, `cap_pct` = amount / `cap_constants.salary_cap` rounded to 4
+  places (null when the season has no cap row), option flags from the cell markers (`is_guaranteed` only when
+  there is no option).
+- `player_salaries` is never written: season totals are not derivable from per-team obligation rows, and
+  valuation pay remains the completed-season figure.
+
+### Contract eligibility and held reasons
+
+A player is eligible when identity is matched, there is exactly one export row, no cell in it is uncertain, its
+team resolves, and the team equals the player's current team (or the player has no current team). Then, against
+the latest stored contract (season_start desc, scraped_at desc): no stored contract, or one with no year in the
+export schedule, is an `insert`; one that matches the schedule amounts and options for every season from the
+first export season on is `unchanged`; anything else is held.
+
+| Reason | Meaning |
+| --- | --- |
+| `not_matched` | no crosswalk row for the BBRef id |
+| `not_verified` | crosswalk row exists but is not `verified` |
+| `ambiguous_identity` | several verified players share the id |
+| `multi_obligation` | more than one export row for the player; team rows are still written |
+| `unknown_team` | export team does not resolve to a `teams` row |
+| `uncertain_cells` | a season cell was unparseable or had conflicting markers |
+| `no_amounts` | the row has no non-blank amounts |
+| `team_differs_from_current` | export team differs from the player's current team |
+| `season_start_collision` | a stored contract already starts in the new first season |
+| `stored_contract_differs` | the stored contract overlaps the schedule but differs; the report carries a per-season diff |
+
+Uncertain cells are listed under `held_uncertain_cells` and are not written to `player_team_salaries`.
+
+### Idempotency, journal and rollback
+
+Re-running `--apply` on the same snapshot inserts nothing: written team rows are `unchanged`, written contracts
+are `unchanged`. Under Postgres the apply takes `LOCK TABLE contracts, contract_years, player_team_salaries IN
+SHARE ROW EXCLUSIVE MODE`, re-reads state inside the transaction, refuses on conflicts, and asserts that each
+table grew by exactly the planned inserts before committing. After commit it writes
+`apply-<UTC timestamp>.json` into the snapshot directory: sha256, confirm, plan counts, a before-record per
+affected player (latest stored contract with years, existing `sportsref_export` team rows), inserted contract
+and team-salary ids, and table counts before and after.
+
+`rollback` selects `contracts` with `source = sportsref_export` and `scraped_at` equal to the manifest
+`received_at_utc` (plus their `contract_years`) and `player_team_salaries` with `source = sportsref_export` and
+`source_ref` equal to the snapshot directory name. It deletes them in one transaction (years, contracts, team
+salaries) after verifying counts. Rows from other sources or other snapshots are untouched. Applying again after
+a rollback re-inserts the same rows.
+
+Production apply needs explicit owner approval after PR review. Always run the dry run first and review the
+report, including the `spot_checks` entry for `jamesle01`.
