@@ -6973,3 +6973,30 @@ main h1:not(.siq-sr-only) {
 }
 /* Standalone text links (e.g. Build plan / FA targets): meet the 24px minimum target */
 .siq-plain-link { display: inline-flex; align-items: center; min-height: 24px; }
+
+/* ---------- Arena fixes: player hero snapshot fits its own width ----------
+   The snapshot narrows when the actions sit beside it, so figures size to the
+   snapshot (container query) and the cap-% unit wraps under the figure. */
+.siq-decision-snapshot { container-type: inline-size; }
+.siq-decision-snapshot .siq-stat { min-width: 0; }
+.siq-decision-snapshot .siq-stat__readout { flex-wrap: wrap; column-gap: 6px; row-gap: 0; }
+.siq-decision-snapshot .siq-stat__value {
+  font-size: clamp(22px, 6.4cqi, 34px) !important;
+  white-space: nowrap;
+}
+
+/* ---------- Arena fixes: metric plate figures fit their plate ----------
+   Plates narrow to ~150px at some widths; size the figure to the plate
+   (container query) and never split a figure such as a season label. */
+.siq-metric-plate { container-type: inline-size; }
+.siq-metric-plate__value {
+  font-size: clamp(26px, 22cqi, 40px) !important;
+  white-space: nowrap;
+}
+
+/* ---------- Arena fixes: metric plates go 2×2 until 4 columns fit ----------
+   Phones already use 2 columns (≤720px). Four columns are too narrow for the
+   figures until ~900px, so keep 2 columns through the tablet range. */
+@media (max-width: 899px) {
+  .siq-metric-plates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
