@@ -11,12 +11,13 @@ import pandas as pd
 from nba_api.stats.endpoints import commonallplayers, leaguedashplayerstats
 from nba_api.stats.static import teams as static_teams
 
-_TEAM_ABBREV_ALIASES = {
+TEAM_ABBREV_ALIASES = {
     "BRK": "BKN",  # Basketball-Reference abbreviation for Brooklyn.
     "CHO": "CHA",
     "NOH": "NOP",
     "PHO": "PHX",
 }
+_TEAM_ABBREV_ALIASES = TEAM_ABBREV_ALIASES
 
 
 def _league_dash(season: str, measure_type: str) -> pd.DataFrame:
