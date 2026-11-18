@@ -58,6 +58,7 @@ class Transaction:
     text: str
     kind: str
     team: str | None
+    from_team: str | None = None
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,7 @@ class SalaryRow:
     season: str
     team: str
     salary: int
+    team_abbr: str | None = None
 
 
 @dataclass(frozen=True)
@@ -181,6 +183,19 @@ def _extract_team(text: str, kind: str) -> str | None:
     return team or None
 
 
+_FROM_TEAM_RE = re.compile(r"traded by the (.*?)(?: \(| with | to the |$)", re.I)
+
+
+def _extract_from_team(text: str, kind: str) -> str | None:
+    if kind != "traded":
+        return None
+    m = _FROM_TEAM_RE.search(text)
+    if not m:
+        return None
+    team = m.group(1).strip()
+    return team or None
+
+
 _DRAFT_RE = re.compile(
     r"drafted by the .*? in the (\d+)(?:st|nd|rd|th) round"
     r"(?: \((\d+)(?:st|nd|rd|th) pick\))? of the (\d{4}) nba draft",
@@ -225,6 +240,7 @@ def parse_bbref_transactions(html: str) -> list[Transaction]:
                 text=text,
                 kind=kind,
                 team=_extract_team(text, kind),
+                from_team=_extract_from_team(text, kind),
             )
         )
     return out
@@ -236,6 +252,7 @@ _SEASON_CELL_RE = re.compile(r'<th[^>]*data-stat="season"[^>]*>(.*?)</th>', re.S
 _TEAM_CELL_RE = re.compile(r'<td[^>]*data-stat="team_name"[^>]*>(.*?)</td>', re.S)
 _SALARY_CELL_RE = re.compile(r'<td[^>]*data-stat="salary"[^>]*>(.*?)</td>', re.S)
 _SEASON_RE = re.compile(r"^\d{4}-\d{2}$")
+_TEAM_ABBR_RE = re.compile(r'href="/teams/([A-Z0-9]+)/\d{4}\.html"')
 
 
 def parse_bbref_salary_rows(html: str) -> list[SalaryRow]:
@@ -252,7 +269,15 @@ def parse_bbref_salary_rows(html: str) -> list[SalaryRow]:
         digits = re.sub(r"\D", "", _clean(sal.group(1)))
         if not _SEASON_RE.match(season) or not digits:
             continue
-        out.append(SalaryRow(season=season, team=_clean(t.group(1)), salary=int(digits)))
+        abbr = _TEAM_ABBR_RE.search(t.group(1))
+        out.append(
+            SalaryRow(
+                season=season,
+                team=_clean(t.group(1)),
+                salary=int(digits),
+                team_abbr=abbr.group(1) if abbr else None,
+            )
+        )
     return out
 
 

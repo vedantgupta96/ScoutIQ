@@ -120,6 +120,34 @@ def test_team_extraction():
     assert _team("Signed a contract.") is None
 
 
+@pytest.mark.parametrize(
+    "text, from_team, team",
+    [
+        (
+            "Traded by the New Orleans Pelicans to the Los Angeles Clippers for Wesley Johnson.",
+            "New Orleans Pelicans",
+            "Los Angeles Clippers",
+        ),
+        (
+            "Traded by the Los Angeles Clippers with Eric Gordon, Chris Kaman to the New Orleans Hornets for Pat Placeholder.",
+            "Los Angeles Clippers",
+            "New Orleans Hornets",
+        ),
+        (
+            "As part of a 3-team trade, traded by the Boston Celtics (as a future 2013 2nd round draft pick) "
+            "with JaJuan Johnson to the Houston Rockets.",
+            "Boston Celtics",
+            "Houston Rockets",
+        ),
+        ("Waived by the Miami Heat.", None, "Miami Heat"),
+        ("Claimed on waivers by the Chicago Bulls from the Miami Heat.", None, "Chicago Bulls"),
+    ],
+)
+def test_traded_from_team_extraction(text, from_team, team):
+    t = parse_bbref_transactions(f'<p class="transaction "><strong>July 1, 2019</strong>: {text}</p>')[0]
+    assert (t.from_team, t.team) == (from_team, team)
+
+
 def test_parse_draft():
     assert parse_draft(
         "Drafted by the Miami Heat in the 1st round (14th pick) of the 2017 NBA Draft."
@@ -999,3 +1027,208 @@ def test_cache_only_main(tmp_path, capsys):
 
 def test_empty_raw_dir_returns_one(tmp_path):
     assert main(["--cache-only", "--raw-dir", str(tmp_path)]) == 1
+
+
+ATTRIBUTION_KEYS = [
+    "rule_version",
+    "events",
+    "attributed",
+    "unresolved",
+    "unresolved_by_reason",
+    "ambiguous_signings",
+    "multi_team_salary",
+    "other_form_excluded",
+    "usable_today",
+    "usable_with_attribution",
+    "newly_usable",
+    "usable_today_not_attributed",
+    "usable_today_not_attributed_by_reason",
+    "usable_and_attributed_salary_differs",
+    "in_season_attributed",
+    "v1_label_effect",
+]
+REASONS = [
+    "signing_team_unknown",
+    "no_salary_rows_for_season",
+    "no_row_for_signing_team",
+    "multiple_rows_for_signing_team",
+    "multiple_signings_with_team",
+    "entry_combines_forms",
+    "earlier_termination_by_signing_team",
+    "earlier_service_with_signing_team",
+    "earlier_release_team_unknown",
+]
+
+
+def test_per_team_attribution_section_on_fixture(report):
+    section = report["per_team_attribution"]
+    assert list(section) == ATTRIBUTION_KEYS
+    assert list(section["unresolved_by_reason"]) == REASONS
+    assert list(section["usable_today_not_attributed_by_reason"]) == REASONS
+    assert (section["events"], section["attributed"], section["unresolved"]) == (6, 0, 6)
+    assert section["unresolved_by_reason"]["no_salary_rows_for_season"] == 4
+    assert section["unresolved_by_reason"]["multiple_signings_with_team"] == 2
+    assert section["ambiguous_signings"] == {
+        "events": 2,
+        "attributed": 0,
+        "previously_reported_resolvable": 0,
+    }
+    assert section["multi_team_salary"]["events"] == 2
+    assert section["usable_today"] == 3
+    assert section["usable_today_not_attributed"] == 3
+    assert section["newly_usable"] == 0
+    assert section["v1_label_effect"]["player_seasons"] == 1
+    assert list(report)[-1] == "per_team_attribution"
+    assert "== per_team_attribution ==" in probe.render_text(report)
+
+
+def _attribution(lines, rows):
+    return build_report(_single_page_inputs(lines, rows))["per_team_attribution"]
+
+
+OWLS_TXN = "Signed a contract with the Owls."
+OWLS_ROW = ce.SalaryRow("2019-20", "Owls", 3 * M)
+FOXES_ROW = ce.SalaryRow("2019-20", "Foxes", 4 * M)
+
+
+def test_attribution_multi_team_season_single_signing():
+    section = _attribution([(date(2019, 7, 10), OWLS_TXN)], [OWLS_ROW, FOXES_ROW])
+    assert (section["attributed"], section["unresolved"]) == (1, 0)
+    assert section["multi_team_salary"] == {
+        "events": 1,
+        "attributed": 1,
+        "otherwise_usable": 1,
+        "otherwise_usable_attributed": 1,
+    }
+    assert (section["usable_today"], section["usable_with_attribution"], section["newly_usable"]) == (0, 1, 1)
+    assert section["usable_and_attributed_salary_differs"] == 0
+    assert section["v1_label_effect"] == {
+        "player_seasons": 1,
+        "stored_differs_from_row_sum": 1,
+        "gap_pct_of_cap": {"n": 1, "median": 2.0, "p90": 2.0, "over_1_point": 1},
+        "note": "row sum is shown only to size the gap; it is not a valid season label when rows mix contracts",
+    }
+
+
+def test_attribution_usable_today_with_differing_salary_and_in_season():
+    section = _attribution([(date(2020, 1, 15), OWLS_TXN)], [OWLS_ROW])
+    assert (section["attributed"], section["usable_today"], section["newly_usable"]) == (1, 1, 0)
+    assert section["usable_and_attributed_salary_differs"] == 1
+    assert section["in_season_attributed"] == 1
+    assert section["usable_today_not_attributed"] == 0
+
+
+@pytest.mark.parametrize(
+    "lines, rows, reason",
+    [
+        ([(date(2019, 7, 10), OWLS_TXN)], [], "no_salary_rows_for_season"),
+        ([(date(2019, 7, 10), OWLS_TXN)], [FOXES_ROW], "no_row_for_signing_team"),
+        (
+            [(date(2019, 7, 10), OWLS_TXN)],
+            [OWLS_ROW, ce.SalaryRow("2019-20", "Owls", 1 * M)],
+            "multiple_rows_for_signing_team",
+        ),
+        (
+            [(date(2019, 7, 10), OWLS_TXN), (date(2019, 7, 20), "Signed a contract with the Foxes.")],
+            [OWLS_ROW],
+            "no_row_for_signing_team",
+        ),
+        (
+            [
+                (date(2020, 2, 1), "Signed two 10-day contracts with the Owls, then signed a contract for the rest of the season."),
+            ],
+            [OWLS_ROW],
+            "entry_combines_forms",
+        ),
+        (
+            [(date(2019, 7, 5), "Waived by the Owls."), (date(2019, 7, 10), OWLS_TXN)],
+            [OWLS_ROW],
+            "earlier_termination_by_signing_team",
+        ),
+        (
+            [(date(2019, 7, 5), "Released by the Owls."), (date(2019, 7, 10), OWLS_TXN)],
+            [OWLS_ROW],
+            "earlier_release_team_unknown",
+        ),
+    ],
+)
+def test_attribution_unresolved_causes(lines, rows, reason):
+    section = _attribution(lines, rows)
+    assert section["unresolved_by_reason"][reason] >= 1
+    assert section["attributed"] == 0 or reason == "no_row_for_signing_team"
+
+
+def test_attribution_resigned_same_team_is_unresolved_and_claim_is_not_a_termination():
+    resigned = _attribution(
+        [(date(2019, 7, 10), OWLS_TXN), (date(2019, 8, 1), "Waived by the Owls."), (date(2019, 9, 1), OWLS_TXN)],
+        [OWLS_ROW],
+    )
+    assert resigned["unresolved_by_reason"]["multiple_signings_with_team"] == 2
+    assert resigned["ambiguous_signings"]["events"] == 2
+    claimed = _attribution(
+        [(date(2019, 7, 5), "Claimed on waivers by the Owls."), (date(2019, 7, 10), OWLS_TXN)], [OWLS_ROW]
+    )
+    assert (claimed["attributed"], claimed["unresolved"]) == (0, 1)
+    assert claimed["unresolved_by_reason"]["earlier_service_with_signing_team"] == 1
+    assert claimed["unresolved_by_reason"]["earlier_termination_by_signing_team"] == 0
+
+
+def test_attribution_other_team_waiver_and_later_waiver_do_not_block():
+    other = _attribution(
+        [(date(2019, 7, 5), "Waived by the Foxes."), (date(2019, 7, 10), OWLS_TXN)], [OWLS_ROW]
+    )
+    later = _attribution([(date(2019, 7, 10), OWLS_TXN), (date(2019, 8, 1), "Waived by the Owls.")], [OWLS_ROW])
+    assert other["attributed"] == later["attributed"] == 1
+
+
+TRADE_AWAY = "Traded by the Owls to the Foxes for Pat Placeholder."
+
+
+def _service_events(lines):
+    page = _page("pz01", lines, salary_rows=[OWLS_ROW])
+    events, _ = probe.build_events([page], {"pz01": 41})
+    return events
+
+
+def test_prior_service_traded_away_then_resigned_same_league_year_is_unresolved():
+    section = _attribution(
+        [(date(2019, 7, 5), TRADE_AWAY), (date(2019, 7, 10), OWLS_TXN)], [OWLS_ROW]
+    )
+    assert (section["attributed"], section["unresolved"]) == (0, 1)
+    assert section["unresolved_by_reason"]["earlier_service_with_signing_team"] == 1
+    events = _service_events([(date(2019, 7, 5), TRADE_AWAY), (date(2019, 7, 10), OWLS_TXN)])
+    assert events[0].prior_service_with_team == 1
+
+
+def test_prior_service_joined_by_trade_counts_but_previous_league_year_does_not():
+    joined = _service_events(
+        [(date(2019, 7, 5), "Traded by the Foxes to the Owls for Pat Placeholder."), (date(2019, 7, 10), OWLS_TXN)]
+    )
+    assert joined[0].prior_service_with_team == 1
+    previous_year = _attribution(
+        [(date(2018, 12, 5), TRADE_AWAY), (date(2019, 7, 10), OWLS_TXN)], [OWLS_ROW]
+    )
+    assert (previous_year["attributed"], previous_year["unresolved"]) == (1, 0)
+
+
+def test_prior_service_trade_between_other_teams_does_not_block():
+    other = "Traded by the Foxes to the Hawks for Pat Placeholder."
+    section = _attribution([(date(2019, 7, 5), other), (date(2019, 7, 10), OWLS_TXN)], [OWLS_ROW])
+    assert (section["attributed"], section["unresolved"]) == (1, 0)
+    assert _service_events([(date(2019, 7, 5), other), (date(2019, 7, 10), OWLS_TXN)])[0].prior_service_with_team == 0
+
+
+def test_build_events_is_public_and_counts_prior_terminations():
+    inputs = _single_page_inputs(
+        [
+            (date(2019, 7, 1), "Waived by the Owls."),
+            (date(2019, 7, 2), "Released by the Owls."),
+            (date(2019, 7, 3), "Waived by the Foxes."),
+            (date(2019, 7, 10), OWLS_TXN),
+            (date(2019, 8, 1), "Waived by the Owls."),
+        ],
+        [OWLS_ROW],
+    )
+    events, _ = probe.build_events(inputs.bbref_pages, inputs.xref)
+    assert (events[0].prior_terminations_by_team, events[0].prior_releases_team_unknown) == (1, 1)
+    assert events[0].attribution is None

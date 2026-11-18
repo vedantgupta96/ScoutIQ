@@ -323,6 +323,66 @@ Proposed follow-up tickets (not yet filed):
 - Verify the 171 unlinked Basketball-Reference pages.
 - Decide whether to source historical contract terms, exception status and restricted status for pre-2022 signings.
 
+## Per-team salary rows and decision attribution (SCO-44)
+
+Added after the spike. Measured on 2026-11-17 with a read-only dry run against the live database and the same page cache; two consecutive runs produced identical JSON. Nothing has been written to production: the two tables below do not exist there yet.
+
+```bash
+cd backend
+.venv/bin/alembic upgrade head                                  # creates the two tables (0012)
+.venv/bin/python -m scoutiq.etl.load_team_salaries              # read-only dry run
+.venv/bin/python -m scoutiq.etl.load_team_salaries --apply      # one transaction; refuses on any conflict
+.venv/bin/pytest tests/test_salary_attribution.py tests/test_load_team_salaries.py -q
+```
+
+**Storage.** `player_team_salaries` keeps every salary row from a player's Basketball-Reference page as it appears: team name and abbreviation, amount, the page it came from and the date the page was cached. Rows are insert-only. A stored row whose amount differs from the source is reported as a conflict and never overwritten, and a row that disappears from the source is kept. `player_salaries` is unchanged, so the v1 label is unchanged.
+
+| Source rows | Count |
+| --- | --- |
+| Salary rows on all 1,812 cached pages | 9,554 |
+| On pages with a verified player link (planned for load) | 9,112 |
+| On the 171 unverified pages (skipped) | 442 |
+| Rows whose team abbreviation has no current team id (relocated or renamed franchises; name and abbreviation are still stored) | 138 |
+| Rows with an empty team name | 1 |
+
+A player can have two or three rows for the same team in one season (53 player-season-team groups in the cache), so each row carries its position among them.
+
+Event building, cache reading and the attribution call live in `scoutiq/etl/contract_decision_events.py`, shared by the probe and the loader; the loader does not import the probe.
+
+**Attribution rule (v1).** `salary_decision_attributions` holds one record per in-window standard-form signing, keyed by the event key above. A signing is attributed to a salary row only when all of these hold; otherwise it is stored as unresolved with the first reason that applies:
+
+| Reason a signing stays unresolved | Events |
+| --- | --- |
+| Signing team not parsed | 2 |
+| No salary rows for the first paid season | 582 |
+| No row for the signing team that season | 342 |
+| Two or more rows for the signing team that season | 47 |
+| More than one signing of any form with that team that season | 389 |
+| The entry combines contract forms | 10 |
+| The signing team waived the player earlier in that league year | 17 |
+| The player was traded away from, traded to, or claimed by the signing team earlier in that league year | 48 |
+| A release with no team named, earlier in that league year | 3 |
+| **Unresolved** | **1,440** |
+| **Attributed** | **1,930** |
+
+Row sums are never used. The loader attributes from the cached rows together with any stored row the cache no longer shows, and stored attribution records count too: a stored signing the cache no longer shows still counts against the other signings with that team, and the stored counts of earlier waivers, earlier service and same-team signings are only ever raised. A row or signing that drops out of the cache therefore cannot turn an ambiguous signing into an attributed one, and the dry run reports any unresolved-to-attributed change as a promotion; the probe's figures here use the cache alone, and the two agree while the tables are empty. Of the 582 with no salary rows, 193 are 2025-26 signings: the cache predates that season's salary tables, and the stored 2025-26 pay is bridged from current contracts. Of the 342 with no row for the signing team, 222 were traded and 115 waived, released or claimed in the same league year, so the page files the pay under another team.
+
+**Effect on the decision cohorts.**
+
+| Population | Events | Attributed |
+| --- | --- | --- |
+| Several standard signings in one league year | 470 | 121 (this report earlier estimated 125; the earlier-termination, earlier-service and release rules account for the difference) |
+| Multi-team salary season | 479 | 259 |
+| of which otherwise usable | 211 | 146 |
+| Shares a league year with a deal of another form | 722 | 83 |
+
+- 1,314 signings are attributed and also have a cap and prior-season BPM. 250 of them are not usable under the rules above.
+- 276 signings that are usable today are not attributed: 90 are 2025-26 signings with no page rows, 167 have their one salary row filed under a different team, 15 follow a waiver by the signing team, 2 follow earlier service with the signing team, and 2 fall under the other reasons. For the other 1,064, the attributed amount equals the stored first-year salary in every case.
+- 215 attributed signings are in-season, so the amount is prorated pay.
+- Attribution therefore does not replace the `Usable` definition yet. Whether a single row filed under a trade destination should count is left to the shared eligibility logic in SCO-45; SCO-24's constraint classes have not been recomputed for the 250.
+
+**Effect on the v1 label.** 428 stored player-seasons have two or more team rows, and in all 428 the stored salary differs from the row sum. The gap has a median of 0.33 points of cap and a 90th percentile of 2.14; 93 exceed 1 point. The row sum is shown only to size the gap: it is not a valid season label where rows mix contracts, so no stored value was changed.
+
 ## Scope kept
 
 No production database writes, schema migration, UI change or model artifact change. No Trade Lab file was read or modified. Tests use synthetic fixtures and make no network requests.
