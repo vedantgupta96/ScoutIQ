@@ -280,7 +280,9 @@ SURPLUS_CAVEAT = (
     "(aging not modeled) and prices each year against actual or projected cap constants. "
     "The default 'committed' scenario counts only fully guaranteed years; option and "
     "non-guaranteed years are shown separately as an upside/downside 'all years' scenario, "
-    "never silently valued as committed money."
+    "never silently valued as committed money. Years whose guarantee is unknown (the source "
+    "gives only a remaining-guaranteed total, not the per-year split) are likewise excluded "
+    "from the committed total, flagged 'guarantee_unknown', and included in 'all years'."
 )
 
 SURPLUS_SCENARIOS = ("committed", "all")
@@ -291,6 +293,7 @@ YEAR_STATUS_GUARANTEED = "guaranteed"
 YEAR_STATUS_PLAYER_OPTION = "player_option"
 YEAR_STATUS_TEAM_OPTION = "team_option"
 YEAR_STATUS_NON_GUARANTEED = "non_guaranteed"
+YEAR_STATUS_GUARANTEE_UNKNOWN = "guarantee_unknown"
 
 
 def contract_year_status(year: ContractYear) -> str:
@@ -298,13 +301,16 @@ def contract_year_status(year: ContractYear) -> str:
 
     Options are never 'committed' even when they carry guaranteed money (that money is
     only owed if the option is exercised), so options and explicit non-guarantees are
-    checked before the guaranteed flag.
+    checked before the guaranteed flag. A null flag means the guarantee is unknown, never
+    guaranteed and never confirmed non-guaranteed.
     """
     if year.is_player_option:
         return YEAR_STATUS_PLAYER_OPTION
     if year.is_team_option:
         return YEAR_STATUS_TEAM_OPTION
-    if not year.is_guaranteed:
+    if year.is_guaranteed is None:
+        return YEAR_STATUS_GUARANTEE_UNKNOWN
+    if year.is_guaranteed is False:
         return YEAR_STATUS_NON_GUARANTEED
     return YEAR_STATUS_GUARANTEED
 
@@ -318,7 +324,7 @@ class SurplusYear:
     surplus_pct: float | None
     discount_factor: float          # team-state factor applied to this year
     discounted_surplus_usd: int | None
-    status: str                     # guaranteed | player_option | team_option | non_guaranteed
+    status: str                     # guaranteed | player_option | team_option | non_guaranteed | guarantee_unknown
     committed: bool                 # counts under the committed-years-only scenario
 
 
@@ -331,7 +337,8 @@ class ContractSurplus:
     total_surplus_all_usd: int          # every listed year
     scenario: str                       # committed | all
     expiring: bool                      # one guaranteed year or fewer remaining
-    has_uncertain_years: bool           # any option/non-guaranteed year present
+    has_uncertain_years: bool           # any option/non-guaranteed/guarantee-unknown year present
+    has_unknown_guarantees: bool = False  # any year whose guarantee is unknown
 
 
 def remaining_contract_surplus(
@@ -377,6 +384,7 @@ def remaining_contract_surplus(
         all_total = 0
         guaranteed_remaining = 0
         has_uncertain = False
+        has_unknown = False
         for offset, year_row in enumerate(year_rows):
             cap = season_caps.get(year_row.season)
             salary_cap = cap.salary_cap if cap else None
@@ -393,6 +401,8 @@ def remaining_contract_surplus(
                 guaranteed_remaining += 1
             else:
                 has_uncertain = True
+            if status == YEAR_STATUS_GUARANTEE_UNKNOWN:
+                has_unknown = True
             factor = discount_factor(team_state, offset)
             surplus_pct = round(value_pct - hit_pct, 2) if value_pct is not None else None
             discounted_usd = (
@@ -426,6 +436,7 @@ def remaining_contract_surplus(
                 scenario=scenario,
                 expiring=guaranteed_remaining <= 1,
                 has_uncertain_years=has_uncertain,
+                has_unknown_guarantees=has_unknown,
             )
     return results
 

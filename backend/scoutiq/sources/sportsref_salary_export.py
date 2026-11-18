@@ -181,6 +181,8 @@ def parse_export(html: str) -> ParsedExport:
                             option_class_counts[cls] = option_class_counts.get(cls, 0) + 1
                         else:
                             problems.append(f"{where}: unknown cell class {cls!r}")
+                            reason = f"unknown_marker:{cls}"
+                            uncertain = f"{uncertain}; {reason}" if uncertain else reason
                 option = MARKER_SEMANTICS[markers[0]] if len(set(markers)) == 1 else None
                 if len(set(markers)) > 1:
                     reason = "conflicting option markers"

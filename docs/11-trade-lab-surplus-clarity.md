@@ -39,6 +39,7 @@ status, and surplus is reported under **two transparent scenarios**:
 | `player_option` | Player decides whether to play | ❌ | ✅ |
 | `team_option` | Team decides whether to keep | ❌ | ✅ |
 | `non_guaranteed` | Not guaranteed (may be waived) | ❌ | ✅ |
+| `guarantee_unknown` | `is_guaranteed` is null: the source gave no per-year split | ❌ | ✅ |
 
 - **Committed** (default): only `guaranteed` years. This is the honest floor — money both
   sides are certain to be on the hook for. Bam's option year is excluded here.

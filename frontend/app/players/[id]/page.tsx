@@ -63,8 +63,10 @@ import {
   contractStatusNote,
   type ContractFetchState,
   extensionWindow,
+  guaranteeLabel,
   payContextNote,
   payLabel,
+  remainingGuaranteedNote,
   simulateActionLabel,
   verdictCaptionParts,
 } from '@/lib/financialContext';
@@ -235,7 +237,8 @@ function citationHost(url: string): string {
 }
 
 function ContractYearRow({ year }: { year: PlayerContractYear }) {
-  const optionLabel = year.is_player_option ? 'Player opt.' : year.is_team_option ? 'Team opt.' : null;
+  const statusLabel = guaranteeLabel(year.is_guaranteed, year.is_player_option, year.is_team_option);
+  const optionLabel = year.is_player_option || year.is_team_option ? statusLabel : null;
   const gap = year.value_gap_pct;
   const gapColor = gap == null
     ? 'var(--text-muted)'
@@ -258,7 +261,7 @@ function ContractYearRow({ year }: { year: PlayerContractYear }) {
             {year.cap_hit_pct != null ? fmtPct(year.cap_hit_pct) + ' of cap' : 'cap % unavailable'}
           </span>
           {optionLabel && <Badge tone="warning" variant="outline" size="sm">{optionLabel}</Badge>}
-          {!year.is_guaranteed && !optionLabel && <Badge tone="neutral" variant="outline" size="sm">Non-gtd</Badge>}
+          {!optionLabel && statusLabel && <Badge tone="neutral" variant="outline" size="sm">{statusLabel}</Badge>}
         </div>
         {year.value_pct != null && (
           <div className="ds-note siq-profile-contract-model-value">
@@ -339,6 +342,9 @@ function ContractCard({
           <div className="siq-contract-ledger">
             {contract.years_detail.map((year) => <ContractYearRow key={year.season} year={year} />)}
           </div>
+          {remainingGuaranteedNote(contract.remaining_guaranteed_usd, contract.years_detail) && (
+            <p className="ds-note">{remainingGuaranteedNote(contract.remaining_guaranteed_usd, contract.years_detail)}</p>
+          )}
           <div className="siq-compact-action-row">
             <Button variant="primary" icon={<SlidersHorizontal size={15} />} onClick={onSimulateExtension} disabled={!contract.extension_start_season}>
               Simulate extension

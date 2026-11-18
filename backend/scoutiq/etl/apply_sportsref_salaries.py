@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -43,7 +44,11 @@ EXIT_CONFIRM = 4
 EXIT_CONFLICT = 5
 EXIT_VERIFY = 6
 EXIT_MIGRATION = 7
-MIGRATION_NOTE = "migration 0013_contract_source_ref is required (contracts.source_ref column is missing)"
+EXIT_JOURNAL = 8
+MIGRATION_NOTE = (
+    "migration 0013_contract_source_ref is required (contracts.source_ref / remaining_guaranteed_usd columns "
+    "or nullable contract_years.is_guaranteed are missing)"
+)
 
 
 class ApplyRefused(RuntimeError):
@@ -220,27 +225,15 @@ def _contract_decision(
     if season_start in extras.contract_starts.get(pid, set()):
         return {**base, "action": "held", "reason": "season_start_collision", "team": resolved, "season_start": season_start}
     guaranteed = row.remaining_guaranteed
-    if guaranteed is None:
-        return {**base, "action": "held", "reason": "guarantee_unknown", "team": resolved}
     total = sum(y.amount for y in schedule)
-    firm_total = sum(y.amount for y in schedule if not y.option)
-    has_options = any(y.option for y in schedule)
-    if guaranteed == 0:
+    if guaranteed is None:
+        basis, flags = "source_missing", [None] * len(schedule)
+    elif guaranteed == 0:
         basis, flags = "none_guaranteed", [False] * len(schedule)
     elif guaranteed == total:
         basis, flags = "all_guaranteed", [True] * len(schedule)
-    elif has_options and guaranteed == firm_total:
-        basis, flags = "option_years_unguaranteed", [not y.option for y in schedule]
     else:
-        return {
-            **base,
-            "action": "held",
-            "reason": "guarantee_unresolved",
-            "team": resolved,
-            "remaining_guaranteed": guaranteed,
-            "amounts": {y.season: y.amount for y in schedule},
-            "options": {y.season: y.option for y in schedule if y.option},
-        }
+        basis, flags = "split_unknown", [None] * len(schedule)
     entries = []
     for idx, y in enumerate(schedule):
         cap = extras.cap_by_season.get(y.season)
@@ -520,6 +513,7 @@ def apply_in_transaction(session, parsed: ParsedExport, manifest: dict, snapshot
     if conflicts:
         raise ApplyRefused(f"{len(conflicts)} player_team_salaries conflict(s); nothing written")
     before = _count_tables(session)
+    own_before = _owned_counts(session, snapshot_name)
     before_records = _before_records(plan, state, extras)
     received = _parse_received(manifest)
 
@@ -534,6 +528,7 @@ def apply_in_transaction(session, parsed: ParsedExport, manifest: dict, snapshot
             source=SOURCE,
             scraped_at=received,
             source_ref=snapshot_name,
+            remaining_guaranteed_usd=item["remaining_guaranteed"],
             contract_years=[
                 ContractYear(
                     season=y["season"],
@@ -574,6 +569,7 @@ def apply_in_transaction(session, parsed: ParsedExport, manifest: dict, snapshot
     return {
         "plan": plan,
         "before_records": before_records,
+        "own_before": own_before,
         "inserted_contract_ids": [c.id for c in contracts],
         "inserted_team_salary_ids": [r.id for r in team_rows],
         "table_counts": {"before": before, "after": after},
@@ -585,13 +581,110 @@ def _journal_path(snapshot: Path, prefix: str, now: datetime) -> Path:
 
 
 def _write_json(path: Path, payload: dict) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
 
 
-def _apply_journal(snapshot: Path, manifest: dict, confirm: str, result: dict, now: datetime, status: str) -> dict:
+def _owned_counts(session, snapshot_name: str) -> dict[str, int]:
+    from sqlalchemy import func, select
+
+    from scoutiq.models import Contract, PlayerTeamSalary
+
+    return {
+        "contracts": session.scalar(
+            select(func.count()).select_from(Contract).where(Contract.source == SOURCE, Contract.source_ref == snapshot_name)
+        ),
+        "player_team_salaries": session.scalar(
+            select(func.count())
+            .select_from(PlayerTeamSalary)
+            .where(PlayerTeamSalary.source == SOURCE, PlayerTeamSalary.source_ref == snapshot_name)
+        ),
+    }
+
+
+def _reconcile_apply(session, snapshot_name: str, result: dict) -> dict:
+    now = _owned_counts(session, snapshot_name)
+    own_before = result["own_before"]
+    planned = result["plan"]["planned_inserts"]
+    expected = {k: own_before[k] + planned[k] for k in own_before}
+    if now == expected:
+        status = "committed_after_reconcile"
+    elif now == own_before:
+        status = "rolled_back"
+    else:
+        status = "outcome_unknown"
+    return {"status": status, "owned_rows_now": now, "owned_rows_before": own_before, "owned_rows_expected": expected}
+
+
+def _reconcile_rollback(session, snapshot_name: str, result: dict) -> dict:
+    now = _owned_counts(session, snapshot_name)
+    original = {"contracts": len(result["contract_ids"]), "player_team_salaries": len(result["team_salary_ids"])}
+    gone = {"contracts": 0, "player_team_salaries": 0}
+    if now == gone:
+        status = "committed_after_reconcile"
+    elif now == original:
+        status = "rolled_back"
+    else:
+        status = "outcome_unknown"
+    return {"status": status, "owned_rows_now": now, "owned_rows_before": original, "owned_rows_expected": gone}
+
+
+def _commit_and_finalize(session, session_factory, snapshot_name, journal, build, result, reconcile) -> int | None:
+    try:
+        session.commit()
+    except Exception as exc:
+        try:
+            _write_json(journal, build("outcome_unknown", {"commit_error": repr(exc)}))
+        except Exception:
+            pass
+        recon: dict = {"status": "outcome_unknown", "commit_error": repr(exc)}
+        try:
+            fresh = _open_session(session_factory)
+            try:
+                recon = {**reconcile(fresh, snapshot_name, result), "commit_error": repr(exc)}
+            finally:
+                fresh.rollback()
+                fresh.close()
+        except Exception as rexc:
+            recon = {"status": "outcome_unknown", "commit_error": repr(exc), "reconcile_error": repr(rexc)}
+        try:
+            _write_json(journal, build(recon["status"], recon))
+        except Exception as jexc:
+            print(f"journal update failed: {jexc}", file=sys.stderr)
+        if recon["status"] != "committed_after_reconcile":
+            print(f"commit raised ({exc!r}); outcome {recon['status']}; journal {journal}", file=sys.stderr)
+            raise
+        print(f"commit raised ({exc!r}) but reconciliation confirms the write is present", file=sys.stderr)
+        return None
+    try:
+        _write_json(journal, build("committed", None))
+    except Exception as exc:
+        print(
+            f"rows committed; journal finalization failed ({exc!r}); pending journal retained at {journal}",
+            file=sys.stderr,
+        )
+        return EXIT_JOURNAL
+    return None
+
+
+def _apply_journal(
+    snapshot: Path, manifest: dict, confirm: str, result: dict, now: datetime, status: str, reconciliation: dict | None = None
+) -> dict:
     plan = result["plan"]
     return {
         "status": status,
+        "reconciliation": reconciliation,
         "sha256": manifest.get("sha256"),
         "confirm": confirm,
         "snapshot": snapshot.name,
@@ -608,9 +701,12 @@ def _apply_journal(snapshot: Path, manifest: dict, confirm: str, result: dict, n
     }
 
 
-def _rollback_journal(snapshot: Path, manifest: dict, confirm: str, result: dict, now: datetime, status: str) -> dict:
+def _rollback_journal(
+    snapshot: Path, manifest: dict, confirm: str, result: dict, now: datetime, status: str, reconciliation: dict | None = None
+) -> dict:
     return {
         "status": status,
+        "reconciliation": reconciliation,
         "sha256": manifest.get("sha256"),
         "confirm": confirm,
         "snapshot": snapshot.name,
@@ -626,7 +722,13 @@ def _rollback_journal(snapshot: Path, manifest: dict, confirm: str, result: dict
 def _has_source_ref(session) -> bool:
     from sqlalchemy import inspect
 
-    return any(c["name"] == "source_ref" for c in inspect(session.connection()).get_columns("contracts"))
+    inspector = inspect(session.connection())
+    contract_cols = {c["name"] for c in inspector.get_columns("contracts")}
+    year_cols = {c["name"]: c for c in inspector.get_columns("contract_years")}
+    return (
+        {"source_ref", "remaining_guaranteed_usd"} <= contract_cols
+        and bool(year_cols.get("is_guaranteed", {}).get("nullable"))
+    )
 
 
 def select_snapshot_rows(session, snapshot_name: str, has_source_ref: bool = True) -> dict:
@@ -790,15 +892,13 @@ def _cmd_apply(args, session_factory) -> int:
         except Exception:
             session.rollback()
             raise
-        try:
-            session.commit()
-        except Exception:
-            try:
-                _write_json(journal, _apply_journal(snapshot, manifest, args.confirm, result, now, "rolled_back"))
-            except OSError:
-                pass
-            raise
-        _write_json(journal, _apply_journal(snapshot, manifest, args.confirm, result, now, "committed"))
+        code = _commit_and_finalize(
+            session, session_factory, snapshot_name, journal,
+            lambda status, recon: _apply_journal(snapshot, manifest, args.confirm, result, now, status, recon),
+            result, _reconcile_apply,
+        )
+        if code:
+            return code
         print(render_apply_summary(result["plan"], "applied"))
         print(f"table counts {result['table_counts']}")
         print(f"journal {journal}")
@@ -848,15 +948,13 @@ def _cmd_rollback(args, session_factory) -> int:
         except Exception:
             session.rollback()
             raise
-        try:
-            session.commit()
-        except Exception:
-            try:
-                _write_json(journal, _rollback_journal(snapshot, manifest, args.confirm, result, now, "rolled_back"))
-            except OSError:
-                pass
-            raise
-        _write_json(journal, _rollback_journal(snapshot, manifest, args.confirm, result, now, "committed"))
+        code = _commit_and_finalize(
+            session, session_factory, snapshot.name, journal,
+            lambda status, recon: _rollback_journal(snapshot, manifest, args.confirm, result, now, status, recon),
+            result, _reconcile_rollback,
+        )
+        if code:
+            return code
         print("rollback applied")
         print(_render_selected(result))
         print(f"table counts {result['table_counts']}")

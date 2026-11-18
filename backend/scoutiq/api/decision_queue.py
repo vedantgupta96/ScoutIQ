@@ -291,7 +291,12 @@ def _expiring_item(
         salary_cap = season_cap.salary_cap if season_cap else None
         cap_hit = ctx.cap_hits.get(player.player_id)
         pay_pct = round(cap_hit / salary_cap * 100, 2) if (cap_hit and salary_cap) else None
-    reason = f"Final guaranteed year is {season}; reaches free agency after it."
+    if final_year.is_guaranteed is True:
+        reason = f"Final guaranteed year is {season}; reaches free agency after it."
+    elif final_year.is_guaranteed is None:
+        reason = f"Final contract year is {season} (guarantee unknown); reaches free agency after it."
+    else:
+        reason = f"Final contract year is {season}; reaches free agency after it."
     return QueueItem(
         id=f"expiring:{team_id}:{player.player_id}:{season}",
         type=TYPE_EXPIRING,
@@ -336,6 +341,8 @@ def _option_or_expiring_item(player: Player, team_id: int, ctx: _QueueContext) -
 
 
 # --------------------------------------------------------------------------- extension
+GUARANTEE_UNKNOWN_CAUTION = "Guarantee split unknown: the source lists a remaining-guaranteed total, not per-year guarantees."
+
 _EXTENSION_PRIORITY = {
     "Extend now": "high",
     "Fair — extend at market or wait": "medium",
@@ -368,11 +375,12 @@ def _extension_item(player: Player, team_id: int, ctx: _QueueContext) -> QueueIt
             destination=f"/players/{player.player_id}",
             season=ctx.season,
             as_of=ctx.season,
-            caution=None,
+            caution=GUARANTEE_UNKNOWN_CAUTION if summary.guarantee_unknown else None,
         )
 
+    year_phrase = "a contract year (guarantee unknown)" if summary.guarantee_unknown else "a guaranteed contract year"
     detail = (
-        f"{player.full_name} has a guaranteed contract year remaining after {LATEST_SEASON}, "
+        f"{player.full_name} has {year_phrase} remaining after {LATEST_SEASON}, "
         "but no model value is available to size an extension verdict."
     )
     return QueueItem(

@@ -20,6 +20,7 @@ import { MiniValuePayGauge } from '@/components/players/MiniValuePayGauge';
 import { classifyGap } from '@/lib/present';
 import { fmtM, fmtPct, signed } from '@/lib/utils';
 import { teamVisual } from '@/lib/teamVisuals';
+import { GUARANTEE_UNKNOWN_LABEL } from '@/lib/financialContext';
 
 // ---- Slider -------------------------------------------------------
 function DSSlider({
@@ -127,13 +128,15 @@ function CapShareBar({ sharePct }: { sharePct: number }) {
 // ---- One contract year in the structure ledger --------------------
 function YearRow({ yr }: { yr: ContractYearResponse }) {
   const optionLabel = yr.is_player_option ? 'Player opt.' : yr.is_team_option ? 'Team opt.' : null;
-  const nonGtd = !yr.is_guaranteed && !yr.is_player_option && !yr.is_team_option;
+  const nonGtd = yr.is_guaranteed === false && !yr.is_player_option && !yr.is_team_option;
+  const unknownGtd = yr.is_guaranteed == null;
   return (
     <div className="siq-sim-year-row">
       <span className="ds-tnum siq-sim-year-row__season">{yr.season}</span>
       <span className="siq-sim-year-row__flags">
         {optionLabel && <Badge tone="warning" size="sm">{optionLabel}</Badge>}
         {nonGtd && <Badge tone="neutral" size="sm">Non-gtd</Badge>}
+        {unknownGtd && <Badge tone="neutral" variant="outline" size="sm">{GUARANTEE_UNKNOWN_LABEL}</Badge>}
         {yr.is_projected_cap && <Badge tone="neutral" variant="outline" size="sm">Projected cap</Badge>}
       </span>
       <span className="ds-tnum siq-sim-year-row__usd">{fmtM(yr.cap_hit_usd)}</span>

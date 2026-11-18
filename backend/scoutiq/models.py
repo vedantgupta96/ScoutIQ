@@ -213,6 +213,11 @@ class Contract(Base):
     # Deferred so default SELECTs never name the column: the API must keep working if code ships before
     # migration 0013 has run (FetchedValue also keeps it out of INSERTs when unset). Only the SportsRef apply/rollback tool reads or filters on it.
     source_ref: Mapped[str | None] = mapped_column(String(128), deferred=True, server_default=FetchedValue())
+    # Source-reported remaining guaranteed total, kept apart from the per-year flags. Same deploy-order
+    # pattern as source_ref: only code that has checked the column exists may read it.
+    remaining_guaranteed_usd: Mapped[int | None] = mapped_column(
+        BigInteger, deferred=True, server_default=FetchedValue()
+    )
 
     contract_years: Mapped[list["ContractYear"]] = relationship(
         back_populates="contract", cascade="all, delete-orphan", order_by="ContractYear.season"
@@ -232,7 +237,10 @@ class ContractYear(Base):
     season: Mapped[str] = mapped_column(String(7), index=True)
     aav: Mapped[int | None] = mapped_column(BigInteger)          # dollars this season
     cap_pct: Mapped[float | None] = mapped_column(Numeric(6, 4)) # fraction (0.20 = 20% of cap)
-    is_guaranteed: Mapped[bool] = mapped_column(Boolean, default=True)
+    # null = guarantee unknown (SportsRef apply); false is reserved for confirmed non-guaranteed pay.
+    is_guaranteed: Mapped[bool | None] = mapped_column(
+        Boolean().evaluates_none(), default=True, nullable=True
+    )
     is_player_option: Mapped[bool] = mapped_column(Boolean, default=False)
     is_team_option: Mapped[bool] = mapped_column(Boolean, default=False)
 

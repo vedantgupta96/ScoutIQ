@@ -373,6 +373,7 @@ const YEAR_STATUS_LABEL: Record<ContractYearStatus, string> = {
   player_option: 'Player option',
   team_option: 'Team option',
   non_guaranteed: 'Non-guaranteed',
+  guarantee_unknown: 'Guarantee unknown',
 };
 
 export function pctText(value: number | null, signedValue = false): string {
@@ -480,7 +481,7 @@ function ExchangeSide({ analysis, toAbbr }: { analysis: TradeTeamAnalysis; toAbb
                     <strong>{fmtM(p.cap_hit_usd ?? 0)}</strong>
                     <small className={surplusSignClass(s?.total_surplus_usd)}>
                       {s ? `${fmtSignedM(s.total_surplus_usd)} surplus` : 'surplus n/a'}
-                      {s?.has_uncertain_years ? <span className="siq-surplus-flag" title="Has option / non-guaranteed years">*</span> : null}
+                      {s?.has_uncertain_years ? <span className="siq-surplus-flag" title="Has option, non-guaranteed, or guarantee-unknown years">*</span> : null}
                     </small>
                   </span>
                   <ChevronDown className="siq-surplus-chevron" size={15} aria-hidden="true" />

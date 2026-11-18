@@ -74,3 +74,25 @@ export function simulateActionLabel(contract: ContractFields | null | undefined)
     ? 'Simulate extension'
     : 'Open cap simulator';
 }
+
+export const GUARANTEE_UNKNOWN_LABEL = 'Guarantee unknown';
+
+export function guaranteeLabel(
+  isGuaranteed: boolean | null | undefined,
+  isPlayerOption: boolean,
+  isTeamOption: boolean,
+): string | null {
+  const option = isPlayerOption ? 'Player opt.' : isTeamOption ? 'Team opt.' : null;
+  if (isGuaranteed == null) return option ? `${option} · ${GUARANTEE_UNKNOWN_LABEL}` : GUARANTEE_UNKNOWN_LABEL;
+  if (option) return option;
+  return isGuaranteed ? null : 'Non-gtd';
+}
+
+export function remainingGuaranteedNote(
+  remainingGuaranteedUsd: number | null | undefined,
+  years: Array<{ is_guaranteed: boolean | null }>,
+): string | null {
+  if (remainingGuaranteedUsd == null || !years.some((y) => y.is_guaranteed == null)) return null;
+  const millions = remainingGuaranteedUsd / 1_000_000;
+  return `Source lists $${millions.toFixed(millions >= 10 ? 1 : 2)}M remaining guaranteed; per-year split unknown.`;
+}

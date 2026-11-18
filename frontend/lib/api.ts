@@ -182,12 +182,14 @@ export interface PlayerContractYear {
   cap_hit_usd: number | null;
   cap_hit_pct: number | null;
   salary_cap: number | null;
-  is_guaranteed: boolean;
+  is_guaranteed: boolean | null;
   is_player_option: boolean;
   is_team_option: boolean;
   value_pct: number | null;
   value_gap_pct: number | null;
 }
+
+export type GuaranteeStatus = 'known' | 'unknown' | 'partial_unknown';
 
 export type ContractCoverageStatus = 'current' | 'expired' | 'future_only' | 'no_years';
 
@@ -207,6 +209,8 @@ export interface PlayerContractResponse {
   coverage_end_season: string | null;
   contract_team: TeamSummary | null;
   years_detail: PlayerContractYear[];
+  remaining_guaranteed_usd?: number | null;
+  guarantee_status?: GuaranteeStatus;
   caveat: string;
 }
 
@@ -231,6 +235,7 @@ export interface PlayerExtensionResponse {
   rationale: string;
   trajectory_note: string | null;
   caveat: string;
+  guarantee_unknown?: boolean;
 }
 
 export type SimilarPlayersMode = 'twins' | 'contract_comps' | 'replacements';
@@ -324,7 +329,7 @@ export interface ContractYearResponse {
   season: string;
   cap_hit_usd: number;
   cap_hit_pct: number;
-  is_guaranteed: boolean;
+  is_guaranteed: boolean | null;
   is_player_option: boolean;
   is_team_option: boolean;
   salary_cap: number;
@@ -381,6 +386,8 @@ export interface ScenarioDelta {
   label: string;
   total_cap_hit_usd: number;
   guaranteed_cap_hit_usd: number;
+  guarantee_unknown_usd?: number;
+  requires_known_guarantee?: boolean;
   value_gap_pct: number | null;
   apron_tier_after: CapTier | null;
 }
@@ -789,7 +796,7 @@ export interface OffseasonContractYear {
   season: string;
   cap_hit_usd: number;
   cap_hit_pct: number;
-  is_guaranteed: boolean;
+  is_guaranteed: boolean | null;
   is_player_option: boolean;
   is_team_option: boolean;
   is_projected_cap: boolean;
@@ -1159,7 +1166,7 @@ export interface TradeRosterLegality {
   standard_before: number; standard_after: number;
   net_change: number; two_way_count: number; reasons: string[];
 }
-export type ContractYearStatus = 'guaranteed' | 'player_option' | 'team_option' | 'non_guaranteed';
+export type ContractYearStatus = 'guaranteed' | 'player_option' | 'team_option' | 'non_guaranteed' | 'guarantee_unknown';
 export interface SurplusYearDetail {
   season: string;
   cap_hit_usd: number;
@@ -1177,6 +1184,7 @@ export interface SurplusPlayerDetail {
   total_surplus_all_usd: number;        // every listed year
   scenario: 'committed' | 'all';
   has_uncertain_years: boolean;
+  has_unknown_guarantees?: boolean;
   expiring: boolean;
   years: SurplusYearDetail[];
 }

@@ -162,9 +162,11 @@ def test_insert_expired_contract_gets_new_contract_with_schedule(tmp_path, facto
     with factory() as s:
         years = list(s.scalars(select(ContractYear).where(ContractYear.contract_id == c.id).order_by(ContractYear.season)))
     assert [(y.season, y.aav, y.is_player_option, y.is_team_option, y.is_guaranteed) for y in years] == [
-        ("2026-27", 3_876_529, False, False, True),
-        ("2027-28", 4_070_355, True, False, False),
+        ("2026-27", 3_876_529, False, False, None),
+        ("2027-28", 4_070_355, True, False, None),
     ]
+    with factory() as s:
+        assert s.scalar(select(Contract.remaining_guaranteed_usd).where(Contract.id == c.id)) == 3_876_529
     assert float(years[0].cap_pct) == round(3_876_529 / 100_000_000, 4)
     assert years[1].cap_pct is None
     assert len(contract_rows(factory, 23)) == 2
@@ -176,7 +178,7 @@ def test_no_stored_contract_inserts_and_team_option_flags(tmp_path, factory):
     [c] = contract_rows(factory, 30)
     with factory() as s:
         years = list(s.scalars(select(ContractYear).where(ContractYear.contract_id == c.id).order_by(ContractYear.season)))
-    assert [(y.is_team_option, y.is_guaranteed) for y in years] == [(False, True), (True, False)]
+    assert [(y.is_team_option, y.is_guaranteed) for y in years] == [(False, None), (True, None)]
 
 
 def test_rerun_is_idempotent_and_unchanged_after_apply(tmp_path, factory):
@@ -256,22 +258,23 @@ def contract_for(plan):
     return inserted[0] if inserted else None
 
 
-def test_guarantee_unknown_when_remaining_guaranteed_missing():
-    plan = custom_plan([(5, None), (5, None)], None)
-    assert held_reasons(plan)["jamesle01"] == "guarantee_unknown"
+def test_missing_remaining_guaranteed_stores_unknown_not_held():
+    c = contract_for(custom_plan([(5, None), (5, None)], None))
+    assert c["guarantee_basis"] == "source_missing"
+    assert [y["is_guaranteed"] for y in c["schedule"]] == [None, None]
+    assert c["remaining_guaranteed"] is None
 
 
-def test_equal_firm_years_with_partial_guarantee_are_unresolved_and_not_written():
-    plan = custom_plan([(5_000_000, None), (5_000_000, None)], 5_000_000)
-    held = {h["bbref_id"]: h for h in plan["contracts"]["held"]}["jamesle01"]
-    assert held["reason"] == "guarantee_unresolved" and held["remaining_guaranteed"] == 5_000_000
-    assert held["amounts"] == {"2026-27": 5_000_000, "2027-28": 5_000_000}
-    assert contract_for(plan) is None and plan["planned_inserts"]["contracts"] == 0
+def test_equal_firm_years_with_partial_guarantee_is_split_unknown():
+    c = contract_for(custom_plan([(5_000_000, None), (5_000_000, None)], 5_000_000))
+    assert c["guarantee_basis"] == "split_unknown" and c["remaining_guaranteed"] == 5_000_000
+    assert [y["is_guaranteed"] for y in c["schedule"]] == [None, None]
 
 
-def test_cisse_like_prefix_match_without_options_is_held():
-    plan = custom_plan([(2_185_116, None), (2_571_895, None)], 2_185_116)
-    assert held_reasons(plan)["jamesle01"] == "guarantee_unresolved"
+def test_cisse_like_prefix_match_without_options_is_split_unknown():
+    c = contract_for(custom_plan([(2_185_116, None), (2_571_895, None)], 2_185_116))
+    assert c["guarantee_basis"] == "split_unknown"
+    assert [y["is_guaranteed"] for y in c["schedule"]] == [None, None]
 
 
 def test_guarantee_equals_total_marks_all_guaranteed():
@@ -287,22 +290,33 @@ def test_zero_guarantee_marks_none_guaranteed():
     assert [y["is_guaranteed"] for y in c["schedule"]] == [False, False]
 
 
-def test_lebron_like_option_year_unguaranteed_rule():
+def test_lebron_like_option_year_is_split_unknown_with_options_kept():
     c = contract_for(custom_plan([(3_876_529, None), (4_070_355, "player_option")], 3_876_529))
-    assert c["guarantee_basis"] == "option_years_unguaranteed"
-    assert [(y["is_guaranteed"], y["is_player_option"]) for y in c["schedule"]] == [(True, False), (False, True)]
+    assert c["guarantee_basis"] == "split_unknown"
+    assert [(y["is_guaranteed"], y["is_player_option"]) for y in c["schedule"]] == [(None, False), (None, True)]
     assert c["remaining_guaranteed"] == 3_876_529
 
 
-def test_guarantee_into_option_year_is_held():
-    plan = custom_plan([(5, None), (7, "player_option")], 8)
-    assert held_reasons(plan)["jamesle01"] == "guarantee_unresolved"
+def test_no_guarantee_reasons_hold_contracts():
+    plan = plan_for()
+    assert not {h["reason"] for h in plan["contracts"]["held"]} & {"guarantee_unknown", "guarantee_unresolved"}
+    assert {r["bbref_id"]: r["guarantee_basis"] for r in plan["contracts"]["insert"]} == {
+        "jamesle01": "split_unknown", "tatumja01": "split_unknown"}
 
 
-def test_fixture_players_resolve_via_option_year_rule():
-    by_id = {r["bbref_id"]: r for r in plan_for()["contracts"]["insert"]}
-    assert {b: r["guarantee_basis"] for b, r in by_id.items()} == {
-        "jamesle01": "option_years_unguaranteed", "tatumja01": "option_years_unguaranteed"}
+def test_apply_keeps_existing_is_guaranteed_values_byte_identical(tmp_path, factory):
+    add_contract(factory, 23, "2024-25", [("2024-25", 48_000_000, False, False), ("2025-26", 50_000_000, True, False)])
+    with factory() as s:
+        before = sorted((y.id, y.is_guaranteed) for y in s.scalars(select(ContractYear)))
+    snap = snapshot(tmp_path)
+    assert run_apply(snap, factory) == 0
+    with factory() as s:
+        after = {y.id: y.is_guaranteed for y in s.scalars(select(ContractYear))}
+    assert all(after[i] == v for i, v in before)
+    assert main(["rollback", "--snapshot", str(snap), "--apply", "--confirm", confirm_for(snap)],
+                session_factory=factory) == 0
+    with factory() as s:
+        assert sorted((y.id, y.is_guaranteed) for y in s.scalars(select(ContractYear))) == before
 
 
 def test_same_received_at_two_snapshots_roll_back_independently(tmp_path, factory):
@@ -358,26 +372,115 @@ def test_journal_pending_failure_rolls_back_and_success_ends_committed(tmp_path,
     assert json.loads(path.read_text())["status"] == "committed"
 
 
-def test_commit_failure_marks_journal_rolled_back(tmp_path, factory, monkeypatch):
-    snap = snapshot(tmp_path)
-    seen = []
-    real = mod._write_json
+def _journal(snap, prefix="apply"):
+    [path] = list(snap.glob(f"{prefix}-*.json"))
+    return json.loads(path.read_text())
 
-    def spy(path, payload):
-        seen.append(payload.get("status"))
-        real(path, payload)
+
+def test_lost_commit_acknowledgement_reconciles_as_committed(tmp_path, factory, monkeypatch):
+    snap = snapshot(tmp_path)
+    real = Session.commit
+
+    def commit_then_raise(self):
+        real(self)
+        raise RuntimeError("ack lost")
+
+    monkeypatch.setattr(Session, "commit", commit_then_raise)
+    assert run_apply(snap, factory) == 0
+    monkeypatch.undo()
+    journal = _journal(snap)
+    assert journal["status"] == "committed_after_reconcile"
+    assert journal["reconciliation"]["owned_rows_now"] == {"contracts": 2, "player_team_salaries": 9}
+    assert counts(factory)["contracts"] == 2
+
+
+def test_genuine_commit_failure_reconciles_as_rolled_back_and_raises(tmp_path, factory, monkeypatch):
+    snap = snapshot(tmp_path)
 
     def bad_commit(self):
+        self.rollback()
         raise RuntimeError("commit failed")
 
-    monkeypatch.setattr(mod, "_write_json", spy)
     monkeypatch.setattr(Session, "commit", bad_commit)
     with pytest.raises(RuntimeError):
         run_apply(snap, factory)
-    assert seen == ["pending", "rolled_back"]
     monkeypatch.undo()
+    assert _journal(snap)["status"] == "rolled_back"
     assert counts(factory)["contracts"] == 0
 
+
+def test_reconcile_failure_leaves_outcome_unknown(tmp_path, factory, monkeypatch):
+    snap = snapshot(tmp_path)
+
+    def bad_commit(self):
+        self.rollback()
+        raise RuntimeError("commit failed")
+
+    def bad_reconcile(*a, **k):
+        raise RuntimeError("query failed")
+
+    monkeypatch.setattr(Session, "commit", bad_commit)
+    monkeypatch.setattr(mod, "_reconcile_apply", bad_reconcile)
+    with pytest.raises(RuntimeError):
+        run_apply(snap, factory)
+    monkeypatch.undo()
+    journal = _journal(snap)
+    assert journal["status"] == "outcome_unknown"
+    assert "query failed" in journal["reconciliation"]["reconcile_error"]
+
+
+def test_rollback_lost_acknowledgement_reconciles(tmp_path, factory, monkeypatch):
+    snap = snapshot(tmp_path)
+    assert run_apply(snap, factory) == 0
+    real = Session.commit
+
+    def commit_then_raise(self):
+        real(self)
+        raise RuntimeError("ack lost")
+
+    monkeypatch.setattr(Session, "commit", commit_then_raise)
+    assert main(["rollback", "--snapshot", str(snap), "--apply", "--confirm", confirm_for(snap)],
+                session_factory=factory) == 0
+    monkeypatch.undo()
+    assert _journal(snap, "rollback")["status"] == "committed_after_reconcile"
+    assert counts(factory)["contracts"] == 0
+
+
+def test_final_journal_write_failure_keeps_pending_journal_and_exit_8(tmp_path, factory, monkeypatch, capsys):
+    snap = snapshot(tmp_path)
+    real_fsync = mod.os.fsync
+    calls = []
+
+    def flaky_fsync(fd):
+        calls.append(1)
+        if len(calls) == 2:
+            raise OSError("fsync failed mid-write")
+        real_fsync(fd)
+
+    monkeypatch.setattr(mod.os, "fsync", flaky_fsync)
+    assert run_apply(snap, factory) == 8
+    monkeypatch.undo()
+    assert counts(factory)["contracts"] == 2
+    assert _journal(snap)["status"] == "pending"
+    assert not list(snap.glob("*.tmp"))
+    assert "pending journal retained" in capsys.readouterr().err
+
+
+def test_unknown_marker_cell_holds_contract_and_is_not_written_to_team_salaries(tmp_path, factory):
+    html = FIXTURE.read_text().replace('<td class="right " data-stat="y1" csk="3876529">', '<td class="right salary-xx" data-stat="y1" csk="3876529">', 1)
+    parsed = parse_export(html)
+    assert parsed.rows[0].years[0].uncertain == "unknown_marker:salary-xx"
+    snap = snapshot(tmp_path, html, name="xx")
+    assert run_apply(snap, factory) == 0
+    assert contract_rows(factory, 23) == []
+    with factory() as s:
+        assert [r.season for r in s.scalars(select(PlayerTeamSalary).where(PlayerTeamSalary.player_id == 23))] == ["2027-28"]
+    plan_path = tmp_path / "p.json"
+    run(snap, factory, "--json", str(plan_path))
+    plan = json.loads(plan_path.read_text())
+    assert {h["bbref_id"]: h["reason"] for h in plan["contracts"]["held"]}["jamesle01"] == "uncertain_cells"
+    cells = [(c["bbref_id"], c["season"], c["reason"]) for c in plan["team_salaries"]["held_uncertain_cells"]]
+    assert ("jamesle01", "2026-27", "unknown_marker:salary-xx") in cells
 
 def test_multi_obligation_writes_team_rows_but_no_contract(tmp_path, factory):
     snap = snapshot(tmp_path)

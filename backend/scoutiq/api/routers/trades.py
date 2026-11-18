@@ -500,6 +500,7 @@ def _asset_ledger(
                 "total_surplus_all_usd": entry.total_surplus_all_usd,
                 "scenario": entry.scenario,
                 "has_uncertain_years": entry.has_uncertain_years,
+                "has_unknown_guarantees": entry.has_unknown_guarantees,
                 "expiring": entry.expiring,
                 "years": [year.__dict__ for year in entry.years],
             }
