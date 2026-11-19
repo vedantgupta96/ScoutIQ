@@ -5,6 +5,7 @@ import { VerdictPill } from '@/components/ui/VerdictPill';
 import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import { fmtM, fmtPct, signed } from '@/lib/utils';
+import { guaranteeLabel } from '@/lib/financialContext';
 
 /** Missing values are labelled in place rather than shown as a bare dash, so an
  *  absent field is never mistaken for a rendered value. */
@@ -33,10 +34,7 @@ function Cell({ primary, secondary }: { primary: ReactNode; secondary?: ReactNod
 }
 
 function contractYearLabel(year: PlayerContractYear): string | null {
-  if (year.is_player_option) return 'Player opt.';
-  if (year.is_team_option) return 'Team opt.';
-  if (!year.is_guaranteed) return 'Non-gtd';
-  return null;
+  return guaranteeLabel(year.is_guaranteed, year.is_player_option, year.is_team_option);
 }
 
 interface Row {

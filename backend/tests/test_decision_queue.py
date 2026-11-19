@@ -208,7 +208,7 @@ def test_option_or_expiring_item_option_pool_member_produces_option_item():
 def test_option_or_expiring_item_expiring_when_not_in_option_pool():
     player = Player(player_id=1, full_name="Vet", current_team_id=LAL_ID)
     contract = Contract(id=10, player_id=1, season_start="2023-24", years=1)
-    years = [ContractYear(contract_id=10, season="2025-26", cap_pct=0.12)]
+    years = [ContractYear(contract_id=10, season="2025-26", cap_pct=0.12, is_guaranteed=True)]
 
     ctx = _ctx(contracts_by_player={1: contract}, years_by_contract={10: years})
     item = dq._option_or_expiring_item(player, LAL_ID, ctx)
@@ -216,6 +216,18 @@ def test_option_or_expiring_item_expiring_when_not_in_option_pool():
     assert item.type == dq.TYPE_EXPIRING
     assert item.priority == "medium"
     assert item.priority_reason == "Final guaranteed year is 2025-26; reaches free agency after it."
+
+
+def test_expiring_item_with_unknown_guarantee_never_claims_a_guarantee():
+    player = Player(player_id=1, full_name="Vet", current_team_id=LAL_ID)
+    contract = Contract(id=10, player_id=1, season_start="2023-24", years=1)
+    years = [ContractYear(contract_id=10, season="2025-26", cap_pct=0.12, aav=5, is_guaranteed=None)]
+
+    item = dq._option_or_expiring_item(player, LAL_ID, _ctx(contracts_by_player={1: contract}, years_by_contract={10: years}))
+
+    assert item.type == dq.TYPE_EXPIRING
+    assert "guarantee unknown" in item.priority_reason and "guaranteed year" not in item.priority_reason
+    assert item.pay_usd == 5
 
 
 def test_option_or_expiring_item_future_option_not_in_pool_produces_no_item():

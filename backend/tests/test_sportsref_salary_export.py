@@ -59,6 +59,7 @@ def test_problems_recorded(parsed):
     assert parsed.skipped_rows == 1
     unk = parsed.rows[5].years[0]
     assert unk.option is None and unk.amount == 2000000
+    assert unk.uncertain == "unknown_marker:salary-xx"
     assert parsed.rows[4].years[0].amount == 1000001
 
 

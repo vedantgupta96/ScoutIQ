@@ -283,7 +283,7 @@ def test_uncertain_cells_have_own_outcome():
     stored = StoredContract("spotrac", None, "2026-27", [("2026-27", 3876529, False, False), ("2027-28", 4070355, False, False)])
     state = _state(contracts={23: stored}, player_salaries=[(23, "2027-28", 4070355)], team_salaries=[(23, "2027-28", "PHI", 4070355)])
     plan = _plan(tbd, state)
-    assert plan["coverage"]["uncertain_cells"] == 1
+    assert plan["coverage"]["uncertain_cells"] == 2
     assert plan["stored_contract_comparison"]["players"][0]["seasons"]["2027-28"]["outcome"] == "uncertain_in_export"
     for section in ("player_salaries_comparison", "team_salary_rows_comparison"):
         details = plan[section]["details"]

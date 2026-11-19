@@ -41,6 +41,7 @@ class ExtensionDecision:
     rationale: str
     trajectory_note: str | None
     caveat: str
+    guarantee_unknown: bool = False
 
 
 CAVEAT = (
@@ -89,6 +90,20 @@ def extension_verdict(value_pct: float, current_pay_pct: float | None) -> tuple[
         rationale = "Model value and current pay are within a cap-point; either path is defensible."
 
     return verdict, tone, rationale, gap_pct
+
+
+GUARANTEE_UNKNOWN_NOTE = " Guarantee split unknown: the source lists a remaining-guaranteed total, not per-year guarantees."
+
+
+def guarantee_split_unknown(year_rows: list[ContractYear]) -> bool:
+    """True when a remaining non-option year has an unknown (null) guarantee. Eligibility still treats
+    non-option years as the extension anchor; this only flags that the guarantee behind them is unproven."""
+    return any(
+        row.season > LATEST_SEASON
+        and not (row.is_player_option or row.is_team_option)
+        and row.is_guaranteed is None
+        for row in year_rows
+    )
 
 
 def _extension_eligibility(
@@ -158,6 +173,7 @@ def decide_extension(db, player_id: int) -> ExtensionDecision:
     ).all()
 
     eligible, ineligible_reason, current_pay_pct, final_contract_season = _extension_eligibility(year_rows)
+    unknown_guarantee = eligible and guarantee_split_unknown(year_rows)
     entering = next_season(final_contract_season) if final_contract_season else None
 
     try:
@@ -226,12 +242,16 @@ def decide_extension(db, player_id: int) -> ExtensionDecision:
             gap_pct=None,
             verdict="No model value",
             tone="neutral",
-            rationale="No loaded stats season to value this player; decision cannot be modeled.",
+            rationale="No loaded stats season to value this player; decision cannot be modeled."
+            + (GUARANTEE_UNKNOWN_NOTE if unknown_guarantee else ""),
             trajectory_note=trajectory_note,
             caveat=CAVEAT,
+            guarantee_unknown=unknown_guarantee,
         )
 
     verdict, tone, rationale, gap_pct = extension_verdict(value_pct, current_pay_pct)
+    if unknown_guarantee:
+        rationale += GUARANTEE_UNKNOWN_NOTE
 
     return ExtensionDecision(
         player_id=player_id,
@@ -254,6 +274,7 @@ def decide_extension(db, player_id: int) -> ExtensionDecision:
         rationale=rationale,
         trajectory_note=trajectory_note,
         caveat=CAVEAT,
+        guarantee_unknown=unknown_guarantee,
     )
 
 
@@ -266,6 +287,7 @@ class ExtensionCandidate:
     verdict: str
     tone: str
     final_contract_season: str | None
+    guarantee_unknown: bool = False
 
 
 def rank_extension_candidates(db, *, limit: int = 30) -> list[ExtensionCandidate]:
@@ -316,6 +338,7 @@ def rank_extension_candidates(db, *, limit: int = 30) -> list[ExtensionCandidate
         eligible[player_id] = {
             "current_pay_pct": current_pay_pct,
             "final_contract_season": final_contract_season,
+            "guarantee_unknown": guarantee_split_unknown(years),
         }
 
     if not eligible:
@@ -340,6 +363,7 @@ def rank_extension_candidates(db, *, limit: int = 30) -> list[ExtensionCandidate
                 verdict=verdict,
                 tone=tone,
                 final_contract_season=info["final_contract_season"],
+                guarantee_unknown=info["guarantee_unknown"],
             )
         )
 
@@ -358,6 +382,7 @@ class ExtensionSummary:
     verdict: str | None
     tone: str | None
     final_contract_season: str | None
+    guarantee_unknown: bool = False
 
 
 def batch_extension_summaries(db, player_ids: list[int]) -> dict[int, ExtensionSummary]:
@@ -416,5 +441,6 @@ def batch_extension_summaries(db, player_ids: list[int]) -> dict[int, ExtensionS
             verdict=verdict,
             tone=tone,
             final_contract_season=final_contract_season,
+            guarantee_unknown=eligible and guarantee_split_unknown(years_by_contract.get(contract_by_player[player_id].id, [])),
         )
     return summaries

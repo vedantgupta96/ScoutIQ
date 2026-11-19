@@ -50,6 +50,7 @@ import { Select } from '@/components/ui/Select';
 import { TeamLogo } from '@/components/ui/TeamLogo';
 import { CAP_TIER_LABEL, TIER_RANK, fmtSignedM, tierIcon, tierTone } from '@/lib/present';
 import { fmtM, signed } from '@/lib/utils';
+import { tradeYearStatusLabel } from '@/lib/financialContext';
 
 const SEASON = '2026-27';
 
@@ -373,6 +374,7 @@ const YEAR_STATUS_LABEL: Record<ContractYearStatus, string> = {
   player_option: 'Player option',
   team_option: 'Team option',
   non_guaranteed: 'Non-guaranteed',
+  guarantee_unknown: 'Guarantee unknown',
 };
 
 export function pctText(value: number | null, signedValue = false): string {
@@ -409,7 +411,7 @@ export function SurplusBreakdown({ detail }: { detail: SurplusPlayerDetail }) {
                 <td className="siq-surplus-td-season">
                   <span>{year.season}</span>
                   <span className={`siq-year-status siq-year-status--${year.committed ? 'committed' : 'uncertain'}`}>
-                    {YEAR_STATUS_LABEL[year.status]}
+                    {tradeYearStatusLabel(year.status, year.is_guaranteed, YEAR_STATUS_LABEL[year.status])}
                   </span>
                 </td>
                 <td>
@@ -436,7 +438,7 @@ export function SurplusBreakdown({ detail }: { detail: SurplusPlayerDetail }) {
       {detail.has_uncertain_years ? (
         <p className="ds-note">
           Committed only <strong>{fmtSignedM(detail.total_surplus_committed_usd)}</strong> · all listed years{' '}
-          <strong>{fmtSignedM(detail.total_surplus_all_usd)}</strong>. Option and non-guaranteed years are
+          <strong>{fmtSignedM(detail.total_surplus_all_usd)}</strong>. Option, non-guaranteed and guarantee-unknown years are
           excluded from the committed total, not silently counted as guaranteed.
         </p>
       ) : null}
@@ -480,7 +482,7 @@ function ExchangeSide({ analysis, toAbbr }: { analysis: TradeTeamAnalysis; toAbb
                     <strong>{fmtM(p.cap_hit_usd ?? 0)}</strong>
                     <small className={surplusSignClass(s?.total_surplus_usd)}>
                       {s ? `${fmtSignedM(s.total_surplus_usd)} surplus` : 'surplus n/a'}
-                      {s?.has_uncertain_years ? <span className="siq-surplus-flag" title="Has option / non-guaranteed years">*</span> : null}
+                      {s?.has_uncertain_years ? <span className="siq-surplus-flag" title="Has option, non-guaranteed, or guarantee-unknown years">*</span> : null}
                     </small>
                   </span>
                   <ChevronDown className="siq-surplus-chevron" size={15} aria-hidden="true" />
@@ -559,8 +561,8 @@ function TradeExchange({
               disabled={busy}
               onClick={() => onScenario(key)}
               title={key === 'committed'
-                ? 'Count only fully guaranteed years (options excluded).'
-                : 'Count every listed year, including options and non-guaranteed years (upside/downside).'}
+                ? 'Count only confirmed-guaranteed years (options and guarantee-unknown years excluded).'
+                : 'Count every listed year, including options, non-guaranteed and guarantee-unknown years (upside/downside).'}
             >
               {SCENARIO_LABEL[key]}
             </button>

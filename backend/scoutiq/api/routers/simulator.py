@@ -48,7 +48,7 @@ class ContractYearResponse(BaseModel):
     season: str
     cap_hit_usd: int
     cap_hit_pct: float
-    is_guaranteed: bool
+    is_guaranteed: bool | None
     is_player_option: bool
     is_team_option: bool
     salary_cap: int
@@ -235,7 +235,9 @@ class CompareRequest(BaseModel):
 class ScenarioDelta(BaseModel):
     label: str                       # e.g. "5yr @ 30.0% of cap"
     total_cap_hit_usd: int           # sum of guaranteed + option years (face value)
-    guaranteed_cap_hit_usd: int      # sum of guaranteed years only
+    guaranteed_cap_hit_usd: int      # sum of confirmed-guaranteed (is_guaranteed is True) years only
+    guarantee_unknown_usd: int = 0   # cap hits of years whose guarantee is unknown (is_guaranteed is None)
+    requires_known_guarantee: bool = False  # true when guaranteed_cap_hit_usd cannot be trusted as a total
     value_gap_pct: float | None      # positive = bargain
     apron_tier_after: str | None     # if a team overlay was requested
 
@@ -252,6 +254,18 @@ def _scenario_label(s: SimulatorResponse) -> str:
     return f"{len(s.years)}yr @ {s.proposed_aav_pct:.1f}% of cap"
 
 
+def _scenario_delta(s: SimulatorResponse) -> ScenarioDelta:
+    return ScenarioDelta(
+        label=_scenario_label(s),
+        total_cap_hit_usd=sum(y.cap_hit_usd for y in s.years),
+        guaranteed_cap_hit_usd=sum(y.cap_hit_usd for y in s.years if y.is_guaranteed is True),
+        guarantee_unknown_usd=sum(y.cap_hit_usd for y in s.years if y.is_guaranteed is None),
+        requires_known_guarantee=any(y.is_guaranteed is None for y in s.years),
+        value_gap_pct=s.value_gap_pct,
+        apron_tier_after=s.apron_outlook.tier_after if s.apron_outlook else None,
+    )
+
+
 @router.post("/simulate/compare", response_model=CompareResponse)
 def compare_contracts(req: CompareRequest, db: DB = None):
     """Run several proposed contracts for side-by-side what-if comparison.
@@ -262,19 +276,7 @@ def compare_contracts(req: CompareRequest, db: DB = None):
     """
     sims = [SimulatorResponse(**_simulate_cap(s, db)) for s in req.scenarios]
 
-    deltas: list[ScenarioDelta] = []
-    for s in sims:
-        total = sum(y.cap_hit_usd for y in s.years)
-        guaranteed = sum(y.cap_hit_usd for y in s.years if y.is_guaranteed)
-        deltas.append(
-            ScenarioDelta(
-                label=_scenario_label(s),
-                total_cap_hit_usd=total,
-                guaranteed_cap_hit_usd=guaranteed,
-                value_gap_pct=s.value_gap_pct,
-                apron_tier_after=s.apron_outlook.tier_after if s.apron_outlook else None,
-            )
-        )
+    deltas = [_scenario_delta(s) for s in sims]
 
     valued = [(i, d.value_gap_pct) for i, d in enumerate(deltas) if d.value_gap_pct is not None]
     best_value_index = max(valued, key=lambda t: t[1])[0] if valued else None

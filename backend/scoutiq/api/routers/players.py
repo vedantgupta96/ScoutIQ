@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, desc, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from scoutiq.api import extension, rosters
+from scoutiq.api import extension, guarantees, rosters, schema_guard
 from scoutiq.api.deps import DB
 from scoutiq.api.financial_status import (
     CURRENT_SEASON,
@@ -89,7 +89,7 @@ class PlayerContractYear(BaseModel):
     cap_hit_usd: int | None
     cap_hit_pct: float | None
     salary_cap: int | None
-    is_guaranteed: bool
+    is_guaranteed: bool | None
     is_player_option: bool
     is_team_option: bool
     value_pct: float | None
@@ -112,6 +112,8 @@ class PlayerContractResponse(BaseModel):
     coverage_end_season: str | None
     contract_team: rosters.TeamSummary | None
     years_detail: list[PlayerContractYear]
+    remaining_guaranteed_usd: int | None = None
+    guarantee_status: guarantees.GuaranteeStatus = "known"
     caveat: str
 
 
@@ -700,6 +702,21 @@ def get_player_season_to_date(player_id: int, db: DB = None):
     )
 
 
+GUARANTEE_UNKNOWN_CAVEAT = (
+    "Per-year guarantees are unknown where marked; the source's remaining-guaranteed total is shown separately."
+)
+
+
+def _contract_source_lead(source: str) -> str:
+    if source == "spotrac":
+        return "Spotrac forward contract structure."
+    if source == "sportsref_export":
+        return "Sports Reference contract export (user-supplied snapshot)."
+    if source == "bbref_contracts":
+        return "Basketball-Reference contract table."
+    return f"{source} contract record."
+
+
 @router.get("/{player_id}/contract", response_model=PlayerContractResponse)
 def get_player_contract(player_id: int, db: DB = None):
     """Return the player's current Spotrac contract timeline."""
@@ -767,7 +784,7 @@ def get_player_contract(player_id: int, db: DB = None):
     )
     if coverage_status == "current":
         caveat = (
-            "Spotrac forward contract structure. Value gaps are shown only for seasons with loaded "
+            f"{_contract_source_lead(contract.source)} Value gaps are shown only for seasons with loaded "
             "stats/model coverage; future seasons remain contract-only until new stats arrive."
         )
     else:
@@ -778,6 +795,9 @@ def get_player_contract(player_id: int, db: DB = None):
             coverage_end,
             fetched=contract.scraped_at.date().isoformat() if contract.scraped_at else None,
         )
+    status = guarantees.guarantee_status(row.is_guaranteed for row in year_rows)
+    if status != "known":
+        caveat += " " + GUARANTEE_UNKNOWN_CAVEAT
     return PlayerContractResponse(
         player_id=player_id,
         player_name=player.full_name,
@@ -794,6 +814,8 @@ def get_player_contract(player_id: int, db: DB = None):
         coverage_end_season=coverage_end,
         contract_team=contract_team,
         years_detail=years_detail,
+        remaining_guaranteed_usd=schema_guard.contract_remaining_guaranteed(db, contract.id),
+        guarantee_status=status,
         caveat=caveat,
     )
 

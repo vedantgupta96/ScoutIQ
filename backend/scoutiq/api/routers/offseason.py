@@ -93,7 +93,7 @@ class OffseasonContractYear(BaseModel):
     season: str
     cap_hit_usd: int
     cap_hit_pct: float
-    is_guaranteed: bool
+    is_guaranteed: bool | None
     is_player_option: bool
     is_team_option: bool
     is_projected_cap: bool

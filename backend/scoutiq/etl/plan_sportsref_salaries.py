@@ -120,13 +120,18 @@ def load_verified_snapshot(snapshot_dir: Path) -> tuple[str, dict]:
 
 
 def read_db_state(
-    session, bbref_ids: set[str], seasons: list[str], export_names: dict[str, str] | None = None
+    session,
+    bbref_ids: set[str],
+    seasons: list[str],
+    export_names: dict[str, str] | None = None,
+    read_only: bool = True,
 ) -> DbState:
     from sqlalchemy import desc, select, text
 
     from scoutiq.models import Contract, Player, PlayerSalary, PlayerTeamSalary, PlayerXref, Team
 
-    session.execute(text("SET TRANSACTION READ ONLY"))
+    if read_only:
+        session.execute(text("SET TRANSACTION READ ONLY"))
     state = DbState()
     ids = sorted(bbref_ids)
     for slug, pid, status in session.execute(
@@ -149,12 +154,15 @@ def read_db_state(
         select(Player.player_id, Player.full_name, Player.current_team_id).where(Player.player_id.in_(pids))
     ):
         state.players[pid] = (name, team_id)
-    from sqlalchemy.orm import selectinload
+    from sqlalchemy.orm import load_only, selectinload
 
     for contract in session.scalars(
         select(Contract)
         .where(Contract.player_id.in_(pids))
-        .options(selectinload(Contract.contract_years))
+        .options(
+            load_only(Contract.player_id, Contract.season_start, Contract.source, Contract.scraped_at),
+            selectinload(Contract.contract_years),
+        )
         .order_by(Contract.player_id, desc(Contract.season_start), desc(Contract.scraped_at))
     ):
         if contract.player_id in state.contracts:
@@ -267,13 +275,9 @@ def _compare_contract(row, stored: StoredContract, first_season: str) -> dict:
     }
 
 
-def build_plan(parsed: ParsedExport, state: DbState, manifest: dict) -> dict:
-    first_season = parsed.seasons[0] if parsed.seasons else ""
-    rows_by_id: dict[str, list] = {}
-    for row in parsed.rows:
-        rows_by_id.setdefault(row.bbref_id, []).append(row)
-    distinct_ids = sorted(rows_by_id)
-
+def classify_identity(
+    distinct_ids: list[str], state: DbState
+) -> tuple[dict[str, int], list[str], dict[str, str], dict[str, list[int]]]:
     matched: dict[str, int] = {}
     unmatched: list[str] = []
     not_verified: dict[str, str] = {}
@@ -288,6 +292,17 @@ def build_plan(parsed: ParsedExport, state: DbState, manifest: dict) -> dict:
             not_verified[bid] = state.other_xref[bid]
         else:
             unmatched.append(bid)
+    return matched, unmatched, not_verified, ambiguous
+
+
+def build_plan(parsed: ParsedExport, state: DbState, manifest: dict) -> dict:
+    first_season = parsed.seasons[0] if parsed.seasons else ""
+    rows_by_id: dict[str, list] = {}
+    for row in parsed.rows:
+        rows_by_id.setdefault(row.bbref_id, []).append(row)
+    distinct_ids = sorted(rows_by_id)
+
+    matched, unmatched, not_verified, ambiguous = classify_identity(distinct_ids, state)
 
     multi_ids = sorted(b for b, rs in rows_by_id.items() if len(rs) > 1)
     multi = [
