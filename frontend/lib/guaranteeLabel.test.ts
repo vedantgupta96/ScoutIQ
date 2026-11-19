@@ -33,3 +33,23 @@ describe('remainingGuaranteedNote', () => {
     expect(remainingGuaranteedNote(null, [{ is_guaranteed: null }])).toBeNull();
   });
 });
+
+import { extensionFinalYearNote, finalContractYearLabel, tradeYearStatusLabel } from '@/lib/financialContext';
+
+describe('extension board and trade-lab guarantee wording', () => {
+  it('never says guaranteed for unknown guarantees', () => {
+    expect(finalContractYearLabel(true)).toBe('Final contract year');
+    expect(finalContractYearLabel(false)).toBe('Final guaranteed year');
+    expect(extensionFinalYearNote('2027-28', true)).toBe('through 2027-28 · Guarantee unknown');
+    expect(extensionFinalYearNote('2027-28', true)).not.toMatch(/guaranteed/i);
+    expect(extensionFinalYearNote('2027-28', false)).toBe('through 2027-28');
+    expect(extensionFinalYearNote(null, undefined)).toBe('');
+  });
+
+  it('keeps option labels and adds unknown for null option years in the trade lab', () => {
+    expect(tradeYearStatusLabel('player_option', null, 'Player option')).toBe('Player opt. · Guarantee unknown');
+    expect(tradeYearStatusLabel('team_option', null, 'Team option')).toBe('Team opt. · Guarantee unknown');
+    expect(tradeYearStatusLabel('team_option', true, 'Team option')).toBe('Team option');
+    expect(tradeYearStatusLabel('guarantee_unknown', null, 'Guarantee unknown')).toBe('Guarantee unknown');
+  });
+});

@@ -762,6 +762,7 @@ export interface ExtensionCandidateItem {
   verdict: string;
   tone: 'positive' | 'negative' | 'neutral';
   final_contract_season: string | null;
+  guarantee_unknown?: boolean;
 }
 
 export interface ExtensionsBoardResponse {
@@ -1177,6 +1178,7 @@ export interface SurplusYearDetail {
   discounted_surplus_usd: number | null;
   status: ContractYearStatus;
   committed: boolean;
+  is_guaranteed?: boolean | null;
 }
 export interface SurplusPlayerDetail {
   total_surplus_usd: number;            // under the selected scenario

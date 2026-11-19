@@ -168,12 +168,14 @@ Re-running `--apply` on the same snapshot inserts nothing: written team rows are
 are `unchanged`. Under Postgres the apply takes `LOCK TABLE contracts, contract_years, player_team_salaries IN
 SHARE ROW EXCLUSIVE MODE`, re-reads state inside the transaction, refuses on conflicts, and asserts that each
 table grew by exactly the planned inserts before committing. Before commit (after the flush and count check) it writes
-`apply-<UTC timestamp>.json` into the snapshot directory with `status: pending`; if that write fails the
+`apply-<UTC yyyymmddTHHMMSS.ffffffZ>-<8 hex>.json` into the snapshot directory with `status: pending`; if that write fails the
 transaction rolls back (exit 6). It contains: sha256, confirm, plan counts, a before-record per
 affected player (latest stored contract with years, existing `sportsref_export` team rows), inserted contract
 and team-salary ids, table counts before and after, and a `reconciliation` object (null unless commit raised).
 
-Every journal write is atomic: a temp file in the same directory is written, flushed and fsynced, then
+Each run gets its own journal name (microsecond timestamp plus 8 hex of a uuid4), created exclusively, so a
+rerun or a run in the same second can never replace an earlier journal; only the same run's pending file is
+rewritten, and that rewrite is atomic: a temp file in the same directory is written, flushed and fsynced, then
 `os.replace`d over the target, so a failed rewrite never damages the previous journal. Statuses:
 
 | Status | Meaning |
@@ -194,7 +196,7 @@ journal finalization failed; pending journal retained at PATH") and the `pending
 directory name (plus their `contract_years`; `scraped_at` is not used, since two snapshots can share it) and `player_team_salaries` with `source = sportsref_export` and
 `source_ref` equal to the snapshot directory name. It deletes them in one transaction (years, contracts, team
 salaries) after verifying counts. Rows from other sources or other snapshots are untouched. Applying again after
-a rollback re-inserts the same rows. Rollback writes its own `rollback-<UTC timestamp>.json` journal (deleted
+a rollback re-inserts the same rows. Rollback writes its own `rollback-<UTC yyyymmddTHHMMSS.ffffffZ>-<8 hex>.json` journal (deleted
 ids) with the same statuses and atomic writes. Contracts written before migration 0013 have no `source_ref`
 and cannot be rolled back by this tool.
 

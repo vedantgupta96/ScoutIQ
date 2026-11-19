@@ -326,6 +326,7 @@ class SurplusYear:
     discounted_surplus_usd: int | None
     status: str                     # guaranteed | player_option | team_option | non_guaranteed | guarantee_unknown
     committed: bool                 # counts under the committed-years-only scenario
+    is_guaranteed: bool | None = None  # stored flag passed through; None = guarantee unknown (option years too)
 
 
 @dataclass(frozen=True)
@@ -384,7 +385,7 @@ def remaining_contract_surplus(
         all_total = 0
         guaranteed_remaining = 0
         has_uncertain = False
-        has_unknown = False
+        has_unknown = any(row.is_guaranteed is None for row in year_rows)
         for offset, year_row in enumerate(year_rows):
             cap = season_caps.get(year_row.season)
             salary_cap = cap.salary_cap if cap else None
@@ -401,8 +402,6 @@ def remaining_contract_surplus(
                 guaranteed_remaining += 1
             else:
                 has_uncertain = True
-            if status == YEAR_STATUS_GUARANTEE_UNKNOWN:
-                has_unknown = True
             factor = discount_factor(team_state, offset)
             surplus_pct = round(value_pct - hit_pct, 2) if value_pct is not None else None
             discounted_usd = (
@@ -424,6 +423,7 @@ def remaining_contract_surplus(
                 discounted_surplus_usd=discounted_usd,
                 status=status,
                 committed=committed,
+                is_guaranteed=year_row.is_guaranteed,
             ))
         if years:
             total = committed_total if scenario == "committed" else all_total

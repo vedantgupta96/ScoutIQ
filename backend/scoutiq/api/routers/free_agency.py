@@ -57,8 +57,9 @@ TARGETS_CAVEAT = (
     "reduction against a median-team benchmark, with recent minutes as a role proxy."
 )
 EXTENSIONS_CAVEAT = (
-    "Ranks rostered, extension-eligible players (a guaranteed season remaining after the latest "
-    "season) by the gap between model value and the final guaranteed year's cap hit. Latest-season "
+    "Ranks rostered, extension-eligible players (a non-option season remaining after the latest "
+    "season) by the gap between model value and the final contract year's cap hit. Rows marked "
+    "'Guarantee unknown' come from a source that gives no per-year guarantee split. Latest-season "
     "value; not a forward projection. Impending free agents appear on the Market tab, not here."
 )
 
@@ -150,6 +151,7 @@ class ExtensionCandidateItem(BaseModel):
     verdict: str
     tone: str
     final_contract_season: str | None
+    guarantee_unknown: bool = False
 
 
 class ExtensionsBoardResponse(BaseModel):
@@ -561,6 +563,7 @@ def get_extensions_board(
                 verdict=candidate.verdict,
                 tone=candidate.tone,
                 final_contract_season=candidate.final_contract_season,
+                guarantee_unknown=candidate.guarantee_unknown,
             )
         )
 

@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import sys
+import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -577,7 +578,27 @@ def apply_in_transaction(session, parsed: ParsedExport, manifest: dict, snapshot
 
 
 def _journal_path(snapshot: Path, prefix: str, now: datetime) -> Path:
-    return snapshot / f"{prefix}-{now.strftime('%Y%m%dT%H%M%SZ')}.json"
+    return snapshot / f"{prefix}-{now.strftime('%Y%m%dT%H%M%S.%fZ')}-{uuid.uuid4().hex[:8]}.json"
+
+
+def _reserve_journal(path: Path) -> None:
+    """Create the run's journal exclusively so an existing journal can never be replaced."""
+    with open(path, "x", encoding="utf-8") as handle:
+        handle.write('{"status": "reserved"}\n')
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _write_pending(path: Path, payload: dict) -> None:
+    _reserve_journal(path)
+    try:
+        _write_json(path, payload)
+    except BaseException:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -880,7 +901,7 @@ def _cmd_apply(args, session_factory) -> int:
         journal = _journal_path(snapshot, "apply", now)
         try:
             result = apply_in_transaction(session, parsed, manifest, snapshot_name, now)
-            _write_json(journal, _apply_journal(snapshot, manifest, args.confirm, result, now, "pending"))
+            _write_pending(journal, _apply_journal(snapshot, manifest, args.confirm, result, now, "pending"))
         except ApplyRefused as exc:
             session.rollback()
             print(f"refused: {exc}", file=sys.stderr)
@@ -940,7 +961,7 @@ def _cmd_rollback(args, session_factory) -> int:
         journal = _journal_path(snapshot, "rollback", now)
         try:
             result = rollback_in_transaction(session, snapshot.name)
-            _write_json(journal, _rollback_journal(snapshot, manifest, args.confirm, result, now, "pending"))
+            _write_pending(journal, _rollback_journal(snapshot, manifest, args.confirm, result, now, "pending"))
         except (ApplyVerificationError, OSError) as exc:
             session.rollback()
             print(f"verification or journal failure, rolled back: {exc}", file=sys.stderr)

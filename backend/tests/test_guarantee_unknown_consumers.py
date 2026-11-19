@@ -90,3 +90,49 @@ def test_offseason_year_schema_accepts_null_guarantee():
     year = OffseasonContractYear(season="2026-27", cap_hit_usd=5, cap_hit_pct=1.0, is_guaranteed=None,
                                  is_player_option=False, is_team_option=False, is_projected_cap=False)
     assert year.is_guaranteed is None and year.cap_hit_usd == 5
+
+
+def test_option_only_unknown_guarantees_keep_option_status_and_flag_unknown():
+    caps = {"2026-27": _cap("2026-27"), "2027-28": _cap("2027-28")}
+    db = SurplusFakeDB([
+        (_year("2026-27", 15_464_700, guaranteed=None, player_option=True), 1),
+        (_year("2027-28", 15_464_700, guaranteed=None, team_option=True), 1),
+    ])
+    entry = remaining_contract_surplus(db, [1], {1: 20.0}, caps, from_season="2026-27")[1]
+    assert [y.status for y in entry.years] == ["player_option", "team_option"]
+    assert [y.is_guaranteed for y in entry.years] == [None, None]
+    assert entry.has_unknown_guarantees is True
+    assert entry.total_surplus_committed_usd == 0
+    assert entry.total_surplus_all_usd > 0
+    assert [y.committed for y in entry.years] == [False, False]
+
+
+def test_extension_candidates_carry_guarantee_unknown(monkeypatch):
+    years = [
+        ContractYear(contract_id=1, season="2026-27", cap_pct=0.15, is_guaranteed=None,
+                     is_player_option=False, is_team_option=False),
+        ContractYear(contract_id=1, season="2027-28", cap_pct=0.15, is_guaranteed=None,
+                     is_player_option=True, is_team_option=False),
+    ]
+    assert ext.guarantee_split_unknown(years) is True
+    assert ext.guarantee_split_unknown([ContractYear(contract_id=1, season="2026-27", cap_pct=0.1, is_guaranteed=True)]) is False
+    from scoutiq.api.routers.free_agency import ExtensionCandidateItem, EXTENSIONS_CAVEAT
+
+    assert "guaranteed season" not in EXTENSIONS_CAVEAT and "Guarantee unknown" in EXTENSIONS_CAVEAT
+    assert ExtensionCandidateItem.model_fields["guarantee_unknown"].default is False
+    assert ext.ExtensionCandidate.__dataclass_fields__["guarantee_unknown"].default is False
+
+
+def test_extensions_board_payload_includes_guarantee_unknown(monkeypatch):
+    from scoutiq.api.routers import free_agency as fa
+
+    class DB:
+        def scalars(self, *_a, **_k):
+            return SimpleNamespace(all=lambda: [SimpleNamespace(player_id=5)])
+
+    candidate = ext.ExtensionCandidate(5, 20.0, 15.0, 5.0, "Extend now", "positive", "2027-28", guarantee_unknown=True)
+    monkeypatch.setattr(fa.extension, "rank_extension_candidates", lambda db, limit: [candidate])
+    monkeypatch.setattr(fa.rosters, "batched_summaries", lambda players, db: {5: fa.PlayerSummary.model_construct(player_id=5)})
+    body = fa.get_extensions_board(limit=10, db=DB())
+    assert body.items[0].guarantee_unknown is True
+    assert body.items[0].final_contract_season == "2027-28"

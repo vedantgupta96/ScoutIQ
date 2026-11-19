@@ -453,7 +453,7 @@ def test_final_journal_write_failure_keeps_pending_journal_and_exit_8(tmp_path, 
 
     def flaky_fsync(fd):
         calls.append(1)
-        if len(calls) == 2:
+        if len(calls) == 3:
             raise OSError("fsync failed mid-write")
         real_fsync(fd)
 
@@ -696,3 +696,34 @@ def test_rollback_dry_run_apply_and_reapply(tmp_path, factory, capsys):
     assert [len(x) for x in again] == [len(x) for x in applied]
     with factory() as s:
         assert s.scalar(select(func.count()).select_from(PlayerTeamSalary).where(PlayerTeamSalary.source_ref == snap.name)) == 9
+
+
+def test_two_runs_with_identical_now_get_distinct_journals(tmp_path, factory, monkeypatch):
+    frozen = datetime(2026, 8, 1, 12, 0, 0, 123456, tzinfo=timezone.utc)
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return frozen
+
+    monkeypatch.setattr(mod, "datetime", FrozenDatetime)
+    snap = snapshot(tmp_path)
+    assert run_apply(snap, factory) == 0
+    first = sorted(snap.glob("apply-*.json"))
+    assert len(first) == 1
+    first_text = first[0].read_text()
+    assert run_apply(snap, factory) == 0
+    both = sorted(snap.glob("apply-*.json"))
+    assert len(both) == 2 and first[0] in both
+    assert first[0].read_text() == first_text
+    assert len(json.loads(first_text)["inserted_contract_ids"]) == 2
+    assert json.loads([p for p in both if p != first[0]][0].read_text())["inserted_contract_ids"] == []
+    assert all(".123456Z-" in p.name for p in both)
+
+
+def test_reserve_journal_refuses_to_replace_existing(tmp_path):
+    path = tmp_path / "apply-x.json"
+    path.write_text("{}")
+    with pytest.raises(FileExistsError):
+        mod._reserve_journal(path)
+    assert path.read_text() == "{}"

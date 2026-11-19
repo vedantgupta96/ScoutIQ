@@ -37,6 +37,7 @@ import { CapBar } from '@/components/cap/CapBar';
 import { RosterNeeds } from '@/components/teams/RosterNeeds';
 import { fmtM, fmtPct, roundedDomainMax } from '@/lib/utils';
 import { useApi } from '@/lib/useApi';
+import { extensionFinalYearNote } from '@/lib/financialContext';
 
 type TabId = 'board' | 'options' | 'targets' | 'extensions';
 const TABS: Array<{ id: TabId; label: string; Icon: typeof Handshake }> = [
@@ -512,7 +513,7 @@ function ExtensionsTab({ season }: { season: string }) {
       >
         <div className="siq-roster-ledger-head">
           <span className="ds-eyebrow">Player</span>
-          <span className="ds-eyebrow ds-right">Final guaranteed yr</span>
+          <span className="ds-eyebrow ds-right">Final contract yr</span>
           <span className="ds-eyebrow">Verdict</span>
           <span className="ds-eyebrow ds-right">Model value</span>
         </div>
@@ -530,7 +531,7 @@ function ExtensionsTab({ season }: { season: string }) {
                 {fmtPct(item.current_pay_pct)}
               </div>
               <div className="ds-tnum ds-note">
-                {item.final_contract_season ? `through ${item.final_contract_season}` : ''}
+                {extensionFinalYearNote(item.final_contract_season, item.guarantee_unknown)}
               </div>
             </div>
             <div>

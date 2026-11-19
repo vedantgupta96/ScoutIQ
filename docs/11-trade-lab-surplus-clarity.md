@@ -39,7 +39,12 @@ status, and surplus is reported under **two transparent scenarios**:
 | `player_option` | Player decides whether to play | ❌ | ✅ |
 | `team_option` | Team decides whether to keep | ❌ | ✅ |
 | `non_guaranteed` | Not guaranteed (may be waived) | ❌ | ✅ |
-| `guarantee_unknown` | `is_guaranteed` is null: the source gave no per-year split | ❌ | ✅ |
+| `guarantee_unknown` | Non-option year with `is_guaranteed` null: the source gave no per-year split | ❌ | ✅ |
+
+Option type and guarantee uncertainty are tracked separately: an option year keeps its `player_option` /
+`team_option` status even when its `is_guaranteed` is null, each year row carries the stored `is_guaranteed`,
+and `has_unknown_guarantees` is true when any year (options included) is null. The UI labels such a year
+"Player opt. · Guarantee unknown" or "Team opt. · Guarantee unknown".
 
 - **Committed** (default): only `guaranteed` years. This is the honest floor — money both
   sides are certain to be on the hook for. Bam's option year is excluded here.

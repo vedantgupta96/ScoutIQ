@@ -63,6 +63,7 @@ import {
   contractStatusNote,
   type ContractFetchState,
   extensionWindow,
+  finalContractYearLabel,
   guaranteeLabel,
   payContextNote,
   payLabel,
@@ -375,8 +376,9 @@ function ExtensionCard({
   }
 
   // The hero "Value gap" measures model value against this season's pay; the extension
-  // gap measures it against the escalated final guaranteed year. When they disagree in
+  // gap measures it against the escalated final contract year. When they disagree in
   // sign, bridge the two so the opposite readings don't look contradictory.
+  const finalYear = extension?.guarantee_unknown ? 'contract year (guarantee unknown)' : 'guaranteed year';
   const bridge =
     extension?.eligible &&
     extension.gap_pct != null &&
@@ -385,8 +387,8 @@ function ExtensionCard({
     Math.abs(extension.gap_pct) >= 1 &&
     Math.abs(currentSeasonGap) >= 1
       ? currentSeasonGap > 0
-        ? `Underpaid on the ${gapSeason} cap hit, but the deal escalates past the model value by its final guaranteed year — which is what an extension would build on.`
-        : `Overpaid on the ${gapSeason} cap hit, yet the final guaranteed year lands below the model value — the anchor an extension would build on.`
+        ? `Underpaid on the ${gapSeason} cap hit, but the deal escalates past the model value by its final ${finalYear} — which is what an extension would build on.`
+        : `Overpaid on the ${gapSeason} cap hit, yet the final ${finalYear} lands below the model value — the anchor an extension would build on.`
       : null;
 
   return (
@@ -419,9 +421,9 @@ function ExtensionCard({
               size="sm"
             />
             <StatTile
-              label="Final guaranteed year"
+              label={finalContractYearLabel(extension.guarantee_unknown)}
               value={extension.current_pay_pct != null ? fmtPct(extension.current_pay_pct) : '—'}
-              sub="% of cap"
+              sub={extension.guarantee_unknown ? '% of cap · Guarantee unknown' : '% of cap'}
               size="sm"
             />
             <StatTile

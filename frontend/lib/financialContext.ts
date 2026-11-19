@@ -96,3 +96,26 @@ export function remainingGuaranteedNote(
   const millions = remainingGuaranteedUsd / 1_000_000;
   return `Source lists $${millions.toFixed(millions >= 10 ? 1 : 2)}M remaining guaranteed; per-year split unknown.`;
 }
+
+export function finalContractYearLabel(guaranteeUnknown: boolean | null | undefined): string {
+  return guaranteeUnknown ? 'Final contract year' : 'Final guaranteed year';
+}
+
+export function extensionFinalYearNote(
+  finalSeason: string | null | undefined,
+  guaranteeUnknown: boolean | null | undefined,
+): string {
+  if (!finalSeason) return guaranteeUnknown ? GUARANTEE_UNKNOWN_LABEL : '';
+  return guaranteeUnknown ? `through ${finalSeason} · ${GUARANTEE_UNKNOWN_LABEL}` : `through ${finalSeason}`;
+}
+
+export function tradeYearStatusLabel(
+  status: string,
+  isGuaranteed: boolean | null | undefined,
+  baseLabel: string,
+): string {
+  if ((status === 'player_option' || status === 'team_option') && isGuaranteed === null) {
+    return guaranteeLabel(null, status === 'player_option', status === 'team_option') ?? baseLabel;
+  }
+  return baseLabel;
+}

@@ -287,6 +287,7 @@ class ExtensionCandidate:
     verdict: str
     tone: str
     final_contract_season: str | None
+    guarantee_unknown: bool = False
 
 
 def rank_extension_candidates(db, *, limit: int = 30) -> list[ExtensionCandidate]:
@@ -337,6 +338,7 @@ def rank_extension_candidates(db, *, limit: int = 30) -> list[ExtensionCandidate
         eligible[player_id] = {
             "current_pay_pct": current_pay_pct,
             "final_contract_season": final_contract_season,
+            "guarantee_unknown": guarantee_split_unknown(years),
         }
 
     if not eligible:
@@ -361,6 +363,7 @@ def rank_extension_candidates(db, *, limit: int = 30) -> list[ExtensionCandidate
                 verdict=verdict,
                 tone=tone,
                 final_contract_season=info["final_contract_season"],
+                guarantee_unknown=info["guarantee_unknown"],
             )
         )
 
